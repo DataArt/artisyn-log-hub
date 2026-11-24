@@ -9,7 +9,7 @@ description: "Serve pre-compressed session log part bodies from a file cache on 
 **Status:** todo
 **Priority:** medium
 **Type:** feature
-**Module(s):** server
+**Module(s):** server, client (Admin System tab)
 **Owner:** denis.tsyplakov
 **Created:** 2026-11-24
 **Tracker:** GH-171 https://github.com/DataArt/artisyn-log-hub/issues/171
@@ -78,20 +78,24 @@ Node server, so the change works the same in Docker, in the release kit and on t
   the known total over the cap triggers an eviction pass without waiting for the next timer tick
   (the cap may be exceeded briefly, never for long). A single part larger than the cap is not
   cached at all.
-- **FR-9 Deleted data.** When a session or repository is deleted (including the tombstone /
-  deleted-session cleanup drain), its cached part files are deleted as well — deleted data must not
-  linger on disk for up to N days.
+- **FR-9 Deleted data.** Every path that deletes `logs` rows also deletes those rows' cached part
+  folders (`<logId>/`), so deleted data does not linger on disk for up to N days:
+  `SessionsService.purgeSessionChildData` (session delete, tombstone / deleted-session cleanup
+  drain, retention purge `hardPurgeExpiredSessions`, admin `hardDeleteSessionsInTx`), the admin
+  repository delete (`admin.service.ts`), the team repository delete (`teams.service.ts`) and
+  account deletion (`account-deletion.service.ts`, where `logs` go by the `users` FK cascade).
 - **FR-10 Fail open.** Any cache error (dir not writable, disk full, read error, file vanished
   between check and open) is logged and the request is served from the DB as today; a cache
   failure never fails a request. A file that fails mid-stream after headers were sent is handled
   the same way an aborted DB stream is today.
 - **FR-11 Disable switch.** The cache can be turned off by config (e.g.
   `SESSION_PART_CACHE_ENABLED=false`); off means exactly today's behaviour.
-- **FR-11a Admin view.** The Admin Panel shows the cache state (System Info tab or next to it —
-  the plan picks the place following existing admin UI patterns): enabled/disabled, folder path,
-  current size vs the cap, file count, TTL, oldest last-read time, time and result of the last
-  sweep (files/bytes removed by TTL, by cap, by deletion). Admin-only, like the rest of the panel.
-  If this needs a new or changed route, it gets its contract registry row.
+- **FR-11a Admin view.** The Admin Panel System tab (`AdminSystemTab.tsx`) shows the cache state:
+  enabled/disabled, folder path, current size vs the cap, file count, TTL, oldest last-read time,
+  time and result of the last sweep (files/bytes removed by TTL, by cap, by deletion). The data
+  comes as a new additive `partCache` field of the existing `GET /api/v1/admin/system` response
+  (admin-only, like the rest of the panel); its contract registry row `F01-admin-system` is
+  updated.
 - **FR-12 Docs.** `release-template/.env.example`, `server/.env.example`, the relevant KB article(s)
   and user docs (admin / install) describe the new variables and that the folder is a disposable
   cache (not needed in backups; safe to delete while the server is stopped or running).
@@ -127,7 +131,8 @@ Node server, so the change works the same in Docker, in the release kit and on t
       the default cap is 1024 MB; a part larger than the cap is served but not cached.
 - [ ] FR-5: no cache file appears for a part that was never requested, even after the gzip drain
       has built its copy.
-- [ ] FR-9: deleting a session (and a repository) removes its part files from the cache.
+- [ ] FR-9: deleting a session and deleting a repository each remove their part folders from the
+      cache.
 - [ ] FR-10: with the cache dir unwritable, part requests still succeed from the DB and a warning is
       logged.
 - [ ] FR-11: with the cache disabled, no files are written and responses match today's.
@@ -139,11 +144,30 @@ Node server, so the change works the same in Docker, in the release kit and on t
 
 - **No algorithm doc** — the eviction logic (TTL + cap by last read) is trivial and is not treated
   as an algorithm.
-- **Scenario** — steps in the existing session-logs streaming scenario (grep `tests/scenarios/`):
-  cache hit/miss, revision change, TTL / cap eviction (with small test values), deletion cleanup,
-  admin view.
-- **API contract** — only if FR-11a adds or changes an admin route (row in
-  `server/test/contract/registry/`); the parts route itself does not change.
+- **Scenario** — steps in `@S-SESS-03` (`tests/scenarios/view/s-sess-03.spec.ts`, already reads
+  `…/logs/parts`): cache hit/miss, revision change, TTL / cap eviction, deletion cleanup; a step in
+  `@S-ADM-01` (`tests/scenarios/auth/s-adm-01.spec.ts`) for the System tab cache block.
+- **API contract** — update row `F01-admin-system` in `server/test/contract/registry/f01-infra.ts`
+  for the new `partCache` field; the parts route itself does not change.
+
+## Common sense considerations
+
+- FR-2 already holds for today's scanners (they match `<uploadId>.chunk*` / session-id prefixes and
+  unlink named files only); the requirement is to keep it that way, verified by the AC.
+- `body_rev` comes from the global sequence `logs_body_rev_seq`, so `<logId>/<body_rev>` never
+  names two different bodies.
+- A hit reads only the revision columns (`body_rev`, `body_gz_rev`) from Postgres, never
+  `body_gz`; a miss keeps today's single query.
+- Rows with `body_rev` NULL (pre-0096, ETag `u<updated_at>`) are not cached.
+- FR-9 file deletion runs best-effort after the DB transaction; a rollback only costs a cache
+  refill, and anything missed is caught by the TTL sweep.
+- The "known total" for the FR-8a write trigger is a per-process estimate seeded by the last scan;
+  the sweep always recomputes the total from disk, so cluster workers need no shared state.
+- The last sweep result is stored in a small state file in the cache folder (skipped by the
+  sweep), so the admin view shows the same result whichever cluster worker serves it.
+- TTL / cap scenario steps use small env values on the scenario stand and backdate file mtimes
+  instead of waiting real days.
+- The miss path still holds the whole `body_gz` Buffer, as today; only hits stream from disk.
 
 ## Notes
 

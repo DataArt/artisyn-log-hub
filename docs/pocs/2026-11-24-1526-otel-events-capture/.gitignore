@@ -1,0 +1,15 @@
+# dependencies (the pinned Claude Code under test)
+node_modules/
+# build output
+dist/
+build/
+out/
+*.tsbuildinfo
+# runtime garbage
+*.log
+.cache/
+coverage/
+.env
+# raw captures (hold account ids, prompts, local paths) — only the sanitised results/ are kept
+raw/
+*.ndjson

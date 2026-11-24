@@ -1,0 +1,279 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1740" viewBox="0 0 1440 1740" font-family="Inter, 'Segoe UI', system-ui, sans-serif">
+<title>Session OTEL tab — surfaced Claude Code events</title>
+<defs>
+  <style>
+    .t{font-size:13px;fill:#111827}
+    .m{font-size:12px;fill:#6b7280}
+    .s{font-size:11px;fill:#6b7280}
+    .mono{font-family:'JetBrains Mono',Consolas,monospace}
+    .b{font-weight:600}
+    .lbl{font-size:10px;fill:#6b7280;letter-spacing:.4px}
+    .note{font-size:12px;fill:#374151}
+  </style>
+</defs>
+<rect width="1440" height="1740" fill="#ffffff"/>
+
+<!-- top nav -->
+<rect width="1440" height="48" fill="#fff"/>
+<line x1="0" y1="48" x2="1440" y2="48" stroke="#e5e7eb"/>
+<circle cx="24" cy="24" r="8" fill="#3b4fd8"/>
+<text x="44" y="29" class="t b" font-size="14">[local] Artisyn Log Hub</text><text x="206" y="29" class="m">dev</text>
+<text x="262" y="29" class="t b" font-size="14">Home</text>
+<rect x="330" y="14" width="84" height="20" rx="4" fill="#fff" stroke="#e5e7eb"/>
+<text x="1100" y="29" class="t b" font-size="14">All views</text>
+<text x="1226" y="29" class="m" font-size="13">alice@example.com</text>
+<rect x="1338" y="10" width="86" height="28" rx="6" fill="#f3f4f6"/><text x="1381" y="29" class="t b" text-anchor="middle">Edit email</text>
+
+<!-- left sidebar (unchanged, simplified) -->
+<rect x="0" y="49" width="320" height="1591" fill="#fff"/>
+<line x1="321" y1="49" x2="321" y2="1640" stroke="#d1d5db" stroke-width="3"/>
+<rect x="0" y="92" width="320" height="22" fill="#fafafa"/><text x="12" y="108" class="s">TEAMS</text>
+<text x="34" y="142" class="t" fill="#374151">Add Team</text>
+<rect x="0" y="160" width="320" height="22" fill="#fafafa"/><text x="30" y="176" class="s">MY REPOS</text>
+<rect x="0" y="190" width="320" height="28" fill="#f3f4f6"/><text x="12" y="209" class="t b">alice@example.com/demo-app</text>
+<text x="12" y="241" class="t" fill="#374151">https://git.example.com/team/demo-service</text>
+
+<!-- repo header + repo tabs -->
+<text x="341" y="76" class="t mono" font-size="14">alice@example.com/demo-app</text>
+<text x="1424" y="76" class="m" font-size="13" text-anchor="end">Sessions: 12   Users: 1</text>
+<line x1="325" y1="94" x2="1440" y2="94" stroke="#e5e7eb"/>
+<line x1="325" y1="142" x2="1440" y2="142" stroke="#e5e7eb"/>
+<rect x="341" y="112" width="24" height="22" rx="5" fill="#fff" stroke="#d1d5db"/>
+<text x="385" y="129" class="t b" font-size="14">Sessions</text><rect x="377" y="140" width="70" height="2" fill="#111827"/>
+<text x="460" y="129" font-size="14" fill="#4b5563">Analytics</text>
+<text x="539" y="129" font-size="14" fill="#4b5563">Spend</text>
+<text x="601" y="129" font-size="14" fill="#4b5563">Reports</text>
+<text x="673" y="129" font-size="14" fill="#4b5563">Tools/MCP</text>
+<text x="763" y="129" font-size="14" fill="#4b5563">OKF</text>
+<text x="811" y="129" font-size="14" fill="#4b5563">OTEL</text>
+<text x="865" y="129" font-size="14" fill="#4b5563">Settings</text>
+
+<!-- session list (unchanged, simplified) -->
+<line x1="628" y1="142" x2="628" y2="1640" stroke="#d1d5db" stroke-width="3"/>
+<rect x="333" y="157" width="284" height="28" rx="5" fill="#fff" stroke="#d1d5db"/><text x="345" y="176" class="m" fill="#111827">By branch</text>
+<text x="361" y="215" class="t mono b">main</text>
+<rect x="325" y="522" width="303" height="88" fill="#f3f4f6"/><rect x="325" y="522" width="3" height="88" fill="#2563eb"/>
+<text x="339" y="550" class="t mono b">2026-11-24 14:01:12</text><text x="497" y="550" class="mono b" font-size="13" fill="#ea580c">| $2.4310</text>
+<text x="339" y="572" class="m" font-size="13">Review the OTEL triage task and …</text>
+<rect x="339" y="582" width="48" height="18" rx="4" fill="#ecfdf5"/><text x="345" y="595" class="s mono" fill="#047857">main</text>
+<rect x="339" y="250" width="270" height="14" rx="3" fill="#f3f4f6"/><rect x="339" y="272" width="200" height="10" rx="3" fill="#f3f4f6"/>
+<rect x="339" y="337" width="270" height="14" rx="3" fill="#f3f4f6"/><rect x="339" y="359" width="200" height="10" rx="3" fill="#f3f4f6"/>
+<rect x="339" y="424" width="270" height="14" rx="3" fill="#f3f4f6"/><rect x="339" y="446" width="200" height="10" rx="3" fill="#f3f4f6"/>
+
+<!-- session header -->
+<text x="646" y="174" class="lbl">START</text><text x="646" y="192" class="t mono" font-size="12">2026-11-24 14:01:12</text>
+<text x="800" y="174" class="lbl">END</text><text x="800" y="192" class="t mono" font-size="12">2026-11-24 14:24:40</text>
+<text x="954" y="174" class="lbl">USER</text><text x="954" y="192" class="t mono" font-size="12">alice@example.com</text>
+<text x="1094" y="174" class="lbl">MODEL</text><text x="1094" y="192" class="t mono" font-size="12">claude-opus-5-5</text>
+<text x="1233" y="174" class="lbl">PROMPTS</text><text x="1233" y="192" class="t mono" font-size="12">6</text>
+<text x="1302" y="174" class="lbl">WORK TIME</text><text x="1302" y="192" class="t mono" font-size="12">0:23:28</text>
+<text x="646" y="215" class="lbl">TOKENS IN/OUT/CACHE</text><text x="646" y="233" class="t mono" font-size="12">1 204 / 38 410 / 2 104 880 / 88 210</text>
+<text x="960" y="215" class="lbl">COST</text><text x="960" y="233" class="t mono" font-size="12">$2.4310</text>
+<line x1="632" y1="250" x2="1440" y2="250" stroke="#e5e7eb"/>
+
+<!-- session tabs -->
+<rect x="646" y="258" width="22" height="22" rx="4" fill="#fff" stroke="#d1d5db"/>
+<rect x="676" y="258" width="22" height="22" rx="4" fill="#fff" stroke="#d1d5db"/>
+<rect x="724" y="256" width="128" height="26" rx="5" fill="#fff" stroke="#d1d5db"/><text x="733" y="274" class="m" fill="#111827">Cost</text>
+<text x="870" y="274" font-size="14" fill="#4b5563">Summary</text>
+<text x="956" y="274" font-size="14" fill="#4b5563">Statistics</text>
+<text x="1038" y="274" font-size="14" fill="#4b5563">Call Tree</text>
+<text x="1118" y="274" font-size="14" fill="#4b5563">Context Growth</text>
+<text x="1243" y="274" class="t b" font-size="14">OTEL</text><rect x="1231" y="283" width="56" height="2" fill="#111827"/>
+<text x="1299" y="274" font-size="14" fill="#4b5563">More ▾</text>
+<line x1="632" y1="286" x2="1440" y2="286" stroke="#e5e7eb"/>
+
+<!-- status line (unchanged) -->
+<text x="646" y="319" class="m" fill="#111827">Cost: Claude Code estimate (cost_usd) · hook 3.2.0 · traces on</text>
+<rect x="1036" y="305" width="108" height="22" rx="11" fill="#eff6ff" stroke="#93c5fd"/><text x="1090" y="320" class="m" fill="#1d4ed8" text-anchor="middle">Realtime data</text>
+<circle cx="1160" cy="316" r="3" fill="#9ca3af"/><text x="1170" y="320" class="m">Session ended</text>
+
+<!-- chart header -->
+<text x="646" y="358" class="t b" font-size="14">Session cost over time</text>
+<text x="810" y="358" class="m">session tree · by event.timestamp</text>
+<text x="646" y="390" class="m">Metric</text>
+<rect x="688" y="376" width="132" height="24" rx="4" fill="#fff" stroke="#e5e7eb"/>
+<rect x="688" y="376" width="44" height="24" rx="4" fill="#eff6ff"/><text x="710" y="392" class="m" fill="#1d4ed8" text-anchor="middle">Cost</text>
+<text x="752" y="392" class="m" fill="#111827" text-anchor="middle">Calls</text><text x="796" y="392" class="m" fill="#111827" text-anchor="middle">Tokens</text>
+<text x="840" y="390" class="m">Stack by</text>
+<rect x="892" y="376" width="276" height="24" rx="4" fill="#fff" stroke="#e5e7eb"/>
+<rect x="892" y="376" width="66" height="24" rx="4" fill="#eff6ff"/><text x="925" y="392" class="m" fill="#1d4ed8" text-anchor="middle">Structure</text>
+<text x="996" y="392" class="m" fill="#111827" text-anchor="middle">query_source</text><text x="1060" y="392" class="m" fill="#111827" text-anchor="middle">Model</text><text x="1104" y="392" class="m" fill="#111827" text-anchor="middle">Skill</text><text x="1140" y="392" class="m" fill="#111827" text-anchor="middle">…</text>
+<!-- NEW events toggle -->
+<text x="1190" y="390" class="m">Events</text>
+<rect x="1234" y="376" width="72" height="24" rx="4" fill="#fff" stroke="#2563eb" stroke-dasharray="3 2"/>
+<rect x="1234" y="376" width="36" height="24" rx="4" fill="#eff6ff"/><text x="1252" y="392" class="m" fill="#1d4ed8" text-anchor="middle">On</text><text x="1288" y="392" class="m" fill="#111827" text-anchor="middle">Off</text>
+
+<!-- chart -->
+<line x1="700" y1="420" x2="700" y2="620" stroke="#9ca3af"/>
+<line x1="700" y1="620" x2="1410" y2="620" stroke="#9ca3af"/>
+<g class="s" text-anchor="end"><text x="694" y="424">$0.60</text><text x="694" y="474">$0.45</text><text x="694" y="524">$0.30</text><text x="694" y="574">$0.15</text><text x="694" y="624">$0.00</text></g>
+<g stroke="#f3f4f6"><line x1="700" y1="470" x2="1410" y2="470"/><line x1="700" y1="520" x2="1410" y2="520"/><line x1="700" y1="570" x2="1410" y2="570"/></g>
+<!-- bars: main + subagent -->
+<g>
+  <rect x="712" y="540" width="120" height="80" fill="#3b82f6"/>
+  <rect x="846" y="470" width="120" height="150" fill="#3b82f6"/><rect x="846" y="440" width="120" height="30" fill="#a855f7"/>
+  <rect x="980" y="500" width="120" height="120" fill="#3b82f6"/><rect x="980" y="430" width="120" height="70" fill="#a855f7"/>
+  <rect x="1114" y="560" width="120" height="60" fill="#3b82f6"/>
+  <rect x="1248" y="520" width="120" height="100" fill="#3b82f6"/>
+</g>
+<g class="s" text-anchor="middle"><text x="772" y="638">14:00</text><text x="906" y="638">14:05</text><text x="1040" y="638">14:10</text><text x="1174" y="638">14:15</text><text x="1308" y="638">14:20</text></g>
+<!-- event markers -->
+<g stroke-dasharray="4 3" stroke-width="1.4">
+  <line x1="790" y1="424" x2="790" y2="620" stroke="#0891b2"/>
+  <line x1="880" y1="424" x2="880" y2="620" stroke="#16a34a"/>
+  <line x1="1060" y1="424" x2="1060" y2="620" stroke="#7c3aed"/>
+  <line x1="1140" y1="424" x2="1140" y2="620" stroke="#dc2626"/>
+  <line x1="1290" y1="424" x2="1290" y2="620" stroke="#0891b2"/>
+</g>
+<g>
+  <rect x="783" y="417" width="14" height="14" rx="2" transform="rotate(45 790 424)" fill="#0891b2"/><text x="790" y="428" font-size="9" fill="#fff" text-anchor="middle" class="b">C</text>
+  <rect x="873" y="417" width="14" height="14" rx="2" transform="rotate(45 880 424)" fill="#16a34a"/><text x="880" y="428" font-size="9" fill="#fff" text-anchor="middle" class="b">S</text>
+  <rect x="1053" y="417" width="14" height="14" rx="2" transform="rotate(45 1060 424)" fill="#7c3aed"/><text x="1060" y="428" font-size="9" fill="#fff" text-anchor="middle" class="b">A</text>
+  <rect x="1133" y="417" width="14" height="14" rx="2" transform="rotate(45 1140 424)" fill="#dc2626"/><text x="1140" y="428" font-size="9" fill="#fff" text-anchor="middle" class="b">!</text>
+  <rect x="1283" y="417" width="14" height="14" rx="2" transform="rotate(45 1290 424)" fill="#0891b2"/><text x="1290" y="428" font-size="9" fill="#fff" text-anchor="middle" class="b">C</text>
+</g>
+<!-- hover tooltip on the "!" marker -->
+<rect x="1150" y="438" width="250" height="70" rx="6" fill="#fff" stroke="#d1d5db" filter="drop-shadow(0 2px 4px rgba(0,0,0,.12))"/>
+<text x="1162" y="458" class="t b" font-size="12">14:11:40 · API retries exhausted</text>
+<text x="1162" y="476" class="m mono" font-size="11">connection_error · 3 attempts</text>
+<text x="1162" y="496" class="s">main thread · click to open in Session events</text>
+
+<!-- legend -->
+<circle cx="652" cy="664" r="5" fill="#3b82f6"/><text x="662" y="668" class="m" fill="#111827">Main thread</text>
+<circle cx="750" cy="664" r="5" fill="#a855f7"/><text x="760" y="668" class="m" fill="#111827">Sub-agents</text>
+<text x="840" y="668" class="s">Events:</text>
+<rect x="886" y="659" width="9" height="9" transform="rotate(45 890 664)" fill="#0891b2"/><text x="900" y="668" class="m" fill="#111827">compaction</text>
+<rect x="976" y="659" width="9" height="9" transform="rotate(45 980 664)" fill="#16a34a"/><text x="990" y="668" class="m" fill="#111827">skill</text>
+<rect x="1028" y="659" width="9" height="9" transform="rotate(45 1032 664)" fill="#7c3aed"/><text x="1042" y="668" class="m" fill="#111827">sub-agent done</text>
+<rect x="1136" y="659" width="9" height="9" transform="rotate(45 1140 664)" fill="#dc2626"/><text x="1150" y="668" class="m" fill="#111827">API failure (error / retries exhausted)</text>
+
+<!-- existing KPI tiles (collapsed) -->
+<rect x="646" y="690" width="778" height="54" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/>
+<text x="1035" y="722" class="m" text-anchor="middle">Existing KPI tiles, tokens by type, cost structure &amp; hidden calls — unchanged</text>
+
+<!-- NEW: Session events card -->
+<rect x="646" y="764" width="778" height="396" rx="6" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="662" y="790" font-size="11" fill="#374151">▴</text><text x="676" y="790" class="lbl b" font-size="11">SESSION EVENTS</text>
+<rect x="784" y="778" width="34" height="16" rx="8" fill="#dbeafe"/><text x="801" y="790" font-size="10" fill="#1d4ed8" text-anchor="middle" class="b">NEW</text>
+<text x="1390" y="790" class="s" text-anchor="end">click the header to collapse</text>
+<text x="662" y="810" class="m">Claude Code OTEL log events of this session tree · 7 of 24 shown · newest last</text>
+<!-- filter chips -->
+<g font-size="12">
+  <rect x="662" y="822" width="44" height="24" rx="12" fill="#111827"/><text x="684" y="838" fill="#fff" text-anchor="middle">All 24</text>
+  <rect x="712" y="822" width="104" height="24" rx="12" fill="#fff" stroke="#d1d5db"/><text x="764" y="838" fill="#111827" text-anchor="middle">Compaction 2</text>
+  <rect x="822" y="822" width="100" height="24" rx="12" fill="#fff" stroke="#d1d5db"/><text x="872" y="838" fill="#111827" text-anchor="middle">API failures 2</text>
+  <rect x="928" y="822" width="70" height="24" rx="12" fill="#fff" stroke="#d1d5db"/><text x="963" y="838" fill="#111827" text-anchor="middle">Skills 3</text>
+  <rect x="1004" y="822" width="94" height="24" rx="12" fill="#fff" stroke="#d1d5db"/><text x="1051" y="838" fill="#111827" text-anchor="middle">Sub-agents 4</text>
+  <rect x="1104" y="822" width="122" height="24" rx="12" fill="#fff" stroke="#d1d5db"/><text x="1165" y="838" fill="#111827" text-anchor="middle">Permissions 12</text>
+  <rect x="1232" y="822" width="124" height="24" rx="12" fill="#fff" stroke="#d1d5db"/><text x="1294" y="838" fill="#111827" text-anchor="middle">Mid-turn prompts 1</text>
+</g>
+<!-- table header -->
+<rect x="647" y="858" width="776" height="26" fill="#f9fafb"/>
+<g class="lbl"><text x="662" y="875">TIME</text><text x="742" y="875">EVENT</text><text x="948" y="875">AGENT</text><text x="1028" y="875">DETAILS</text></g>
+<line x1="647" y1="884" x2="1423" y2="884" stroke="#e5e7eb"/>
+<!-- rows -->
+<g font-size="12">
+  <text x="662" y="906" class="mono" fill="#374151">14:02:31</text>
+  <rect x="742" y="894" width="9" height="9" transform="rotate(45 746 898)" fill="#0891b2"/><text x="758" y="906" fill="#111827">Compaction · auto</text>
+  <text x="948" y="906" class="mono" fill="#6b7280">main</text>
+  <text x="1028" y="906" class="mono" fill="#374151">182 K → 41 K tokens · 5.8 s</text>
+  <line x1="647" y1="918" x2="1423" y2="918" stroke="#f3f4f6"/>
+
+  <text x="662" y="940" class="mono" fill="#374151">14:04:05</text>
+  <rect x="742" y="928" width="9" height="9" transform="rotate(45 746 932)" fill="#16a34a"/><text x="758" y="940" fill="#111827">Skill activated</text>
+  <text x="948" y="940" class="mono" fill="#6b7280">main</text>
+  <text x="1028" y="940" class="mono" fill="#374151">adlc-lh:review-deep · project · proactive</text>
+  <line x1="647" y1="952" x2="1423" y2="952" stroke="#f3f4f6"/>
+
+  <text x="662" y="974" class="mono" fill="#374151">14:06:12</text>
+  <circle cx="746" cy="970" r="4" fill="#f59e0b"/><text x="758" y="974" fill="#111827">Prompt sent mid-turn</text>
+  <text x="948" y="974" class="mono" fill="#6b7280">main</text>
+  <text x="1028" y="974" fill="#374151">sent while the turn was running · prompt text not shown</text>
+  <line x1="647" y1="986" x2="1423" y2="986" stroke="#f3f4f6"/>
+
+  <text x="662" y="1008" class="mono" fill="#374151">14:07:44</text>
+  <circle cx="746" cy="1004" r="4" fill="#6b7280"/><text x="758" y="1008" fill="#111827">Tool decision · rejected</text>
+  <text x="948" y="1008" class="mono" fill="#6b7280">main</text>
+  <text x="1028" y="1008" class="mono" fill="#374151">Write · by config · mode default</text>
+  <line x1="647" y1="1020" x2="1423" y2="1020" stroke="#f3f4f6"/>
+
+  <text x="662" y="1042" class="mono" fill="#374151">14:09:15</text>
+  <rect x="742" y="1030" width="9" height="9" transform="rotate(45 746 1034)" fill="#7c3aed"/><text x="758" y="1042" fill="#111827">Sub-agent completed</text>
+  <text x="948" y="1042" class="mono" fill="#6b7280">a432dc</text>
+  <text x="1028" y="1042" class="mono" fill="#374151">Explore · 1m 56s · 21 K tokens · 7 tool uses</text>
+  <line x1="647" y1="1054" x2="1423" y2="1054" stroke="#f3f4f6"/>
+
+  <rect x="647" y="1055" width="776" height="33" fill="#fef2f2"/>
+  <text x="662" y="1076" class="mono" fill="#374151">14:11:40</text>
+  <rect x="742" y="1064" width="9" height="9" transform="rotate(45 746 1068)" fill="#dc2626"/><text x="758" y="1076" fill="#b91c1c" class="b">API retries exhausted</text>
+  <text x="948" y="1076" class="mono" fill="#6b7280">main</text>
+  <text x="1028" y="1076" class="mono" fill="#374151">connection_error · 3 attempts · 1.7 s retrying</text>
+
+  <text x="662" y="1110" class="mono" fill="#374151">14:13:02</text>
+  <circle cx="746" cy="1106" r="4" fill="#6b7280"/><text x="758" y="1110" fill="#111827">Permission mode changed</text>
+  <text x="948" y="1110" class="mono" fill="#6b7280">main</text>
+  <text x="1028" y="1110" class="mono" fill="#374151">default → acceptEdits</text>
+</g>
+<text x="662" y="1145" font-size="12" fill="#2563eb">Show 17 more ▾</text>
+<text x="1408" y="1145" class="s" text-anchor="end">attributes as captured — see otel-inventory.md</text>
+
+<!-- NEW: Hook overhead card -->
+<rect x="646" y="1180" width="778" height="214" rx="6" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="662" y="1206" class="lbl b" font-size="11">HOOK OVERHEAD</text>
+<rect x="760" y="1194" width="34" height="16" rx="8" fill="#dbeafe"/><text x="777" y="1206" font-size="10" fill="#1d4ed8" text-anchor="middle" class="b">NEW</text>
+<text x="662" y="1226" class="m">hook_execution_complete events, grouped by hook event + tool · 5.4 s of hook time = 0.4 % of session wall time</text>
+<rect x="647" y="1238" width="776" height="26" fill="#f9fafb"/>
+<g class="lbl"><text x="662" y="1255">HOOK EVENT : TOOL</text><text x="900" y="1255">RUNS</text><text x="960" y="1255">HOOKS/RUN</text><text x="1050" y="1255">TOTAL</text><text x="1120" y="1255">AVG</text><text x="1185" y="1255">STDOUT</text><text x="1255" y="1255">ERRORS</text><text x="1320" y="1255">SHARE</text></g>
+<g font-size="12">
+  <text x="662" y="1286" class="mono" fill="#111827">PostToolUse:Bash</text>
+  <text x="900" y="1286" class="mono">42</text><text x="960" y="1286" class="mono">2</text><text x="1050" y="1286" class="mono">3.1 s</text><text x="1120" y="1286" class="mono">74 ms</text><text x="1185" y="1286" class="mono">1.2 K</text><text x="1255" y="1286" class="mono">0</text>
+  <rect x="1320" y="1278" width="88" height="8" rx="4" fill="#f3f4f6"/><rect x="1320" y="1278" width="50" height="8" rx="4" fill="#3b82f6"/>
+  <line x1="647" y1="1298" x2="1423" y2="1298" stroke="#f3f4f6"/>
+  <text x="662" y="1320" class="mono" fill="#111827">PreToolUse:Bash</text>
+  <text x="900" y="1320" class="mono">42</text><text x="960" y="1320" class="mono">1</text><text x="1050" y="1320" class="mono">1.4 s</text><text x="1120" y="1320" class="mono">33 ms</text><text x="1185" y="1320" class="mono">0</text><text x="1255" y="1320" class="mono">0</text>
+  <rect x="1320" y="1312" width="88" height="8" rx="4" fill="#f3f4f6"/><rect x="1320" y="1312" width="23" height="8" rx="4" fill="#3b82f6"/>
+  <line x1="647" y1="1332" x2="1423" y2="1332" stroke="#f3f4f6"/>
+  <text x="662" y="1354" class="mono" fill="#111827">UserPromptSubmit</text>
+  <text x="900" y="1354" class="mono">6</text><text x="960" y="1354" class="mono">1</text><text x="1050" y="1354" class="mono">0.9 s</text><text x="1120" y="1354" class="mono">150 ms</text><text x="1185" y="1354" class="mono">126</text><text x="1255" y="1354" class="mono" fill="#b91c1c">1</text>
+  <rect x="1320" y="1346" width="88" height="8" rx="4" fill="#f3f4f6"/><rect x="1320" y="1346" width="15" height="8" rx="4" fill="#3b82f6"/>
+</g>
+<text x="662" y="1380" class="s">Session without hook_execution_* events (older Claude Code): the Hook overhead card is hidden.</text>
+
+<!-- traces (unchanged) -->
+<rect x="646" y="1412" width="778" height="40" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/>
+<text x="1035" y="1437" class="m" text-anchor="middle">Traces (waterfall + span details) — unchanged</text>
+
+<!-- callouts -->
+<g font-size="11" font-weight="700" fill="#fff" text-anchor="middle">
+  <circle cx="1322" cy="388" r="10" fill="#f97316"/><text x="1322" y="392">1</text>
+  <circle cx="1140" cy="410" r="10" fill="#f97316" transform="translate(-26 0)"/><text x="1114" y="414">2</text>
+  <circle cx="1410" cy="790" r="10" fill="#f97316"/><text x="1410" y="794">3</text>
+  <circle cx="1410" cy="970" r="10" fill="#f97316"/><text x="1410" y="974">4</text>
+  <circle cx="1410" cy="1206" r="10" fill="#f97316"/><text x="1410" y="1210">5</text>
+</g>
+
+<!-- notes -->
+<rect x="24" y="1470" width="1392" height="156" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+<text x="40" y="1492" class="t b" font-size="12">Wireframe notes — surfaced items per FR-2; attribute values from the FR-1 capture (otel-inventory.md)</text>
+<g class="note">
+  <text x="40" y="1514"><tspan class="b" fill="#c2410c">1</tspan>  "Events On/Off" toggle over the cost chart (default On when the session has events; hidden when it has none). Local tab state, like the other session chart controls.</text>
+  <text x="40" y="1534"><tspan class="b" fill="#c2410c">2</tspan>  Event markers: one diamond per surfaced event at its event time; hover shows time, event, key attributes, agent; click expands the Session events card and scrolls to the row.</text>
+  <text x="40" y="1554"><tspan class="b" fill="#c2410c">3</tspan>  Session events: collapsible, collapsed by default (summary of counts per kind in the header, see below); expanded: chips per kind (Permissions = tool decisions + mode changes), newest last, first 7 rows + "Show N more".</text>
+  <text x="40" y="1574"><tspan class="b" fill="#c2410c">4</tspan>  Mid-turn prompts never show prompt text; tool decisions show tool, source (config / classifier verdict) and mode; for a team-no-prompts caller Details reads "hidden for your role" (DD-22).</text>
+  <text x="40" y="1594"><tspan class="b" fill="#c2410c">5</tspan>  Hook overhead: grouped by hook_name (event:tool). Claude Code does not report which hook command or plugin ran, so Log Hub's own hook is not singled out.</text>
+  <text x="40" y="1614">Older Claude Code / old hook: no events → no markers, no toggle, Session events and Hook overhead cards hidden; the rest of the tab is unchanged. Live rows arrive through since= with the usual highlight.</text>
+</g>
+
+<!-- NEW: Session events card, collapsed state (default) -->
+<text x="40" y="1658" class="t b" font-size="12">Session events card — collapsed (default state)</text>
+<rect x="646" y="1640" width="778" height="56" rx="6" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="662" y="1662" font-size="11" fill="#374151">▾</text><text x="676" y="1662" class="lbl b" font-size="11">SESSION EVENTS</text>
+<rect x="784" y="1650" width="34" height="16" rx="8" fill="#dbeafe"/><text x="801" y="1662" font-size="10" fill="#1d4ed8" text-anchor="middle" class="b">NEW</text>
+<text x="1408" y="1662" class="s" text-anchor="end">click to expand</text>
+<g font-size="12">
+  <text x="662" y="1684" fill="#111827"><tspan class="b">24 events</tspan><tspan fill="#9ca3af"> · </tspan>Compaction 2<tspan fill="#9ca3af"> · </tspan><tspan fill="#b91c1c" class="b">API failures 2</tspan><tspan fill="#9ca3af"> · </tspan>Skills 3<tspan fill="#9ca3af"> · </tspan>Sub-agents 4<tspan fill="#9ca3af"> · </tspan>Permissions 12<tspan fill="#9ca3af"> · </tspan>Mid-turn prompts 1</text>
+</g>
+<text x="40" y="1680" class="s">Kinds with 0 events are left out of the summary;</text>
+<text x="40" y="1694" class="s">API failures are red when &gt; 0. Live: counts update in place.</text>
+</svg>

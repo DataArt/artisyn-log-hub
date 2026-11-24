@@ -1,0 +1,13 @@
+{
+  "name": "poc-api-response-compression",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node poc.mjs"
+  },
+  "dependencies": {
+    "compression": "1.8.2",
+    "express": "5.2.1"
+  }
+}

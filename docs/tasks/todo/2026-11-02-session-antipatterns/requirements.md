@@ -264,3 +264,5 @@ polling, cache busting without idle (4 events, mostly `/model` switch).
   retries and compactions as separate cost drivers (research: retries rare; compaction is already a
   finding). Cost overlap is solved by an exact partition (FR-A2) plus non-summed waste estimates
   (FR-B3). First pattern set now #1, #2, #10, #3, #4, #9 (#7 moved to a later set).
+- **2026-11-24:** not implemented yet. PR #82 (merged) carried only the research and this task
+  draft — no code change; the task stays open.
