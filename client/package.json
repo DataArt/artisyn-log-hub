@@ -70,6 +70,7 @@
     "lightningcss-win32-x64-msvc": "^1.32.0"
   },
   "overrides": {
-    "postcss-selector-parser": "^6.1.5"
+    "postcss-selector-parser": "^6.1.5",
+    "parse5": "^8.1.1"
   }
 }
