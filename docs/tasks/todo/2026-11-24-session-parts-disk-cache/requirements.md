@@ -1,7 +1,7 @@
 ---
 type: "Task"
 title: "Disk File Cache for Session Log Parts"
-description: "Serve pre-compressed session log part bodies from a file cache on the working-data volume instead of reading bytea from Postgres each time; files not read for N days (default 14) are swept by a timer."
+description: "Serve pre-compressed session log part bodies from a file cache on the working-data volume instead of reading bytea from Postgres each time; files not read for N days (default 14) are swept by a timer, a size cap (default 1 GB) evicts by last read, and the Admin Panel shows the cache state."
 ---
 
 # 2026-11-24: Disk File Cache for Session Log Parts
@@ -60,7 +60,8 @@ Node server, so the change works the same in Docker, in the release kit and on t
 - **FR-5 Fill on read.** A miss (no file for the current revision) is served from the DB exactly as
   today, and the gzip bytes are then written to the cache: temp file in the same folder + atomic
   rename, so a concurrent reader (another cluster worker) never sees a partial file. Rows without a
-  valid gzip copy (served from `body::text`) are not cached.
+  valid gzip copy (served from `body::text`) are not cached. No pre-warming: the cache is filled
+  only by reads, never by the `log-body-gz.service` drain or any other background job.
 - **FR-6 Old revisions.** Writing a new revision's file removes older revision files of the same
   `logId` (best effort).
 - **FR-7 Last-read tracking.** Each served hit records the read time on the file itself (mtime via
@@ -71,6 +72,12 @@ Node server, so the change works the same in Docker, in the release kit and on t
   `SESSION_PART_CACHE_SWEEP_INTERVAL_MS` (default a few hours). Empty `<logId>/` folders and
   stale temp files left by a crashed write are removed too. Safe to run from several cluster
   workers at once (deleting an already-deleted file is not an error).
+- **FR-8a Size cap.** Total cache size is capped by `SESSION_PART_CACHE_MAX_MB` (default **1024**,
+  i.e. 1 GB). When the total is over the cap, files are deleted in order of oldest last read (FR-7
+  mtime) until it is back under the cap. The cap is enforced by the sweep, and a write that pushes
+  the known total over the cap triggers an eviction pass without waiting for the next timer tick
+  (the cap may be exceeded briefly, never for long). A single part larger than the cap is not
+  cached at all.
 - **FR-9 Deleted data.** When a session or repository is deleted (including the tombstone /
   deleted-session cleanup drain), its cached part files are deleted as well — deleted data must not
   linger on disk for up to N days.
@@ -80,6 +87,11 @@ Node server, so the change works the same in Docker, in the release kit and on t
   the same way an aborted DB stream is today.
 - **FR-11 Disable switch.** The cache can be turned off by config (e.g.
   `SESSION_PART_CACHE_ENABLED=false`); off means exactly today's behaviour.
+- **FR-11a Admin view.** The Admin Panel shows the cache state (System Info tab or next to it —
+  the plan picks the place following existing admin UI patterns): enabled/disabled, folder path,
+  current size vs the cap, file count, TTL, oldest last-read time, time and result of the last
+  sweep (files/bytes removed by TTL, by cap, by deletion). Admin-only, like the rest of the panel.
+  If this needs a new or changed route, it gets its contract registry row.
 - **FR-12 Docs.** `release-template/.env.example`, `server/.env.example`, the relevant KB article(s)
   and user docs (admin / install) describe the new variables and that the folder is a disposable
   cache (not needed in backups; safe to delete while the server is stopped or running).
@@ -110,23 +122,28 @@ Node server, so the change works the same in Docker, in the release kit and on t
       file remains for that `logId`.
 - [ ] FR-7/FR-8: a file whose last read is older than `SESSION_PART_CACHE_TTL_DAYS` is deleted by
       the next sweep; a file read within the window is kept; the default is 14 days.
+- [ ] FR-8a: with `SESSION_PART_CACHE_MAX_MB` set low, reading more parts than fit leaves the total
+      at or under the cap shortly after, and the files removed are the least recently read ones;
+      the default cap is 1024 MB; a part larger than the cap is served but not cached.
+- [ ] FR-5: no cache file appears for a part that was never requested, even after the gzip drain
+      has built its copy.
 - [ ] FR-9: deleting a session (and a repository) removes its part files from the cache.
 - [ ] FR-10: with the cache dir unwritable, part requests still succeed from the DB and a warning is
       logged.
 - [ ] FR-11: with the cache disabled, no files are written and responses match today's.
+- [ ] FR-11a: an admin sees the cache size, cap, file count, TTL and last sweep result in the Admin
+      Panel; a non-admin cannot reach it.
 - [ ] FR-12: env examples and KB/user docs list the new variables with their defaults.
 
-## Open Questions
+## Testing
 
-- Fill strategy: lazy fill on first read only (as written in FR-5), or also pre-warm from the
-  `log-body-gz.service` drain right after building the gzip copy? Lazy keeps the cache to what
-  people actually open; pre-warm makes the first open fast too but writes files nobody may read.
-- Should there be a total size cap (e.g. `SESSION_PART_CACHE_MAX_MB`, evicting least recently read
-  first) in addition to the TTL, for small disks like the Pi?
-- Should the admin System Info tab show the cache size / file count / hit rate?
-- Is the eviction rule (last-read throttling + TTL decision) worth an algorithm doc with table
-  rows, or is a scenario step enough? Per the test policy: scenario step in the existing
-  session-logs streaming scenario; contract registry unchanged (no route change).
+- **No algorithm doc** — the eviction logic (TTL + cap by last read) is trivial and is not treated
+  as an algorithm.
+- **Scenario** — steps in the existing session-logs streaming scenario (grep `tests/scenarios/`):
+  cache hit/miss, revision change, TTL / cap eviction (with small test values), deletion cleanup,
+  admin view.
+- **API contract** — only if FR-11a adds or changes an admin route (row in
+  `server/test/contract/registry/`); the parts route itself does not change.
 
 ## Notes
 
