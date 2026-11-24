@@ -726,6 +726,22 @@ const realtimeRows: ContractCase[] = [
 
 const REPO_FACTS = 'GET /api/v1/repositories/:repoId/otel/facts' as const;
 
+/**
+ * 2026-11-24 traffic-optimization (DD-10, DD-23): a gzip-accepting client (superagent sends
+ * `Accept-Encoding: gzip, deflate`) gets a gzipped JSON answer — the contract suite sets
+ * API_GZIP_MIN_BYTES=1 — and every `/api` JSON answer varies on Accept-Encoding.
+ */
+const GZIPPED = {
+  'Content-Encoding': 'gzip',
+  Vary: 'Accept-Encoding',
+} as const;
+
+/** `Accept-Encoding: identity`: the same answer, uncompressed. */
+const IDENTITY = {
+  'Content-Encoding': null,
+  Vary: 'Accept-Encoding',
+} as const;
+
 const repoRows: ContractCase[] = [
   {
     // Owner's personal view of R1 over January: s01 + s04 (s02 has no OTEL data).
@@ -736,6 +752,8 @@ const repoRows: ContractCase[] = [
     query: { ...JAN },
     expect: {
       status: 200,
+      // 2026-11-24 traffic-optimization (DD-10): the suite runs with API_GZIP_MIN_BYTES=1.
+      headers: GZIPPED,
       bodyMatches: {
         interval: '1d',
         tz: 'UTC',
@@ -1081,6 +1099,7 @@ const sessionSnapshot: CallCase = {
   expect: {
     status: 200,
     minRows: 2,
+    headers: GZIPPED,
     bodyMatches: {
       cursor: 'v1.3',
       full: true,
@@ -1109,6 +1128,13 @@ const sessionSnapshot: CallCase = {
 
 const sessionRows: ContractCase[] = [
   sessionSnapshot,
+  {
+    // DD-10: a client that does not accept gzip gets the same decoded JSON uncompressed.
+    ...sessionSnapshot,
+    id: 'F25-session-snapshot-identity',
+    headers: { 'Accept-Encoding': 'identity' },
+    expect: { ...sessionSnapshot.expect, headers: IDENTITY },
+  },
   {
     id: 'F25-session-spans',
     route: SESSION_OTEL,
@@ -1298,6 +1324,7 @@ const teamRows: ContractCase[] = [
     query: { ...JAN },
     expect: {
       status: 200,
+      headers: GZIPPED,
       bodyMatches: { interval: '1d', hasOtel: true, hasOtelInPeriod: true },
     },
     read: {

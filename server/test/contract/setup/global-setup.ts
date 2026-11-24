@@ -141,6 +141,11 @@ export default async function globalSetup(): Promise<void> {
   process.env.WORKFLOWS_BACKFILL_INTERVAL_MS = '3600000';
   process.env.SESSION_REEXTRACT_INTERVAL_MS = '3600000';
   process.env.DELETED_SESSION_CLEANUP_INTERVAL_MS = '3600000';
+  // 2026-11-24 traffic-optimization (DD-10): every `/api` JSON answer to a gzip-accepting
+  // client is gzipped whatever the fixture size, so the `expect.headers` rows of F17 / F25 see
+  // `Content-Encoding: gzip`. superagent decodes it, so no other row notices. The 8192-byte
+  // default threshold itself is the scenarios' job (@S-OTEL-01 / @S-SESS-03).
+  process.env.API_GZIP_MIN_BYTES = '1';
   // The rebuild governor (DD-15) would stretch those start-up passes while jest compiles at
   // full CPU; the contract run measures no load behaviour, so it never slows down or pauses.
   process.env.REBUILD_SLOWDOWN_CPU_PERCENT = '100';

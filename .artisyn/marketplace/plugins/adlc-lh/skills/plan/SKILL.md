@@ -48,10 +48,12 @@ results that are already known.
 ## Simplicity guard
 
 None of the following stop the simple track — the user has already judged this task simple, and
-that judgment stands. If while planning you discover the task involves database schema/migration
-changes, API contract changes, non-trivial cross-module impact, or new dependencies, still write
-the full plan, but add this exact warning near the top of your report (fill in the concrete
-reasons): "Task does not look that simple because <reasons>. I recommend considering the full
+that judgment stands. Plain external-surface changes (a new column, a new endpoint, a new config
+key) are not a reason on their own. Only two things are: tricky data work (a migration or backfill
+that transforms existing data, a data-integrity or consistency risk, concurrent writes to the same
+data), or a change that is very large (many modules, or the file-count threshold below). If while
+planning you find either, still write the full plan, but add this exact warning near the top of
+your report (fill in the concrete reasons): "Task does not look that simple because <reasons>. I recommend considering the full
 `/adlc-lh:plan-deep $ARGUMENTS` instead."
 
 File count is a warning, not a blocker: if the change touches more files than the configured
@@ -122,43 +124,60 @@ If `REQUIREMENTS` is marked `(MISSING)`, stop: the task has no requirements doc 
 Read the file at `REQUIREMENTS` (and any referenced wireframes). If there are unanswered Open Questions
 that block the plan, stop and ask the user to answer them first.
 
-Then look directly at the code the change touches: find the exact files, components, and existing
+Then look directly at the code the change touches: find the area it lives in and the existing
 patterns to follow. If `.claude/repo_config/project-env.json` defines `kbIndexPath`, read that
 knowledgebase index and read an article only if it clearly covers the touched area — skip broad
-research; if the file or key is missing, skip the knowledgebase entirely. Carry exact `path:line`
-references into the plan so it is self-contained.
+research; if the file or key is missing, skip the knowledgebase entirely. Look enough to decide the
+approach — the plan names areas, not exact lines.
 
 If the requirements ask for an analysis, or the plan would rest on an assumption you have not checked (a
 library does X, an API returns Y, the data looks like Z), find it out now: check the data, run the query, try
 the small PoC (follow the project's PoC convention if it has one, e.g. a `poc` skill). Save what you found in
 `TASK_DIR` (`research/<topic>.md`, or the deliverable named `<topic>-analysis.md` when the analysis is the
-task) and state the outcome in the plan as a Design Decision. If you cannot find it out now, stop and tell the
+task) and state the outcome in the plan as an Architecture decision. If you cannot find it out now, stop and tell the
 user what is missing — never turn it into a chunk item. A task that needs a real survey or several PoCs is
 not simple: say so per the Simplicity guard.
 
 ### 3 — Write the plan
 
 Write the plan to `IMPL_PLAN` using the same section format as the full skill, keeping only the
-sections that apply (for a simple task most are omitted):
+sections that apply (for a simple task most are omitted). Keep it short: the plan states the
+decisions and the acceptance criteria, and the implementing agent works out the how — no
+files-to-change table, no step-by-step instructions, no exact line references.
 
-- **TL;DR**: ALWAYS the very first section, before Reference. 2-6 terse bullets flagging anything a
-  reviewer must not miss — new service/module + functions it exposes, new npm packages, a one-line
-  DB changes summary, new/changed API endpoints. Skip a bullet category that doesn't apply; for a
-  truly trivial change (e.g. move a button) this can be a single bullet like "Pure UI tweak, no
-  new deps/services/DB/API changes."
-- **Reference**: link to the requirements doc (the `REQUIREMENTS` file) at the top
-- **Design Decisions**: only if the requirements left a real choice open — one sentence each
-- **Files to create/modify**: table — path, purpose, brief note per file. No `.md` file whose basename
-  starts with `report`, `summary`, `findings` or `analysis` — Claude Code refuses those names to subagents;
-  use `<topic>-analysis.md` and the like
-- **Test coverage plan**: follow the project's test policy (CLAUDE.md, e.g. a "Test policy"
+- **TL;DR**: ALWAYS the very first section, before Reference. 1-5 terse bullets with the
+  architecture-level choices a reviewer must check — new module/service, new dependency, a one-line
+  DB change summary, new/changed API endpoints, anything backward-incompatible — and, for a choice
+  that is not the obvious one, the simpler alternative rejected in a few words. One bullet is
+  mandatory: a one-line summary of the external-surface changes, or "no external surface changes".
+  Otherwise skip a category that doesn't apply; for a truly trivial change (e.g. move a button)
+  this can be a single bullet like "Pure UI tweak, no external surface changes, no new
+  deps/services."
+- **Reference**: link to the requirements doc (the `REQUIREMENTS` file)
+- **Architecture decisions**: only if the requirements left a real choice open, or chunks share an
+  internal contract (a signature, a type shape) — one sentence each, saying which existing project
+  pattern is reused or why none fits. External contracts go to External surface, not here
+- **External surface**: MANDATORY, never omitted. EVERY change to what the outside world sees or
+  what this code depends on outside itself, at contract level (no implementation detail):
+  - **API** — each new, changed or removed endpoint: method, path, request params/body, response
+    shape, auth/permission
+  - **DB** — each new, changed or removed table or column: type, nullability/default,
+    constraints/indexes, plus the migration/backfill path
+  - **Other** — anything else that is called or that calls this code: external services and
+    integrations, the published interface other installed components use, config keys and
+    environment variables, CLI flags, file formats, events/messages
+
+  For each item state whether it is backward compatible and, if not, how older clients and
+  existing data are handled. When nothing external changes, write "None" explicitly
+- **Test coverage plan**: plain bullets, no checkboxes (Implementation Chunks is the only place
+  with checkboxes). Follow the project's test policy (CLAUDE.md, e.g. a "Test policy"
   section) when it has one — it overrides this default. Prefer extending existing tests over
-  adding new ones; for each item name the kind of test the policy allows and the existing
-  file/doc/scenario it extends, and never plan a test kind the policy forbids. For a pure visual
-  tweak "no test changes; visual check only" is a valid answer
+  adding new ones; name the kind of test the policy allows and the existing file/doc/scenario it
+  extends, and never plan a test kind the policy forbids. For a pure visual tweak "no test
+  changes; visual check only" is a valid answer
 - **Visual/UX notes**: only if the task has UI changes
-- **Implementation Chunks**: mandatory, always the last section, the ONLY place action items
-  appear. For a simple task this is normally a SINGLE chunk with 2–6 checkbox items:
+- **Implementation Chunks**: mandatory, always the last section. For a simple task this is
+  normally a SINGLE chunk with 2–6 checkbox items:
 
 ```markdown
 ## Implementation Chunks
@@ -168,25 +187,34 @@ sections that apply (for a simple task most are omitted):
 | 1 | <short chunk name> | <count> | — |
 
 ### Chunk 1 — <short chunk name>
-- [ ] <item>
-- [ ] <item>
+<one-line goal>
+Where: <modules / areas>
+- [ ] <acceptance criterion>
+- [ ] <acceptance criterion>
 ```
 
-Item rules (same as the full skill): every item is a checkbox, hard cap 60 words, states the
-concrete action + file/location + any value it needs, no rationale prose, and must be
-implementable without reading requirements.md, and no discovery items (investigate, analyse,
-measure, compare, observe, build a PoC) — those were done in step 2. Use a second chunk only if there is a true
-dependency ordering (e.g. code first, then tests).
+Chunk rules (same as the full skill): a one-line goal, a `Where:` line naming the modules/areas
+touched (approximate is fine), then checkbox items that are acceptance criteria — observable
+outcomes that can be checked against the code or the app, not instructions for how to get there.
+No discovery items (investigate, analyse, measure, compare, observe, build a PoC) — those were
+done in step 2. Use a second chunk only if there is a true dependency ordering (e.g. code first,
+then tests). If the plan calls for a new `.md` file, its basename must not start with `report`,
+`summary`, `findings` or `analysis` — Claude Code refuses those names to subagents; use
+`<topic>-analysis.md` and the like.
 
 Keep this format exactly — `/adlc-lh:implement-deep` (full) must be able to consume this plan too.
 
 ### 4 — Self-check (inline, no subagent)
 
 Re-read the plan you just wrote and verify: TL;DR is the first section and its bullets match what's
-actually in the plan, every touched file appears in the Files table, every chunk item is
-self-contained and under 60 words, no item is discovery work whose outcome the plan does not already
-state, and tests/visual verification are accounted for. Fix anything
-you find directly.
+actually in the plan, including the one-line external-surface summary; the External surface
+section is present and complete — every endpoint, table, column, integration, config or other
+external change the chunks imply is listed with its contract and a compatibility note, or the
+section says "None"; nothing in the plan adds a dependency, a piece of infrastructure or a new mechanism
+where an existing project pattern would do; nothing breaks backward compatibility without saying
+so; every chunk item is a verifiable acceptance criterion and none is discovery work whose outcome
+the plan does not already state; tests/visual verification are accounted for. Fix anything you
+find directly.
 
 ### 5 — Report
 

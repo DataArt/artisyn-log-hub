@@ -79,6 +79,9 @@ export const f01Infra: ContractFamily = {
       id: 'F01-admin-system',
       route: 'GET /api/v1/admin/system',
       actor: 'admin',
+      // The answer now also carries `partCache` (session part cache view, DD-10 of
+      // 2026-11-24-session-parts-disk-cache). Its shape is asserted in @S-ADM-01 step 4c, not
+      // here: `bodyMatches` deep-equals top-level keys and the rest of the body is host-specific.
       expect: { status: 200 },
       noDb: true,
     },

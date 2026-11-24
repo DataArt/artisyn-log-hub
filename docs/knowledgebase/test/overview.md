@@ -59,7 +59,7 @@ and this table mirror it.
 | Scenarios, mode B (`password-confirm`) | `npm run test:scenarios -- --mode b --only scenarios` | repo root | `scenarios-b` |
 | Scenarios, mode C (`password`) | `npm run test:scenarios -- --mode c --only scenarios` | repo root | `scenarios-c` |
 | Legacy e2e, fast `@core` loop | `npm run test:e2e` | repo root | `e2e-fast` |
-| Legacy e2e, full | `npm run test:e2e:full` | repo root | `e2e-full` (final only) |
+| Legacy e2e, rest (every test not tagged `@core`) | `npm run test:e2e:full` | repo root | `e2e-full` (final only) |
 
 - **Fast set vs full set.** Every iteration (`finalRun: false`) runs the fast set: all `static`
   checks plus `build`. `contract`, `scenarios-a/b/c`, `e2e-fast` and `e2e-full` are

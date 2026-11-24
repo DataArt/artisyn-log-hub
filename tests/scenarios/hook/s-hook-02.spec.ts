@@ -275,7 +275,11 @@ test('@S-HOOK-02 the hook repairs torn NDJSON byte-for-byte and keeps secrets ou
       const key = await createApiKey(owner.api);
       writeStandConfig(repo, stand.url, key.key);
       fs.rmSync(path.join(telemetry, `${bad}.jsonl`));
+      // Forget everything the fake hub got: both manifests. The v2 entry carries the append state
+      // (hook 3.3.0) — how much of the backlog transcript the *fake hub* holds — so leaving it
+      // would make the hook send only new lines (none) to a stand that has never seen the file.
       fs.rmSync(path.join(telemetry, '.claude-logs.sent'), { force: true });
+      fs.rmSync(path.join(telemetry, '.claude-logs.sent.v2'), { force: true });
       const res = await runHook(toolDir, { hook_event_name: 'Stop', session_id: cur, cwd: repo }, { home });
       expect(res.code, res.stderr).toBe(0);
       await waitForQueueIdle(db, owner.id);

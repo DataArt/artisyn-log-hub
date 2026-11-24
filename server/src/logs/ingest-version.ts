@@ -13,10 +13,15 @@ export const INGEST_VERSION = 1;
  * - `bodySha256` — sha256 hex of the staged raw body string (UTF-8), computed before parsing;
  * - `receivedAt` — `upload_queue.received_at` of the row, the "newer upload wins" key (DD-19).
  *
+ * - `appendStartLine` — set only for an append row (`upload_queue.start_line`, DD-7 of
+ *   2026-11-24-traffic-optimization): the lines are a delta starting at this record index, to be
+ *   appended to the stored body. Its `bodySha256` is `null` (the hash covers only the delta).
+ *
  * Absent (an older caller), both columns are written as NULL and the ordering guard always lets
  * the write through.
  */
 export interface UpsertIngestMeta {
-  bodySha256: string;
+  bodySha256: string | null;
   receivedAt: Date;
+  appendStartLine?: number;
 }

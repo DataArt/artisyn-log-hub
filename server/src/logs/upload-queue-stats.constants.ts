@@ -43,13 +43,16 @@ export function getMeasurementPruneIntervalMs(): number {
  *
  * - `skipped` — the server hash skip dropped an unchanged upload without parsing it (DD-20 of
  *   2026-11-23-session-logs-streaming);
- * - `superseded` — a newer upload of the same whole-file log replaced this one (DD-16/DD-19).
+ * - `superseded` — a newer upload of the same whole-file log replaced this one (DD-16/DD-19);
+ * - `upload-full` — an append row's delta did not fit the stored log, so the hook is asked to
+ *   re-send the whole file (2026-11-24-traffic-optimization).
  *
- * The admin stats count only `success` / `failure`, so the two new outcomes stay out of the
+ * The admin stats count only `success` / `failure`, so the other outcomes stay out of the
  * throughput and failure figures.
  */
 export type UploadQueueMeasurementOutcome =
   | 'success'
   | 'failure'
   | 'skipped'
-  | 'superseded';
+  | 'superseded'
+  | 'upload-full';

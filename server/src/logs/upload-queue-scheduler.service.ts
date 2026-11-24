@@ -15,7 +15,7 @@ import { NO_LOG_MARKER } from '../common/sql-logger';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { uploadQueue, uploadQueueMeasurements } from '../database/schema/index';
-import { LogsService } from './logs.service';
+import { LogsService, type CheckUnchangedResult } from './logs.service';
 import { SessionTombstoneService } from '../sessions/session-tombstone.service';
 import { parseNdjsonLinesTolerant } from './ndjson-parser';
 import {
@@ -26,6 +26,7 @@ import {
 import {
   COALESCED_LOG_TYPES,
   CONTENT_HASH_MISMATCH,
+  UPLOAD_FULL_REASON,
   UploadQueueService,
 } from './upload-queue.service';
 import { FOREIGN_SESSION_WARNING } from './upload-warnings';
@@ -57,6 +58,11 @@ interface UploadQueueRawRow extends Record<string, unknown> {
   /** DD-24: the sha256 hex the hook declared for the body; NULL from older hooks. */
   content_sha256: string | null;
   failure_delivered: boolean;
+  /**
+   * Append row (`POST /api/v2/logs/append`): the stored line count the delta continues from.
+   * NULL for a full upload.
+   */
+  start_line: number | null;
 }
 
 /**
@@ -350,6 +356,11 @@ export class UploadQueueSchedulerService
    * the same `(user_id, session_id, log_type)` is claimed instead — the older ones are deleted
    * as `superseded` once it succeeds. The first pick is only row-locked for the length of this
    * transaction and stays `pending`, untouched.
+   *
+   * Append rows (`start_line IS NOT NULL`, traffic-optimization DD-4) keep their order: one is
+   * picked only when no older `pending` / `processing` row of the same key exists, and it is
+   * never coalesced. The coalescing jump only ever lands on a full upload (`start_line IS NULL`);
+   * an append row it passes over is processed later and dropped as stale by the age check.
    */
   private async claimNextPendingRow(): Promise<UploadQueueRawRow | null> {
     // A row sent back after a transient error waits a little, so the transaction it collided
@@ -364,10 +375,18 @@ export class UploadQueueSchedulerService
           user_id: number;
           session_id: string;
           log_type: string;
+          start_line: number | null;
         }>(
           sql`${sql.raw(NO_LOG_MARKER)}
-              SELECT id, user_id, session_id, log_type FROM upload_queue
+              SELECT id, user_id, session_id, log_type, start_line FROM upload_queue
               WHERE ${eligible}
+                AND (start_line IS NULL OR NOT EXISTS (
+                  SELECT 1 FROM upload_queue o
+                  WHERE o.user_id = upload_queue.user_id
+                    AND o.session_id = upload_queue.session_id
+                    AND o.log_type = upload_queue.log_type
+                    AND o.status IN ('pending', 'processing')
+                    AND (o.received_at, o.id) < (upload_queue.received_at, upload_queue.id)))
               ORDER BY received_at ASC
               LIMIT 1
               FOR UPDATE SKIP LOCKED`,
@@ -376,7 +395,10 @@ export class UploadQueueSchedulerService
       if (!first) return null;
 
       let claimId = first.id;
-      if (COALESCED_LOG_TYPES.includes(first.log_type)) {
+      if (
+        first.start_line === null &&
+        COALESCED_LOG_TYPES.includes(first.log_type)
+      ) {
         const newest = (
           await tx.execute<{ id: number }>(
             sql`${sql.raw(NO_LOG_MARKER)}
@@ -386,6 +408,7 @@ export class UploadQueueSchedulerService
                   AND session_id = ${first.session_id}
                   AND log_type = ${first.log_type}
                   AND id <> ${first.id}
+                  AND start_line IS NULL
                 ORDER BY received_at DESC, id DESC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED`,
@@ -482,10 +505,12 @@ export class UploadQueueSchedulerService
           workflowPhase: row.workflow_phase ?? null,
         },
       };
-      const unchanged = await this.logsService.checkUnchanged(
-        uploadParams,
-        bodySha256,
-      );
+      // An append row carries only a delta, so the whole-body hash skip does not apply to it
+      // (traffic-optimization DD-8); `upsert` decides append / stale / upload-full instead.
+      const isAppend = row.start_line !== null;
+      const unchanged: CheckUnchangedResult = isAppend
+        ? 'process'
+        : await this.logsService.checkUnchanged(uploadParams, bodySha256);
       if (unchanged === 'foreign') {
         await this.rejectForeignSession(row, filePath, startedAt);
         return;
@@ -525,8 +550,21 @@ export class UploadQueueSchedulerService
         uploadParams.parentSessionId,
         uploadParams.workflowRunId,
         uploadParams.agentMeta,
-        { bodySha256, receivedAt: new Date(row.received_at) },
+        row.start_line !== null
+          ? {
+              bodySha256: null,
+              receivedAt: new Date(row.received_at),
+              appendStartLine: row.start_line,
+            }
+          : { bodySha256, receivedAt: new Date(row.received_at) },
       );
+
+      if (upsertResult.status === 'upload-full') {
+        // DD-8/DD-9: the delta does not continue the stored log — the hook is asked (once,
+        // through `failedUploads`) to send the whole file instead.
+        await this.failUploadFull(row, filePath, startedAt);
+        return;
+      }
 
       if (upsertResult.status === 'foreign-session') {
         // Open-source readiness: another user owns this session (the
@@ -687,6 +725,55 @@ export class UploadQueueSchedulerService
     } catch (err) {
       this.logger.warn(
         `Failed to record upload queue measurement (failure) for id=${row.id} sessionId=${row.session_id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Traffic-optimization DD-9: terminal handling of an append row whose delta does not continue
+   * the stored log (`upload-full`). Unlinks the staged delta, marks the row `failed`
+   * (`error_kind = 'server'`, `error_message = UPLOAD_FULL_REASON`, `failure_delivered = false`)
+   * without a retry, and records an `upload-full` measurement. The hook learns about it once
+   * through `failedUploads` and re-sends the whole file; the row is deleted on delivery and is
+   * hidden from the pending warnings.
+   */
+  private async failUploadFull(
+    row: UploadQueueRawRow,
+    filePath: string,
+    startedAt: Date,
+  ): Promise<void> {
+    this.logger.log(
+      `Upload queue append does not continue the stored log, asking for a full upload: id=${row.id} sessionId=${row.session_id} logType=${row.log_type} startLine=${row.start_line}`,
+    );
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.logger.warn(
+          `Failed to remove staged append body for id=${row.id} fileName=${row.file_name}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+    await this.db
+      .update(uploadQueue)
+      .set({
+        status: 'failed',
+        attempts: Number(row.attempts ?? 0) + 1,
+        errorMessage: UPLOAD_FULL_REASON,
+        errorKind: 'server',
+        failureDelivered: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(uploadQueue.id, row.id));
+    try {
+      await this.recordMeasurement(row, startedAt, new Date(), 'upload-full');
+    } catch (err) {
+      this.logger.warn(
+        `Failed to record upload queue measurement (upload-full) for id=${row.id} sessionId=${row.session_id}: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );

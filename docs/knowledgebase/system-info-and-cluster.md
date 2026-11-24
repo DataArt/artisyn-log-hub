@@ -5,7 +5,7 @@ description: "Native node:cluster launch (server/src/cluster/), the System Info 
 tags:
   - server
   - cluster
-generated: { by: "human:denistsyplakov", at: "2026-11-20T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-24T22:55:00+04:00" }
 ---
 
 # System Info & Cluster Parallel Launch
@@ -71,7 +71,9 @@ The primary runs with `NODE_APP_INSTANCE` unset, so its own `AppLogger` writes t
 optional, so a primary-side fatal line is already discoverable in Admin → Error Logs.
 
 **Restart policy (`WorkerSlotRegistry`).** Per-slot state is
-`{ instance, pid, status, restarts, lastRestartAt, rssBytes, consecutiveFastCrashes, forkedAt }` with
+`{ instance, pid, status, restarts, lastRestartAt, rssBytes, partCache, consecutiveFastCrashes, forkedAt }` with
+`partCache` the worker's last pushed part cache counters (optional field of the worker-stats IPC
+message, cleared on re-fork; see [session-part-cache.md](session-part-cache.md)) and
 `status` one of `'starting' | 'online' | 'restarting' | 'stopped'`. On exit:
 
 - shutting down → `ignore` (no counter is touched);
@@ -212,7 +214,11 @@ The full set of CWD-relative resolvers `WORKDIR /app/dist` governs: `resolveStag
 and `error-logs.service.ts` (all `logs` → `logs_data`), plus `logs/export-import-zip.ts`
 (`EXPORT_IMPORT_DIR` || `export-import`; the release compose mounts it from
 `$LOG_HUB_DATA_DIR/export-import`, so staged export/import zips survive a container recreate until their
-TTL and the dir is writable under a `read_only: true` override).
+TTL and the dir is writable under a `read_only: true` override), and `readPartCacheConfig()` in
+`logs/part-cache/part-cache.config.ts` (`SESSION_PART_CACHE_DIR` || `<UPLOAD_QUEUE_DIR || upload-queue>/part-cache`
+→ inside `upload_queue_data`; a disposable cache, see [session-part-cache.md](session-part-cache.md)).
+The System Info API also carries the cache's admin view as `partCache` (Part cache card on the
+System tab).
 
 **A second, code-level cause of the same `ENOENT` symptom (fixed, see below).** Even with the volume
 correctly mounted, `UploadQueueService.reassembleChunks()` used to delete a chunked upload's `.chunkN`

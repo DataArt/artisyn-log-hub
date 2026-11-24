@@ -1,0 +1,62 @@
+[
+  {
+    "id": "IA-01",
+    "input": {"stored": null, "rowReceivedAt": "2026-11-24T10:00:00.000Z", "startLine": 5},
+    "expected": {"decision": "upload-full"},
+    "note": "No stored log for (session, log_type): nothing to append to (rule 1)."
+  },
+  {
+    "id": "IA-02",
+    "input": {"stored": {"receivedAt": "2026-11-24T10:00:05.000Z", "lineCount": 5}, "rowReceivedAt": "2026-11-24T10:00:00.000Z", "startLine": 5},
+    "expected": {"decision": "stale"},
+    "note": "The row is older than the stored body: discarded as superseded (rule 2)."
+  },
+  {
+    "id": "IA-03",
+    "input": {"stored": {"receivedAt": "2026-11-24T10:00:00.000Z", "lineCount": 5}, "rowReceivedAt": "2026-11-24T10:00:00.000Z", "startLine": 5},
+    "expected": {"decision": "append"},
+    "note": "Equal times are not stale; the count matches (rules 2, 4)."
+  },
+  {
+    "id": "IA-04",
+    "input": {"stored": {"receivedAt": null, "lineCount": 5}, "rowReceivedAt": "2026-11-24T10:00:00.000Z", "startLine": 5},
+    "expected": {"decision": "append"},
+    "note": "Stored time NULL (body written by an older path) is never stale (rule 2)."
+  },
+  {
+    "id": "IA-05",
+    "input": {"stored": {"receivedAt": "2026-11-24T10:00:00.000Z", "lineCount": 3}, "rowReceivedAt": "2026-11-24T10:00:05.000Z", "startLine": 5},
+    "expected": {"decision": "upload-full"},
+    "note": "Stored count below startLine: the delta would leave a gap (rule 3)."
+  },
+  {
+    "id": "IA-06",
+    "input": {"stored": {"receivedAt": "2026-11-24T10:00:00.000Z", "lineCount": 8}, "rowReceivedAt": "2026-11-24T10:00:05.000Z", "startLine": 5},
+    "expected": {"decision": "upload-full"},
+    "note": "Stored count above startLine: the delta would duplicate records (rule 3)."
+  },
+  {
+    "id": "IA-07",
+    "input": {"stored": {"receivedAt": "2026-11-24T10:00:00.000Z", "lineCount": null}, "rowReceivedAt": "2026-11-24T10:00:05.000Z", "startLine": 0},
+    "expected": {"decision": "upload-full"},
+    "note": "Stored body is not an array (count NULL): never treated as 0 (rule 3)."
+  },
+  {
+    "id": "IA-08",
+    "input": {"stored": {"receivedAt": "2026-11-24T10:00:00.000Z", "lineCount": 12}, "rowReceivedAt": "2026-11-24T10:00:05.000Z", "startLine": 12},
+    "expected": {"decision": "append"},
+    "note": "A newer row whose startLine equals the stored count: store body + delta (rule 4)."
+  },
+  {
+    "id": "IA-09",
+    "input": {"stored": {"receivedAt": "2026-11-24T10:00:05.000Z", "lineCount": 3}, "rowReceivedAt": "2026-11-24T10:00:00.000Z", "startLine": 5},
+    "expected": {"decision": "stale"},
+    "note": "Older and mismatching: the stale check comes first, so no full re-upload is asked for (rule 2 before 3)."
+  },
+  {
+    "id": "IA-10",
+    "input": {"stored": {"receivedAt": "2026-11-24T10:00:00.000Z", "lineCount": 0}, "rowReceivedAt": "2026-11-24T10:00:05.000Z", "startLine": 0},
+    "expected": {"decision": "append"},
+    "note": "An empty stored array and startLine 0: append onto it (rule 4)."
+  }
+]

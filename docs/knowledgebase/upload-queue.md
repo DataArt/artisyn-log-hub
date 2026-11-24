@@ -1,12 +1,12 @@
 ---
 type: "Architecture Guide"
 title: "Upload Queue (async log ingest, chunked upload, worker stats)"
-description: "How POST /api/v2/logs stages uploads and a cluster-safe scheduler ingests them: queue lifecycle and statuses, chunked upload and reassembly, malformed-line tolerance, coalescing, hash skip, ordering guard, content hash, failure feedback and transcript re-extraction, the admin Upload Queue tab and its worker statistics, and the hook-side upload order and unchanged-file skip."
+description: "How POST /api/v2/logs stages uploads and a cluster-safe scheduler ingests them: queue lifecycle and statuses, chunked upload and reassembly, malformed-line tolerance, coalescing, hash skip, ordering guard, content hash, failure feedback and transcript re-extraction, append rows (POST /api/v2/logs/append, start_line, upload-full), the admin Upload Queue tab and its worker statistics, and the hook-side upload order and unchanged-file skip."
 tags:
   - server
   - hooks
   - upload
-generated: { by: "claude-code", at: "2026-11-23T18:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-24T20:00:00+04:00" }
 ---
 
 # Upload Queue
@@ -33,6 +33,12 @@ parsed on the request path. Column-level detail lives in
 | Admin UI | `client/src/viewer/pages/admin/tabs/AdminUploadQueueTab.tsx`, `UploadQueueStatsPanel.tsx` |
 | Hook uploader | `hook/.claude/telemetry_tool/upload-logs.js`, `hook/.claude/telemetry_tool/send-logs-hook.js` |
 
+**`part-cache/` is not staging.** By default the session-log part cache lives in
+`<UPLOAD_QUEUE_DIR>/part-cache/` ([session-part-cache.md](session-part-cache.md)). No staging
+scanner touches it: every one matches `<uploadId>.chunk*` or a session / upload id prefix, or
+unlinks named files, and the admin disk-usage figure sizes only `logs/`. A new scanner over
+`UPLOAD_QUEUE_DIR` must skip that folder too.
+
 ## Queue lifecycle
 
 1. **Stage.** `saveRawUpload()` writes the body to `<UPLOAD_QUEUE_DIR>/<epochMs>-<uuid>.raw`
@@ -47,7 +53,8 @@ parsed on the request path. Column-level detail lives in
 3. **Claim.** Every `UPLOAD_QUEUE_INTERVAL_MS` (default 1s) each cluster worker runs `tick()`. It
    claims the oldest `pending` row with `SELECT … FOR UPDATE SKIP LOCKED` and an `UPDATE` in one
    transaction, which is cluster-safe without any instance-index gating (whole-file types claim
-   the newest row of the same key instead — see "Skip, ordering, coalescing and integrity"). A tick keeps claiming rows until the
+   the newest row of the same key instead — see "Skip, ordering, coalescing and integrity"; an
+   append row waits for the older rows of its key — see "Append rows"). A tick keeps claiming rows until the
    queue is empty or `UPLOAD_QUEUE_TICK_BUDGET_MS` (default 500ms, `0` allowed) has passed, and
    always processes at least one row, so a burst of small `claude-otel` chunks drains in one tick.
    An in-process flag stops two ticks of the same process from overlapping.
@@ -186,9 +193,11 @@ delays or fails an upload.
 - a 7-day average speed (the retention window);
 - latency avg / p95 / min / max and a drain ETA.
 
-A measurement's `outcome` is `success`, `failure`, `skipped` (hash skip) or `superseded`
-(coalesced away, or older than the stored body) — see the next section. Only `success` rows feed
-throughput; failures count toward utilisation; `skipped` and `superseded` rows feed neither. Measurements older than
+A measurement's `outcome` is `success`, `failure`, `skipped` (hash skip), `superseded`
+(coalesced away, or older than the stored body) — see the next section — or `upload-full` (an
+append row whose delta did not fit the stored log, see "Append rows"). Only `success` rows feed
+throughput; failures count toward utilisation; `skipped`, `superseded` and `upload-full` rows feed
+neither. Measurements older than
 `UPLOAD_QUEUE_MEASUREMENT_RETENTION_MS` (default 7 days) are pruned at most once per
 `UPLOAD_QUEUE_MEASUREMENT_PRUNE_INTERVAL_MS` (default 5 min) per process. All three values are
 read from `process.env` on every call, so e2e overrides apply after bootstrap. The Upload Queue tab
@@ -244,6 +253,55 @@ row of the tree one body at a time, sets its `stats_edit_sha256`, marks the tree
 Tools/MCP rebuild and deletes the queue row. A queued row older than 30 s makes the parts manifest
 report `derivedLagging`.
 
+## Append rows
+
+Hook `3.3.0`+ sends only the new complete lines of a `claude` / `claude-subagent` transcript to
+`POST /api/v2/logs/append` (`postLogsAppend` in `logs-v2.controller.ts`; contract and fallbacks in
+[hook-api-versioning.md](hook-api-versioning.md) § "`POST /api/v2/logs/append`"). Task
+`docs/tasks/todo/2026-11-24-traffic-optimization` (DD-1 to DD-9).
+
+- **Staging.** The route shares the non-chunked branch of `postLogs` (`stageSingleUpload`:
+  foreign / deleted session answers, then `saveRawUpload(rawBody, meta, contentSha256,
+  startLine)`), so the row is a normal single `pending` row plus `upload_queue.start_line` — the
+  0-based record index the delta starts at. `start_line IS NULL` marks a full upload; every
+  pre-append row and old hook stays NULL. `contentSha256` covers the delta.
+- **Claim rule.** An append row is claimed only when no older row of the same
+  `(user_id, session_id, log_type)` is still `pending` or `processing` (`NOT EXISTS` on
+  `(received_at, id)`, served by `idx_upload_queue_session_id_received_at`), so the deltas of one
+  key are applied in order, one at a time. Full rows ignore append rows: for the queue F1, A1, F2
+  the coalescing jump claims F2, and A1, processed later, is discarded as stale.
+- **No coalescing, no superseding.** The coalescing jump runs only when the first pick is a full
+  row, and lands only on a full row (`AND start_line IS NULL`). `deleteSupersededRows` deletes only
+  full rows (`AND start_line IS NULL`), so an append row is never dropped unprocessed and never
+  gets a `superseded` measurement that way.
+- **Worker branch.** The staged-file read, the `content_sha256` check and the tombstone pre-check
+  run as for a full row; `checkUnchanged` (hash skip) is skipped. The body is parsed with
+  `parseNdjsonLinesTolerant` and passed to `upsert` with `{ bodySha256: null, receivedAt,
+  appendStartLine: start_line }`. Inside the ingest transaction `decideIngestAppend`
+  ([algorithms/ingest-append.md](algorithms/ingest-append.md)) compares the row with the stored
+  `logs` row (`body_received_at`, `jsonb_array_length(body)`):
+  - `append` — the stored body ends exactly at `start_line`: `upsert` stores body + delta and the
+    rest of the ingest (derived rows, `markTreeStale`) runs on the full body. `body_sha256` is
+    written NULL, so the next full upload of the file is processed, not hash-skipped; the
+    `logs_body_guard` trigger advances `body_rev`.
+  - `stale` — the row is older than the stored body: `superseded`, completed with a `superseded`
+    measurement, nothing written.
+  - `upload-full` — no stored log, a NULL record count or a different one: the transaction rolls
+    back and the worker calls `failUploadFull`.
+- **`upload-full` lifecycle.** `failUploadFull` unlinks the staged delta and sets the row
+  `status = 'failed'`, `error_kind = 'server'`, `error_message = 'upload-full'`
+  (`UPLOAD_FULL_REASON` in `upload-queue.service.ts`), `failure_delivered = false` — no retry. Then:
+  - `getPendingWarnings` skips it (`error_message IS DISTINCT FROM 'upload-full'`), so the hook
+    gets no `warnings` entry and no `broken-upload-file` recommendation;
+  - `takeFailedUploadsForFeedback` returns it once as a `failedUploads` entry (only to callers that
+    send `uploadFeedback=1`, which every `3.3.0` hook does) and **deletes** it in the same call; the
+    hook then re-sends the whole file;
+  - the admin `reprocess-failed` skips it (its delta no longer fits); `clear failed` still deletes
+    it.
+- **Measurement.** `failUploadFull` records one measurement with outcome `upload-full`
+  (`UploadQueueMeasurementOutcome`). Like `skipped` and `superseded` it feeds neither throughput
+  nor the failure count of the admin statistics.
+
 ## Upload priority
 
 On `Stop`, `send-logs-hook.js` uploads files in this order:
@@ -268,6 +326,9 @@ recorded size is skipped; only the current session's `artisyn` file is never ski
 - Entries whose file no longer exists are pruned, per namespace that resolved in this run.
 - Uploaded `claude-otel` chunks are deleted rather than fingerprinted (see
   [otel-receiver.md](otel-receiver.md)).
+
+For `claude` / `claude-subagent` files that did change, hook `3.3.0`+ usually sends only the new
+lines ("Append rows" above).
 
 More on the manifest and namespaces: [hook-system-overview.md](hook-system-overview.md).
 

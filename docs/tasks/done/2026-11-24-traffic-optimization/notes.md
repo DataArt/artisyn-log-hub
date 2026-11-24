@@ -61,3 +61,26 @@ the `compression` 1.8.2 middleware answers `br` to a browser (`gzip, deflate, br
 turn brotli off; a small middleware wrapping `res.json` with async `zlib.gzip` answers `gzip`, keeps
 `Vary`, honours `q=0` and the threshold, and leaves streamed and pre-gzipped answers alone by
 construction. The plan uses the `res.json` wrapper.
+
+## 2026-11-24 — after: measured on the Pi (FR-11 / NFR)
+
+Pi build of this branch (image `partcache-admin-20261124-arm64`), session `9fc6b5cc`, the same
+`GET …/sessions/<id>/otel?interval=auto&stackBy=structure` from a LAN client (Node `http`, no
+browser cache), three requests with `Accept-Encoding: gzip`, then one without:
+
+| Request | Content-Encoding | Bytes on the wire | Decoded | Time |
+|---|---|---|---|---|
+| gzip #1 | gzip | 666,817 | 10,438,568 | 7.1 s |
+| gzip #2 | gzip | 666,817 | 10,438,568 | 5.8 s |
+| gzip #3 | gzip | 666,817 | 10,438,568 | 5.7 s |
+| no gzip | identity | 10,438,568 | 10,438,568 | 10.5 s (8.2 s in an earlier run) |
+
+Median with gzip 5.8 s vs ~10.5 s before (the body grew from 9.2 MB to 10.4 MB since the
+"before" measurement); 15.7× fewer bytes on the wire. What remains is server time on the Pi
+(building the 6k-span answer), not transfer.
+
+Live hook append check on the Pi (same evening): after the server gained the route, the hook
+logged `appended N lines from line M` for every Stop; `upload_queue_measurements` sizes were
+0.4–132 KB instead of 1.4–2.2 MB full bodies, and the stored `claude` line counts equal the local
+transcripts (715 / 393 / 260 / 8). Before the deploy the hook got 404 and went full
+(`append not used (append-off) — full upload`) — the new-hook / old-server path, live.

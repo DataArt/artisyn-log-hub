@@ -46,6 +46,10 @@ const { uploadFileMaybeCompressed, uploadFileChunked, CHUNK_SIZE_BYTES, acquireU
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
 const { readSessionSnapshot, forgetSnapshot } = require('./harness-state');
 const { recordScopedClaudeUpload, forgetFailedUploads } = require('./upload-skip');
+const {
+  uploadWithAppend, stateAfterFull, readScopedAppendState, failedUploadsIncludeKey,
+  formatAppendResultLine, formatAppendFallbackLine,
+} = require('./append-upload');
 
 const HOOK_FILE = 'prompt-upload-hook.js';
 
@@ -107,8 +111,37 @@ function formatUploadResultLine(manifestKey, result) {
 }
 
 /**
- * Upload the scoped current-session files. No manifest read — every invocation re-uploads whatever
- * is currently on disk; the server's idempotent upsert absorbs the resulting repeat uploads.
+ * DD-25 upload feedback: the server flags the failures it reports as delivered, so this path acts
+ * on them too — forget their keys in both manifests (the caller holds `.upload.lock`) so the next
+ * `Stop` re-sends them; `sessionDeleted` is logged and never retried. `manifestKey` (this upload's
+ * own key) is kept: Design Decision 19 handles it at the call site. Never throws.
+ * @param {string} telemetryDir
+ * @param {{ failedUploads?: Array<{sessionId: string, type: string}>, sessionDeleted?: true }} result
+ * @param {string} manifestKey
+ * @param {string} sessionId
+ * @param {string|null} cwd
+ */
+function applyUploadFeedback(telemetryDir, result, manifestKey, sessionId, cwd) {
+  if (Array.isArray(result.failedUploads) && result.failedUploads.length > 0) {
+    try {
+      const removed = forgetFailedUploads(telemetryDir, result.failedUploads, manifestKey);
+      if (removed.length > 0) {
+        hookLog(HOOK_FILE, sessionId, 'result', `server reported failed uploads — will re-send: ${removed.join(', ')}`, cwd);
+      }
+    } catch (err) {
+      hookLog(HOOK_FILE, sessionId, 'warn', `failed uploads not forgotten in the manifest: ${err.message}`, cwd);
+    }
+  }
+  if (result.sessionDeleted === true) {
+    hookLog(HOOK_FILE, sessionId, 'result', `${manifestKey}: session deleted on the server — upload ignored, not retried`, cwd);
+  }
+}
+
+/**
+ * Upload the scoped current-session files. Every invocation re-uploads whatever is currently on
+ * disk; the server's idempotent upsert absorbs the resulting repeat uploads. The one exception is
+ * the session's own `claude` transcript: its v2 manifest entry's append state is read, and when it
+ * still describes the file only the new lines go to the append route (`append-upload.js`).
  *
  * DD-26 scoped-path recording: after a 201 for the session's own `claude` transcript, and only
  * when `sanitizeNdjson` dropped no line (so the bytes sent are the file's bytes), its entry goes
@@ -164,6 +197,48 @@ async function runUploads(cwd, sessionId, serverUrl, apiKey, timeoutMs, telemetr
     // un-ingestable — the server rejects the whole body on the first malformed line, and this
     // hook re-uploads the same file on every prompt.
     const readSize = body.length;
+    /** The raw file bytes, before sanitizing — what the append state describes. */
+    const rawBuf = body;
+
+    // Append path for the session's own transcript (traffic optimization, Design Decisions 18–20):
+    // only the lines the server does not hold yet are sent. Any doubt falls through to the full
+    // upload below, unchanged.
+    if (isOwnTranscript) {
+      const appended = await uploadWithAppend({
+        buf: rawBuf,
+        state: readScopedAppendState(telemetryDir, sessionId),
+        manifestKey, serverUrl, apiKey, namespace, sessionId,
+        parentSessionId: null, workflowRunId: null, agentMeta: null,
+        timeoutMs, hookSessionId: sessionId, cwd, telemetryDir,
+      });
+      const recordAppend = (newState) => {
+        if (preReadMtimeMs === null) return;
+        try {
+          recordScopedClaudeUpload(telemetryDir, sessionId, readSize, preReadMtimeMs, newState);
+        } catch (err) {
+          hookLog(HOOK_FILE, sessionId, 'warn', `${manifestKey}: manifest not recorded: ${err.message}`, cwd);
+        }
+      };
+      let fallbackReason;
+      if (appended.kind === 'none') {
+        recordAppend(appended.newState);
+        continue;
+      } else if (appended.kind === 'appended') {
+        applyUploadFeedback(telemetryDir, appended.result, manifestKey, sessionId, cwd);
+        hookLog(HOOK_FILE, sessionId, 'result', formatAppendResultLine(manifestKey, appended), cwd);
+        if (!failedUploadsIncludeKey(appended.result.failedUploads, manifestKey)) {
+          uploadedCount++;
+          recordAppend(appended.newState);
+          continue;
+        }
+        fallbackReason = 'failed-feedback'; // Design Decision 19
+      } else {
+        fallbackReason = appended.reason;
+      }
+      const fallbackLine = formatAppendFallbackLine(manifestKey, fallbackReason);
+      if (fallbackLine) hookLog(HOOK_FILE, sessionId, 'result', fallbackLine, cwd);
+    }
+
     const sanitized = sanitizeNdjson(body);
     for (const msg of formatDroppedLines(manifestKey, sanitized)) {
       hookLog(HOOK_FILE, sessionId, 'warn', msg, cwd);
@@ -196,29 +271,17 @@ async function runUploads(cwd, sessionId, serverUrl, apiKey, timeoutMs, telemetr
       : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null, snapshotQuery);
     const { success, reason, unknownSnapshotId } = result;
 
-    // DD-25 upload feedback: the server flags the failures it reports as delivered, so this path
-    // acts on them too — forget their keys in both manifests (we hold `.upload.lock`) so the next
-    // `Stop` re-sends them; `sessionDeleted` is logged and never retried.
-    if (Array.isArray(result.failedUploads) && result.failedUploads.length > 0) {
-      try {
-        const removed = forgetFailedUploads(telemetryDir, result.failedUploads, manifestKey);
-        if (removed.length > 0) {
-          hookLog(HOOK_FILE, sessionId, 'result', `server reported failed uploads — will re-send: ${removed.join(', ')}`, cwd);
-        }
-      } catch (err) {
-        hookLog(HOOK_FILE, sessionId, 'warn', `failed uploads not forgotten in the manifest: ${err.message}`, cwd);
-      }
-    }
-    if (result.sessionDeleted === true) {
-      hookLog(HOOK_FILE, sessionId, 'result', `${manifestKey}: session deleted on the server — upload ignored, not retried`, cwd);
-    }
+    applyUploadFeedback(telemetryDir, result, manifestKey, sessionId, cwd);
 
     if (success) {
       uploadedCount++;
       hookLog(HOOK_FILE, sessionId, 'result', formatUploadResultLine(manifestKey, result), cwd);
       if (isOwnTranscript && preReadMtimeMs !== null && sanitized.dropped.length === 0) {
+        // The append state goes with the entry (Design Decisions 15, 19): none when the server
+        // reported this very file as failed.
+        const fullState = failedUploadsIncludeKey(result.failedUploads, manifestKey) ? null : stateAfterFull(rawBuf);
         try {
-          recordScopedClaudeUpload(telemetryDir, sessionId, readSize, preReadMtimeMs);
+          recordScopedClaudeUpload(telemetryDir, sessionId, readSize, preReadMtimeMs, fullState);
         } catch (err) {
           hookLog(HOOK_FILE, sessionId, 'warn', `${manifestKey}: manifest not recorded: ${err.message}`, cwd);
         }

@@ -163,6 +163,11 @@ export interface ExpectSpec {
   bodyMatches?: Record<string, unknown>;
   /** The raw response body, byte for byte (a file download). */
   bodyText?: string;
+  /**
+   * Response headers. Names are case-insensitive. A string must be contained in the header
+   * value (case-insensitive); `null` means the header must be absent.
+   */
+  headers?: Record<string, string | null>;
 }
 
 /**

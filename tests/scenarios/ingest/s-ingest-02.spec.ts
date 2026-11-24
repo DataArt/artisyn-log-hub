@@ -24,14 +24,29 @@
 // (`superseded` measurements), the re-extract drain on new artisyn edit records and the
 // workflows backfill / gzip drains converging legacy rows.
 //
+// Steps 17–23 (2026-11-24-traffic-optimization) cover append uploads (`POST /api/v2/logs/append`,
+// algorithm doc ingest-append.md): full + deltas equal one full upload, the row fields a delta
+// leaves, the next full upload, a stale delta, ordering of append rows, a gzipped delta and two
+// concurrent deltas with the same startLine.
+//
 // Replaces:
 //   - server/test/logs.e2e-spec.ts block «artisyn log extraction» (17)
 //   - server/src/logs/artisyn-extractor.spec.ts (repository, branch and time extraction: ≈ 8)
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { gunzipSync } from 'zlib';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
-import { holdSessionTreeLock, measurementOutcomes, ndjson, postLogs, queueRowCount, sessionRowCount, storedBody } from '../helpers/ingest';
+import {
+  holdSessionTreeLock,
+  measurementOutcomes,
+  ndjson,
+  postLogs,
+  postLogsAppend,
+  processedSizes,
+  queueRowCount,
+  sessionRowCount,
+  storedBody,
+} from '../helpers/ingest';
 import { ownRepoId } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
 import { infoValue, openSession } from '../helpers/session-view';
@@ -668,5 +683,198 @@ test('@S-INGEST-02 first v2 upload: repository, branch, user, context; re-upload
       .toBe(true);
     const r = await gzRow();
     expect(gunzipSync(r.body_gz!).toString('utf8'), 'the gzip copy is the body text').toBe(r.t);
+  });
+
+  // Steps 17–23 (2026-11-24-traffic-optimization, FR-4a/4d/5/9, algorithm doc
+  // ingest-append.md): `POST /api/v2/logs/append` deltas on top of a full upload. Every session
+  // below gets the same 9-line transcript, parametrised only by its session id.
+  const transcript = (sessionId: string): object[] => {
+    const usage = (input: number, output: number) => ({ input_tokens: input, output_tokens: output, cache_read_input_tokens: 10 });
+    const assistant = (n: number, parent: string, hms: string, content: object[], u: object) => ({
+      type: 'assistant', uuid: `${sessionId}-a${n}`, parentUuid: parent, sessionId, timestamp: at(hms),
+      message: { id: `msg-${sessionId}-${n}`, role: 'assistant', model: 'claude-sonnet-4-6', usage: u, content },
+    });
+    const user = (n: number, parent: string | null, hms: string, content: object[]) => ({
+      type: 'user', uuid: `${sessionId}-u${n}`, ...(parent ? { parentUuid: parent } : {}), sessionId, timestamp: at(hms),
+      message: { role: 'user', content },
+    });
+    return [
+      user(1, null, '18:00:00', [{ type: 'text', text: `Append transcript ${run}` }]),
+      assistant(1, `${sessionId}-u1`, '18:00:10', [
+        { type: 'tool_use', id: `toolu_bash_${sessionId}`, name: 'Bash', input: { command: 'ls' } },
+        { type: 'tool_use', id: `toolu_wf_${sessionId}`, name: 'Workflow', input: { name: 'ShipIt' } },
+      ], usage(100, 30)),
+      user(2, `${sessionId}-a1`, '18:00:20', [{ type: 'tool_result', tool_use_id: `toolu_bash_${sessionId}`, content: 'a.ts' }]),
+      assistant(2, `${sessionId}-u2`, '18:00:30', [
+        { type: 'tool_use', id: `toolu_w_${sessionId}`, name: 'Write', input: { file_path: 'src/a.ts', content: 'x\ny\n' } },
+      ], usage(120, 40)),
+      user(3, `${sessionId}-a2`, '18:00:40', [{ type: 'tool_result', tool_use_id: `toolu_w_${sessionId}`, content: 'File created' }]),
+      assistant(3, `${sessionId}-u3`, '18:00:50', [{ type: 'text', text: `First answer ${run}` }], usage(130, 20)),
+      user(4, `${sessionId}-a3`, '18:01:00', [{ type: 'text', text: `Second prompt ${run}` }]),
+      assistant(4, `${sessionId}-u4`, '18:01:10', [
+        { type: 'tool_use', id: `toolu_bash2_${sessionId}`, name: 'Bash', input: { command: 'npm test' } },
+      ], usage(140, 25)),
+      assistant(5, `${sessionId}-a4`, '18:01:20', [{ type: 'text', text: `Second answer ${run}` }], usage(150, 35)),
+    ];
+  };
+  const appendOk = async (sessionId: string, startLine: number, rows: object[], gzip = false) => {
+    const res = await postLogsAppend(api, { key: key.key, sessionId, type: 'claude', startLine, body: ndjson(rows), gzip });
+    expect(res.status(), `append ${sessionId} @${startLine}`).toBe(201);
+    expect(await res.json()).toEqual({ warnings: [] });
+  };
+  const sha256Hex = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
+  // Everything ingest derives from the transcript, with the session's own ids replaced, so two
+  // sessions with the same transcript compare equal.
+  const derived = async (sessionId: string) => {
+    const { rows } = await db.query<{ stats: unknown; tools: unknown; cost: unknown }>(
+      `SELECT to_jsonb(ss) - 'session_id' - 'updated_at' - 'cs_computed_at' AS stats,
+              (SELECT jsonb_agg(to_jsonb(t) - 'session_id' ORDER BY t.tool_name) FROM session_tool_stats t WHERE t.session_id = s.id) AS tools,
+              (SELECT to_jsonb(c) - 'session_id' - 'computed_at' FROM session_costs c WHERE c.session_id = s.id) AS cost
+         FROM sessions s LEFT JOIN session_stats ss ON ss.session_id = s.id
+        WHERE s.session_id = $1`,
+      [sessionId],
+    );
+    return JSON.parse(JSON.stringify(rows[0]).split(sessionId).join('<sid>')) as { stats: Record<string, unknown>; tools: unknown; cost: unknown };
+  };
+  const sidAp = `sess-append-${run}`;
+  const sidOne = `sess-oneshot-${run}`;
+  const linesAp = transcript(sidAp);
+
+  await test.step('17. A full upload of 3 lines, then a delta of 3 more (startLine 3): the queued row carries start_line; afterwards body_sha256 is NULL, body_received_at is the row’s received_at and body_rev advanced', async () => {
+    await send(key.key, sidAp, 'claude', ndjson(linesAp.slice(0, 3)));
+    await queueA();
+    const before = await claudeRow(sidAp);
+    expect(before.body_sha256).toMatch(/^[0-9a-f]{64}$/);
+    let receivedAt: string;
+    // The tree lock keeps the delta queued, so its row can be read before the worker deletes it.
+    const release = await holdSessionTreeLock(db, sidAp);
+    try {
+      await appendOk(sidAp, 3, linesAp.slice(3, 6));
+      const { rows } = await db.query<{ start_line: number | null; received_at: string }>(
+        // The worker carries received_at as a JS Date, so body_received_at has millisecond precision.
+        "SELECT start_line, date_trunc('milliseconds', received_at)::text AS received_at FROM upload_queue WHERE session_id = $1",
+        [sidAp],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].start_line).toBe(3);
+      receivedAt = rows[0].received_at;
+    } finally {
+      await release();
+    }
+    await queueA();
+    expect(await storedBody(db, sidAp, 'claude'), 'stored body + delta').toEqual(linesAp.slice(0, 6));
+    const after = await db.query<{ body_sha256: string | null; body_received_at: string; body_rev: string }>(
+      `SELECT l.body_sha256, l.body_received_at::text AS body_received_at, l.body_rev::text AS body_rev
+         FROM logs l JOIN sessions s ON s.id = l.session_id WHERE s.session_id = $1 AND l.log_type = 'claude'`,
+      [sidAp],
+    );
+    expect(after.rows[0].body_sha256, 'a delta leaves no whole-body hash').toBeNull();
+    expect(after.rows[0].body_received_at).toBe(receivedAt!);
+    expect(BigInt(after.rows[0].body_rev) > BigInt(before.body_rev!), 'body_rev advanced').toBe(true);
+    await expect.poll(() => outcomesOf(sidAp)).toEqual(['success', 'success']);
+  });
+
+  await test.step('18. A second delta (startLine 6): full + deltas equal one full upload of the whole transcript — body, stats, workflows, tool stats and cost', async () => {
+    await appendOk(sidAp, 6, linesAp.slice(6));
+    await send(key.key, sidOne, 'claude', ndjson(transcript(sidOne)));
+    await queueA();
+    expect(await storedBody(db, sidAp, 'claude')).toEqual(linesAp);
+    const ap = await derived(sidAp);
+    const one = await derived(sidOne);
+    expect(one.stats.workflows, 'the Workflow call is one stored run').toHaveLength(1);
+    expect(one.tools, 'tool stats are there').not.toBeNull();
+    expect(one.cost, 'cost is there').not.toBeNull();
+    expect(ap).toEqual(one);
+  });
+
+  await test.step('19. The next full upload after a delta is processed, not skipped (no stored hash), and stores its hash again', async () => {
+    const body = ndjson(linesAp);
+    await send(key.key, sidAp, 'claude', body);
+    await queueA();
+    await expect.poll(async () => countOf(await outcomesOf(sidAp), 'success'), 'processed').toBe(4);
+    expect(countOf(await outcomesOf(sidAp), 'skipped')).toBe(0);
+    expect((await claudeRow(sidAp)).body_sha256).toBe(sha256Hex(body));
+    expect(await storedBody(db, sidAp, 'claude')).toEqual(linesAp);
+  });
+
+  await test.step('20. An append older than the stored body is discarded: body unchanged, measured superseded, and it is not in failedUploads', async () => {
+    const stored = await claudeRow(sidAp);
+    await db.query("UPDATE logs SET body_received_at = now() + interval '1 hour' WHERE id = $1", [stored.id]);
+    try {
+      await appendOk(sidAp, linesAp.length, [{ type: 'user', uuid: `${sidAp}-late`, sessionId: sidAp, timestamp: at('18:02:00'), message: { role: 'user', content: 'late' } }]);
+      await queueA();
+      await expect.poll(async () => countOf(await outcomesOf(sidAp), 'superseded')).toBe(1);
+      expect(await storedBody(db, sidAp, 'claude'), 'the body stays').toEqual(linesAp);
+      expect((await claudeRow(sidAp)).body_rev, 'no body write').toBe(stored.body_rev);
+      const sidFb = `sess-fb-${run}`;
+      const fb = await postLogs(api, key.key, { sessionId: sidFb, type: 'artisyn', uploadFeedback: 1 }, ndjson([{ event: 'prompt_start', timestamp: at('18:03:00'), session_id: sidFb, prompt: `fb ${run}` }]));
+      expect(fb.status()).toBe(201);
+      expect(await fb.json()).toEqual({ warnings: [], failedUploads: [] });
+      await queueA();
+    } finally {
+      await db.query('UPDATE logs SET body_received_at = $2 WHERE id = $1', [stored.id, stored.body_received_at]);
+    }
+  });
+
+  await test.step('21. A full row followed by two append rows, all queued together: never superseded, applied in order', async () => {
+    const sidBlock = `sess-block2-${run}`;
+    const sidOrd = `sess-order-${run}`;
+    const lines = transcript(sidOrd);
+    const release = await holdSessionTreeLock(db, sidBlock);
+    try {
+      await send(key.key, sidBlock, 'claude', claudeFor(sidBlock, `Blocker 2 ${run}`, '17:00:00'));
+      await expect
+        .poll(async () => (await db.query<{ status: string }>('SELECT status FROM upload_queue WHERE session_id = $1', [sidBlock])).rows[0]?.status)
+        .toBe('processing');
+      await send(key.key, sidOrd, 'claude', ndjson(lines.slice(0, 2)));
+      await appendOk(sidOrd, 2, lines.slice(2, 5));
+      await appendOk(sidOrd, 5, lines.slice(5));
+      const { rows } = await db.query<{ start_line: number | null }>(
+        "SELECT start_line FROM upload_queue WHERE session_id = $1 AND status = 'pending' ORDER BY id",
+        [sidOrd],
+      );
+      expect(rows.map((r) => r.start_line)).toEqual([null, 2, 5]);
+    } finally {
+      await release();
+    }
+    await queueA();
+    await expect.poll(() => outcomesOf(sidOrd)).toEqual(['success', 'success', 'success']);
+    expect(await storedBody(db, sidOrd, 'claude')).toEqual(lines);
+  });
+
+  await test.step('22. A gzipped delta (Content-Encoding: gzip) is stored exactly like a plain one; its processed size is the plain delta size', async () => {
+    const sidGz = `sess-append-gz-${run}`;
+    const lines = transcript(sidGz);
+    await send(key.key, sidGz, 'claude', ndjson(lines.slice(0, 3)));
+    await queueA();
+    await appendOk(sidGz, 3, lines.slice(3), true);
+    await queueA();
+    expect(await storedBody(db, sidGz, 'claude')).toEqual(lines);
+    await expect
+      .poll(() => processedSizes(db, sidGz))
+      .toEqual([Buffer.byteLength(ndjson(lines.slice(0, 3))), Buffer.byteLength(ndjson(lines.slice(3)))]);
+  });
+
+  await test.step('23. Two concurrent deltas with the same startLine: one is applied, the other fails «upload-full» and is reported in failedUploads; the full re-upload leaves exactly one copy of every line', async () => {
+    const sidCc = `sess-append-cc-${run}`;
+    const lines = transcript(sidCc);
+    await send(key.key, sidCc, 'claude', ndjson(lines.slice(0, 3)));
+    await queueA();
+    await Promise.all([appendOk(sidCc, 3, lines.slice(3)), appendOk(sidCc, 3, lines.slice(3))]);
+    await waitForQueueIdle(db, owner.id, { allowFailed: true });
+    const failed = await db.query<{ error_message: string }>(
+      "SELECT error_message FROM upload_queue WHERE session_id = $1 AND status = 'failed'",
+      [sidCc],
+    );
+    expect(failed.rows.map((r) => r.error_message)).toEqual(['upload-full']);
+    expect(await storedBody(db, sidCc, 'claude'), 'the applied delta, once').toEqual(lines);
+    const fb = await postLogs(api, key.key, { sessionId: sidCc, type: 'artisyn', uploadFeedback: 1 }, ndjson([{ event: 'prompt_start', timestamp: at('18:00:00'), session_id: sidCc, prompt: `cc ${run}` }]));
+    expect(fb.status()).toBe(201);
+    expect(((await fb.json()) as { failedUploads?: unknown }).failedUploads).toEqual([{ sessionId: sidCc, type: 'claude' }]);
+    await send(key.key, sidCc, 'claude', ndjson(lines));
+    await queueA();
+    const stored = (await storedBody(db, sidCc, 'claude')) as Array<{ uuid: string }>;
+    expect(stored).toEqual(lines);
+    expect(new Set(stored.map((l) => l.uuid)).size, 'every line once').toBe(lines.length);
   });
 });

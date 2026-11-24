@@ -26,8 +26,45 @@ const MANIFEST_V2_NAME = '.claude-logs.sent.v2';
 const MANIFEST_V2_VERSION = 2;
 
 /**
- * @typedef {{ size: number, mtimeMs: number, paramsSha256: string, fp?: string }} ManifestV2Entry
+ * `appendBytes` / `appendLines` / `appendSha256` (2026-11-24-traffic-optimization, append uploads
+ * of `claude` / `claude-subagent` logs): how much of the file the server already holds — the byte
+ * length of the sent prefix (ends after a `\n`), the record count it contributed and the sha256 of
+ * the raw file bytes `[0, appendBytes)`. Present all three or none.
+ * @typedef {{ size: number, mtimeMs: number, paramsSha256: string, fp?: string,
+ *   appendBytes?: number, appendLines?: number, appendSha256?: string }} ManifestV2Entry
  */
+
+/**
+ * @typedef {{ bytes: number, lines: number, sha256: string }} AppendState
+ */
+
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+/** @param {unknown} n @returns {boolean} */
+function isNonNegativeInteger(n) {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0;
+}
+
+/**
+ * Whether the three append fields are all present and valid: two non-negative integers and a
+ * 64-char lowercase sha256 hex.
+ * @param {unknown} bytes @param {unknown} lines @param {unknown} sha256
+ * @returns {boolean}
+ */
+function isValidAppendFields(bytes, lines, sha256) {
+  return isNonNegativeInteger(bytes) && isNonNegativeInteger(lines)
+    && typeof sha256 === 'string' && SHA256_HEX_RE.test(sha256);
+}
+
+/**
+ * The append state of a v2 entry, or null when it has none (or an invalid one).
+ * @param {ManifestV2Entry|undefined|null} entry
+ * @returns {AppendState|null}
+ */
+function appendStateOf(entry) {
+  if (!entry || !isValidAppendFields(entry.appendBytes, entry.appendLines, entry.appendSha256)) return null;
+  return { bytes: entry.appendBytes, lines: entry.appendLines, sha256: entry.appendSha256 };
+}
 
 /**
  * sha256 hex of the upload's identifying params, in a fixed order with absent values as `''`.
@@ -123,6 +160,13 @@ function readManifestV2(manifestPath) {
     if (!key || !isValidEntry(entry)) continue;
     const clean = { size: entry.size, mtimeMs: entry.mtimeMs, paramsSha256: entry.paramsSha256 };
     if (typeof entry.fp === 'string') clean.fp = entry.fp;
+    // Append state is kept only when all three fields are valid; otherwise all three are dropped
+    // (the entry itself stays — it still drives the skip rule).
+    if (isValidAppendFields(entry.appendBytes, entry.appendLines, entry.appendSha256)) {
+      clean.appendBytes = entry.appendBytes;
+      clean.appendLines = entry.appendLines;
+      clean.appendSha256 = entry.appendSha256;
+    }
     map.set(key, clean);
   }
   return map;
@@ -136,7 +180,16 @@ function readManifestV2(manifestPath) {
  */
 function writeManifestV2(manifestPath, map) {
   const entries = {};
-  for (const [key, entry] of map) entries[key] = entry;
+  for (const [key, entry] of map) {
+    const out = { size: entry.size, mtimeMs: entry.mtimeMs, paramsSha256: entry.paramsSha256 };
+    if (typeof entry.fp === 'string') out.fp = entry.fp;
+    if (isValidAppendFields(entry.appendBytes, entry.appendLines, entry.appendSha256)) {
+      out.appendBytes = entry.appendBytes;
+      out.appendLines = entry.appendLines;
+      out.appendSha256 = entry.appendSha256;
+    }
+    entries[key] = out;
+  }
   const content = JSON.stringify({ version: MANIFEST_V2_VERSION, entries });
   const tmpPath = `${manifestPath}.tmp`;
   try {
@@ -212,19 +265,28 @@ function writeManifestV1(manifestPath, map) {
  * @param {string} sessionId
  * @param {number} readSize - the byte length read
  * @param {number} preReadMtimeMs - the file's mtime from a stat taken before the read
+ * @param {AppendState|null} [appendState] - the append state to store with the entry
+ *   (`appendBytes` / `appendLines` / `appendSha256`); null or omitted stores none
  */
-function recordScopedClaudeUpload(telemetryDir, sessionId, readSize, preReadMtimeMs) {
+function recordScopedClaudeUpload(telemetryDir, sessionId, readSize, preReadMtimeMs, appendState) {
   const key = `claude/${sessionId}.jsonl`;
   const v1Path = path.join(telemetryDir, MANIFEST_V1_NAME);
   const v2Path = path.join(telemetryDir, MANIFEST_V2_NAME);
   const v1 = readManifestV1(v1Path);
   const v2 = readManifestV2(v2Path);
   v1.set(key, readSize);
-  v2.set(key, {
+  /** @type {ManifestV2Entry} */
+  const entry = {
     size: readSize,
     mtimeMs: preReadMtimeMs,
     paramsSha256: paramsSha256({ type: 'claude', sessionId }),
-  });
+  };
+  if (appendState && isValidAppendFields(appendState.bytes, appendState.lines, appendState.sha256)) {
+    entry.appendBytes = appendState.bytes;
+    entry.appendLines = appendState.lines;
+    entry.appendSha256 = appendState.sha256;
+  }
+  v2.set(key, entry);
   writeManifestV1(v1Path, v1);
   writeManifestV2(v2Path, v2);
 }
@@ -308,6 +370,8 @@ module.exports = {
   decideUploadSkip,
   canResumePending,
   paramsSha256,
+  isValidAppendFields,
+  appendStateOf,
   readManifestV1,
   writeManifestV1,
   readManifestV2,

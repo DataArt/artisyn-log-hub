@@ -264,7 +264,9 @@ its `pgdata/` is empty while the app shows data — stop and move it before recr
 container. Back up `$LOG_HUB_DATA_DIR` before an upgrade: migrations only go forward, and the only
 way back to an older version is that version plus a backup made on it. `loghub-db/` backups also
 include short-lived export/import staging zips (`export-import/`, deleted by the app after
-`EXPORT_IMPORT_JOB_TTL_MS`). If an older install has an override volume on
+`EXPORT_IMPORT_JOB_TTL_MS`). `upload-queue/part-cache/` is a disposable cache of session-log
+parts the server has already served: it need not be backed up, and it is safe to delete with the
+server stopped or running (it refills on the next reads). If an older install has an override volume on
 `/app/dist/export-import` (an old workaround for a read-only or non-root container), it can be
 removed after this upgrade: the compose file now mounts that directory itself.
 

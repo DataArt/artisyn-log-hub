@@ -4,6 +4,7 @@ import {
 } from './cluster-messages';
 import type { WorkerStatsMessage } from './cluster-messages';
 import { WORKER_STATS_INTERVAL_MS } from './cluster.constants';
+import { partCacheCounters } from '../logs/part-cache/part-cache-counters';
 import type { SupervisorInfo } from '../system-info/system-info.types';
 
 /**
@@ -71,6 +72,7 @@ export class WorkerStatsReporter {
       instance: Number(process.env.NODE_APP_INSTANCE),
       pid: process.pid,
       rssBytes: process.memoryUsage().rss,
+      partCache: partCacheCounters.snapshot(),
     };
     try {
       process.send(message);

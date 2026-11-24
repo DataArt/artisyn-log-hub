@@ -29,6 +29,17 @@
 // check the parts read path on GS-05: on open only the manifest and the root parts load; a part
 // answers gzip; legacy `/logs` and the delta full snapshot equal the parts; a foreign user gets
 // 4xx; an upload of one loaded agent refetches only its part (FR-4); and the derived-lag notice.
+// Step 13a (2026-11-24 traffic-optimization FR-12) checks the `/api` JSON gzip on the wire: the
+// manifest (of its own root with 30 sub-agents) and the sessions list (of its own 15-session
+// repository) gzip + Vary above 8192 bytes, identity below it and without
+// Accept-Encoding; a part is gzipped once and the streamed /logs answer not at all.
+// Steps 16–21 (2026-11-24 session-parts-disk-cache) check the parts disk cache under
+// <runDir>/upload-queue/part-cache: a read fills it and later reads are served from it (mode A
+// proves the bytes do not come from Postgres), no pre-warm on upload and the old revision's file
+// removed on the next fill, the read-touch and the TTL sweep, the size cap (mode C), fail-open on
+// an unwritable cache folder, and the folders removed with deleted sessions and repositories.
+// Mode-C stands share a 1 MB cache with parallel scenarios, so mode C never relies on one file
+// surviving (impl-plan DD-15).
 //
 // Code facts that differ from the design text:
 //   - the prompt text of a turn is shown in its header, not collapsed behind a click; the scenario
@@ -55,12 +66,15 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
+import { standMode } from '../helpers/auth-mode';
 import { loadExpected, materializeGolden } from '../helpers/golden';
-import { ownRepoId, promptSessionBodies, type PromptSession } from '../helpers/prompt-session';
+import { ownRepoId, promptSessionBodies, uploadPromptSession, uploadSubagent, type PromptSession } from '../helpers/prompt-session';
 import { holdSessionTreeLock } from '../helpers/ingest';
 import { waitForQueueIdle } from '../helpers/queue';
+import { expectJsonGzipPair, rawGet } from '../helpers/raw-http';
 import { hms, infoValue, int, logTurns, num, openSession, turnMetric, uploadGoldenRepo, usd4 } from '../helpers/session-view';
 
 const HIDDEN_TEXTS = [
@@ -170,8 +184,9 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
   db,
   users,
   page,
+  stand,
 }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(480_000);
   const G7 = loadExpected('gs-07').roots[0];
   const G1 = loadExpected('gs-01').roots[0];
   const owner = await users.user('user', { label: 'ss03-owner' });
@@ -1146,6 +1161,41 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     }
   });
 
+  await test.step('13a. FR-12 (2026-11-24 traffic-optimization): the parts manifest and the sessions list are gzip + Vary above 8192 bytes, identity (with Vary) for a small answer and without Accept-Encoding, decoded JSON identical; a part is gzipped once (one gunzip parses); the streamed /logs answer has no Content-Encoding', async () => {
+    // GS-05's manifest (two agents) and the golden repository's list (three sessions) stay under
+    // 8192 bytes; a root with 30 sub-agents and a repository of 15 sessions do not.
+    const gzRun = randomBytes(4).toString('hex');
+    const tree: PromptSession = { sessionId: `ss03-gz-${gzRun}`, prompt: `gzip tree ${gzRun}`, repoUrl: `https://git.arrakis.test/scn/${gzRun}/ss03-gzip` };
+    const gzKey = await createApiKey(owner.api);
+    for (let n = 0; n < 15; n += 1) {
+      const s = n === 0 ? tree : { ...tree, sessionId: `${tree.sessionId}-s${n}`, prompt: `${tree.prompt} (${n})` };
+      await uploadPromptSession(api, gzKey.key, s, { db, userId: owner.id });
+    }
+    for (let n = 1; n <= 30; n += 1) {
+      await uploadSubagent(api, gzKey.key, { sessionId: `ss03-gz-${gzRun}-agent${String(n).padStart(2, '0')}`, parentSessionId: tree.sessionId, prompt: `agent ${n}` }, { db, userId: owner.id });
+    }
+    const treeRepoId = await ownRepoId(owner.api, tree.repoUrl);
+    const manifest = await expectJsonGzipPair(stand.url, owner, `/api/v1/repositories/${treeRepoId}/sessions/${encodeURIComponent(tree.sessionId)}/logs/parts`, true);
+    expect(manifest.bytes, 'the 30-agent manifest is above the threshold').toBeGreaterThanOrEqual(8192);
+    expect((manifest.json as PartsManifest).parts).toHaveLength(32);
+    const list = await expectJsonGzipPair(stand.url, owner, `/api/v1/repositories/${treeRepoId}/sessions`, true);
+    expect(list.bytes, 'the 15-session list is above the threshold').toBeGreaterThanOrEqual(8192);
+    expect(list.json as unknown[]).toHaveLength(15);
+    const small = await expectJsonGzipPair(stand.url, owner, `/api/v1/repositories/${treeRepoId}/sessions?branch=scn-no-such-branch`, false);
+    expect(small.json, 'a branch nobody used: an empty list').toEqual([]);
+
+    const part = await rawGet(stand.url, owner, partUrl(sid5, 'claude'), 'gzip');
+    expect(part.status).toBe(200);
+    expect(part.headers['content-encoding']).toBe('gzip');
+    const lines = JSON.parse(zlib.gunzipSync(part.body).toString('utf8')) as unknown[];
+    expect(lines, 'one gunzip gives the JSON lines: not compressed twice').toEqual(await fetchPart(sid5, 'claude'));
+
+    const legacy = await rawGet(stand.url, owner, logsBase, 'gzip');
+    expect(legacy.status).toBe(200);
+    expect(legacy.headers['content-encoding'], 'the streamed /logs answer is not gzipped').toBeUndefined();
+    expect((JSON.parse(legacy.body.toString('utf8')) as LegacyLogs).main.length).toBeGreaterThan(0);
+  });
+
   await test.step('14. FR-4: with every part loaded (Statistics), one upload of W1 then Refresh refetches the manifest and the W1 part only', async () => {
     await openSession(page, owner, repo.repoId, sid5, { tab: 'usage' });
     await expect(page.getByTestId('session-usage-tab')).toBeVisible({ timeout: 20_000 });
@@ -1223,5 +1273,343 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await page.getByTestId('session-refresh').click();
     await expect(notice).toHaveCount(0);
     expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+  });
+
+  // Steps 16–21 (2026-11-24 session-parts-disk-cache): the stand's cache is the default
+  // <runDir>/upload-queue/part-cache, swept every second (modes.ts). Mode A has the 1 GB default
+  // cap; mode C a 1 MB cap shared with parallel scenarios, so only mode A relies on a file
+  // surviving (DD-15).
+  const mode = standMode();
+  expect(stand.runDir, 'STAND_RUN_DIR (the cache lives under it)').not.toBe('');
+  const cacheDir = path.join(stand.runDir, 'upload-queue', 'part-cache');
+  const cacheFile = (logId: number, rev: string) => path.join(cacheDir, String(logId), `${rev}.json.gz`);
+  /** The stored row of one part; `bodyGz` is null until the gzip copy matches the revision. */
+  const logRow = async (sessionId: string, logType: string): Promise<{ id: number; rev: string; bodyGz: Buffer | null }> => {
+    const { rows } = await db.query<{ id: string; rev: string; body_gz: Buffer | null }>(
+      `SELECT l.id::text AS id, l.body_rev::text AS rev,
+              CASE WHEN l.body_rev IS NOT NULL AND l.body_gz_rev = l.body_rev THEN l.body_gz END AS body_gz
+         FROM logs l JOIN sessions s ON s.id = l.session_id
+        WHERE s.session_id = $1 AND l.log_type = $2`,
+      [sessionId, logType],
+    );
+    expect(rows, `one ${logType} row of ${sessionId}`).toHaveLength(1);
+    return { id: Number(rows[0].id), rev: rows[0].rev, bodyGz: rows[0].body_gz };
+  };
+  /** A cached row whose gzip copy is built (LOG_BODY_GZ_INTERVAL_MS, 1 s on the stand). */
+  const gzReadyRow = async (sessionId: string, logType: string) => {
+    await expect.poll(async () => (await logRow(sessionId, logType)).bodyGz !== null, { timeout: 30_000 }).toBe(true);
+    const row = await logRow(sessionId, logType);
+    if (row.bodyGz === null) throw new Error(`${sessionId}/${logType} has no current gzip copy`);
+    return { ...row, bodyGz: row.bodyGz };
+  };
+  const sizeOf = (file: string): number | null => {
+    try {
+      return fs.statSync(file).size;
+    } catch {
+      return null;
+    }
+  };
+  const mtimeOf = (file: string): number | null => {
+    try {
+      return fs.statSync(file).mtimeMs;
+    } catch {
+      return null;
+    }
+  };
+  const readCacheFile = (file: string): Buffer | null => {
+    try {
+      return fs.readFileSync(file);
+    } catch {
+      return null;
+    }
+  };
+  /** Σ size of every `<logId>/<rev>.json.gz` (files the sweep removes mid-walk count 0). */
+  const allCacheBytes = (): number => {
+    let total = 0;
+    let dirs: string[] = [];
+    try {
+      dirs = fs.readdirSync(cacheDir).filter((d) => /^\d+$/.test(d));
+    } catch {
+      return 0;
+    }
+    for (const d of dirs) {
+      let names: string[] = [];
+      try {
+        names = fs.readdirSync(path.join(cacheDir, d)).filter((n) => /^\d+\.json\.gz$/.test(n));
+      } catch {
+        continue;
+      }
+      for (const n of names) total += sizeOf(path.join(cacheDir, d, n)) ?? 0;
+    }
+    return total;
+  };
+  const backdate = (file: string, ms: number) => {
+    const at = new Date(Date.now() - ms);
+    fs.utimesSync(file, at, at);
+  };
+  /**
+   * Re-uploads W1 (the step-14 call, DD-15) with `extra` lines after its original ones; each
+   * extra line gets the last original line's timestamp.
+   */
+  const uploadW1 = async (extra: Array<Record<string, unknown>>) => {
+    const upload = materializeGolden('gs-05', { runId: repo.runId }).uploads.find((u) => u.sessionId === w1);
+    if (!upload) throw new Error('GS-05 has no W1 upload');
+    const lines = upload.body.split('\n').filter((l) => l.trim() !== '');
+    const { timestamp } = JSON.parse(lines[lines.length - 1]) as { timestamp?: string };
+    const key = await createApiKey(owner.api);
+    const res = await api.post('/api/v2/logs', {
+      params: {
+        sessionId: w1,
+        type: 'claude-subagent',
+        parentSessionId: upload.parentSessionId ?? sid5,
+        ...(upload.workflowRunId ? { workflowRunId: upload.workflowRunId } : {}),
+        ...(upload.agentDescription ? { agentDescription: upload.agentDescription } : {}),
+        ...(upload.workflowPhase ? { workflowPhase: upload.workflowPhase } : {}),
+      },
+      headers: { 'Content-Type': 'text/plain', 'X-API-Key': key.key },
+      data: [...lines, ...extra.map((e) => JSON.stringify({ ...e, timestamp }))].join('\n') + '\n',
+    });
+    expect(res.status(), 'upload W1').toBe(201);
+    await waitForQueueIdle(db, owner.id, { timeoutMs: 30_000 });
+  };
+  /** Step 14's extra W1 line, kept in every later re-upload. */
+  const fr4Marker = { type: 'system', subtype: 'informational', uuid: `${w1}-fr4`, content: 'FR-4 marker' };
+  /**
+   * Reads a part until `check` holds. Each read refills the file, so this also holds in mode C,
+   * where the shared 1 MB cap may evict the file between two polls.
+   */
+  const readUntil = async (sessionId: string, logType: string, check: () => boolean, message: string) => {
+    await expect
+      .poll(async () => {
+        await fetchPart(sessionId, logType);
+        // The fill runs after the answer is sent.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return check();
+      }, { message, timeout: 15_000 })
+      .toBe(true);
+  };
+  const tempFiles = (dir: string): string[] => {
+    try {
+      return fs.readdirSync(dir).filter((n) => n.startsWith('.tmp-'));
+    } catch {
+      return [];
+    }
+  };
+
+  await test.step('16. a part read fills the cache: <logId>/<rev>.json.gz = body_gz, no temp file left; mode A: with body_gz overwritten in Postgres the reads still answer the original bytes (served from the file)', async () => {
+    // Nothing in the browser may read parts behind the steps' backs from here on.
+    await page.goto('about:blank');
+    const row = await gzReadyRow(sid5, 'claude');
+    const file = cacheFile(row.id, row.rev);
+    const lines = await fetchPart(sid5, 'claude');
+    await readUntil(sid5, 'claude', () => readCacheFile(file)?.equals(row.bodyGz) ?? false, 'cache file = body_gz');
+    await expect.poll(() => tempFiles(path.dirname(file)), { message: 'no temp file left', timeout: 5_000 }).toEqual([]);
+
+    // Admin view: the live scan sees the file and the cluster-summed counters see the fill and a
+    // hit (workers push counters every 10 s, so poll with a read each time).
+    const cacheAdmin = await users.user('admin', { label: 'ss03-cache-admin' });
+    await expect
+      .poll(async () => {
+        await fetchPart(sid5, 'claude');
+        const res = await cacheAdmin.api.get('/api/v1/admin/system');
+        expect(res.status(), 'GET /admin/system').toBe(200);
+        const pc = ((await res.json()) as {
+          partCache: { current: { fileCount: number; sizeBytes: number } | null; counters: { hits: number; fills: number } };
+        }).partCache;
+        return (
+          pc.current !== null &&
+          pc.current.fileCount >= 1 &&
+          pc.current.sizeBytes >= row.bodyGz.length &&
+          pc.counters.hits >= 1 &&
+          pc.counters.fills >= 1
+        );
+      }, { message: 'admin partCache: live size counts the file, counters show a fill and a hit', timeout: 30_000, intervals: [1_000] })
+      .toBe(true);
+
+    if (mode !== 'a') return;
+    // DD-16: the body guard fires only on UPDATE OF body, so body_gz can change under the same revision.
+    await db.query('UPDATE logs SET body_gz = $1 WHERE id = $2', [zlib.gzipSync('[]'), row.id]);
+    try {
+      const gz = await owner.api.get(partUrl(sid5, 'claude'), { headers: { 'Accept-Encoding': 'gzip' } });
+      expect(gz.status()).toBe(200);
+      expect(gz.headers()['etag']).toBe(`"${row.rev}"`);
+      expect(gz.headers()['content-encoding']).toBe('gzip');
+      expect(gz.headers()['content-length'], 'the cached copy\'s length').toBe(String(row.bodyGz.length));
+      expect((await gz.json()) as unknown[], 'gzip read: the original lines, not the overwritten []').toEqual(lines);
+      const plain = await owner.api.get(partUrl(sid5, 'claude'), { headers: { 'Accept-Encoding': 'identity' } });
+      expect(plain.status()).toBe(200);
+      expect(plain.headers()['etag']).toBe(`"${row.rev}"`);
+      expect(plain.headers()['content-encoding']).toBeUndefined();
+      expect((await plain.json()) as unknown[], 'identity read: the original lines').toEqual(lines);
+    } finally {
+      await db.query('UPDATE logs SET body_gz = $1 WHERE id = $2', [row.bodyGz, row.id]);
+    }
+  });
+
+  await test.step('17. an upload does not pre-warm the cache; the first read of the new revision writes its file (mode A: and removes the old revision\'s file)', async () => {
+    // The current W1 revision (step 14's upload) cached first, so there is an old file to remove.
+    const old = await gzReadyRow(w1, 'claude-subagent');
+    const oldFile = cacheFile(old.id, old.rev);
+    await readUntil(w1, 'claude-subagent', () => fs.existsSync(oldFile), 'old revision cached');
+
+    await uploadW1([
+      fr4Marker,
+      { type: 'system', subtype: 'informational', uuid: `${w1}-cache17`, content: 'Part cache marker' },
+    ]);
+    const fresh = await gzReadyRow(w1, 'claude-subagent');
+    expect(fresh.id, 'same row').toBe(old.id);
+    expect(fresh.rev, 'a new revision').not.toBe(old.rev);
+    const freshFile = cacheFile(fresh.id, fresh.rev);
+    expect(fs.existsSync(freshFile), 'no pre-warm: no file before the first read').toBe(false);
+
+    const lines = await fetchPart(w1, 'claude-subagent');
+    expect(JSON.stringify(lines)).toContain('Part cache marker');
+    await readUntil(w1, 'claude-subagent', () => fs.existsSync(freshFile), 'new revision cached');
+    if (mode === 'a') {
+      await expect
+        .poll(() => fs.existsSync(oldFile), { message: 'the older revision\'s file is removed by the fill', timeout: 5_000 })
+        .toBe(false);
+    }
+  });
+
+  await test.step('18. a read of a file last read over an hour ago touches it; mode A: the sweep removes a file unread for 15 days and keeps one unread for 13', async () => {
+    const claude = await gzReadyRow(sid5, 'claude');
+    const claudeFile = cacheFile(claude.id, claude.rev);
+    // Retried as a whole: in mode C the cap may evict the file at any second (DD-15).
+    await expect(async () => {
+      await readUntil(sid5, 'claude', () => fs.existsSync(claudeFile), 'GS-05 claude cached');
+      backdate(claudeFile, 2 * 60 * 60 * 1000);
+      expect(Date.now() - (mtimeOf(claudeFile) ?? Date.now()), 'backdated 2 h').toBeGreaterThan(60 * 60 * 1000);
+      await fetchPart(sid5, 'claude');
+      await expect
+        .poll(() => Math.abs(Date.now() - (mtimeOf(claudeFile) ?? 0)) < 60_000, { message: 'the read touched the file', timeout: 5_000 })
+        .toBe(true);
+    }).toPass({ timeout: 30_000 });
+
+    if (mode !== 'a') return;
+    const cached = async (sessionId: string, logType: string) => {
+      const row = await gzReadyRow(sessionId, logType);
+      const file = cacheFile(row.id, row.rev);
+      await readUntil(sessionId, logType, () => fs.existsSync(file), `${sessionId}/${logType} cached`);
+      return file;
+    };
+    const w2File = await cached(w2, 'claude-subagent');
+    const artisynFile = await cached(sid5, 'artisyn');
+    backdate(w2File, 15 * 86_400_000);
+    await expect.poll(() => fs.existsSync(w2File), { message: 'TTL 14 days: the sweep removes it', timeout: 10_000 }).toBe(false);
+    backdate(artisynFile, 13 * 86_400_000);
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    expect(fs.existsSync(artisynFile), 'within the TTL: kept').toBe(true);
+  });
+
+  const CAP_BYTES = 1_048_576;
+  /** The two cap dummies of step 19a: log ids no real row has. */
+  const dummies = [
+    { file: path.join(cacheDir, '9000000001', '1.json.gz'), ageMs: 3 * 86_400_000 },
+    { file: path.join(cacheDir, '9000000002', '1.json.gz'), ageMs: 2 * 86_400_000 },
+  ];
+
+  await test.step('19a. mode C: two 600 KB files over the 1 MB cap — the sweep removes the least recently read first and brings the total down to the cap', async () => {
+    if (mode !== 'c') return;
+    try {
+      for (const d of dummies) {
+        fs.mkdirSync(path.dirname(d.file), { recursive: true });
+        fs.writeFileSync(d.file, randomBytes(614_400));
+        backdate(d.file, d.ageMs);
+      }
+      await expect
+        .poll(() => !fs.existsSync(dummies[0].file) && allCacheBytes() <= CAP_BYTES, {
+          message: 'the oldest dummy evicted and the total at or below the cap',
+          timeout: 15_000,
+        })
+        .toBe(true);
+    } finally {
+      for (const d of dummies) fs.rmSync(path.dirname(d.file), { recursive: true, force: true });
+    }
+  });
+
+  await test.step('19b. mode C: a part whose gzip copy is larger than the cap is served but never cached', async () => {
+    if (mode !== 'c') return;
+    // 1,179,648 random bytes → 1,572,864 base64 chars: the gzip cannot shrink below the 1 MB cap,
+    // and the body stays under LOGS_MAX_BODY_MB=2 (DD-15).
+    const blob = randomBytes(1_179_648).toString('base64');
+    await uploadW1([
+      fr4Marker,
+      { type: 'system', subtype: 'informational', uuid: `${w1}-cache19`, content: blob },
+    ]);
+    const big = await gzReadyRow(w1, 'claude-subagent');
+    expect(big.bodyGz.length, 'the gzip copy is over the cap').toBeGreaterThan(CAP_BYTES);
+    const res = await owner.api.get(partUrl(w1, 'claude-subagent'));
+    expect(res.status()).toBe(200);
+    expect(Array.isArray(await res.json()), 'a JSON array').toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    expect(fs.existsSync(cacheFile(big.id, big.rev)), 'over the cap: never written').toBe(false);
+  });
+
+  /** A part URL of any root session of the golden repo. */
+  const rootPartUrl = (rootId: string, sessionId: string, logType: string) =>
+    `/api/v1/repositories/${repo.repoId}/sessions/${encodeURIComponent(rootId)}/logs/parts/${encodeURIComponent(sessionId)}/${logType}`;
+  const readRootPart = async (rootId: string, sessionId: string, logType: string): Promise<unknown[]> => {
+    const res = await owner.api.get(rootPartUrl(rootId, sessionId, logType));
+    expect(res.status(), `part ${sessionId}/${logType}`).toBe(200);
+    return (await res.json()) as unknown[];
+  };
+  /** Reads a root part until its cache file exists (refilled after any mode-C eviction). */
+  const cachedRootPart = async (rootId: string, sessionId: string, logType: string) => {
+    const row = await gzReadyRow(sessionId, logType);
+    const file = cacheFile(row.id, row.rev);
+    await expect
+      .poll(async () => {
+        await readRootPart(rootId, sessionId, logType);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return fs.existsSync(file);
+      }, { message: `${sessionId}/${logType} cached`, timeout: 15_000 })
+      .toBe(true);
+    return row;
+  };
+
+  await test.step('20. fail-open: with a plain file where the <logId> folder belongs, the part is still served from Postgres and nothing is written', async () => {
+    const sid1 = repo.rootId('gs-01');
+    const row = await gzReadyRow(sid1, 'claude');
+    const lines = await readRootPart(sid1, sid1, 'claude');
+    const logDir = path.join(cacheDir, String(row.id));
+    fs.rmSync(logDir, { recursive: true, force: true });
+    fs.writeFileSync(logDir, 'blocks the cache folder');
+    try {
+      expect(await readRootPart(sid1, sid1, 'claude'), 'same lines with the cache folder blocked').toEqual(lines);
+      // The fill runs after the answer is sent.
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      expect(fs.statSync(logDir).isFile(), 'the blocking file is untouched').toBe(true);
+    } finally {
+      fs.rmSync(logDir, { force: true });
+    }
+  });
+
+  await test.step('21a. deleting a session removes its parts\' cache folders', async () => {
+    const claude = await cachedRootPart(sid7, sid7, 'claude');
+    const artisyn = await cachedRootPart(sid7, sid7, 'artisyn');
+    expect((await owner.api.delete(`/api/v1/sessions/${encodeURIComponent(sid7)}`)).status(), 'DELETE session').toBe(204);
+    for (const row of [claude, artisyn]) {
+      await expect
+        .poll(() => fs.existsSync(path.join(cacheDir, String(row.id))), { message: `folder of log ${row.id} removed`, timeout: 10_000 })
+        .toBe(false);
+    }
+  });
+
+  // Deletes the whole golden repo: must stay the last step (DD-15).
+  await test.step('21b. an admin repository delete removes every GS-05 cache folder', async () => {
+    await cachedRootPart(sid5, sid5, 'claude');
+    const { rows } = await db.query<{ id: string }>(
+      `SELECT l.id::text AS id FROM logs l JOIN sessions s ON s.id = l.session_id WHERE s.session_id = ANY($1::text[])`,
+      [[sid5, w1, w2]],
+    );
+    expect(rows.length, 'GS-05 log rows').toBeGreaterThan(0);
+    const admin = await users.user('admin', { label: 'ss03-admin' });
+    expect((await admin.api.delete(`/api/v1/admin/repos/${repo.repoId}`)).status(), 'DELETE admin repo').toBe(204);
+    for (const { id } of rows) {
+      await expect
+        .poll(() => fs.existsSync(path.join(cacheDir, id)), { message: `folder of log ${id} removed`, timeout: 10_000 })
+        .toBe(false);
+    }
   });
 });

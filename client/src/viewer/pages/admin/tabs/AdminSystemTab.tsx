@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Download, Loader2 } from 'lucide-react';
 import type { SystemInfoWorkerProcess } from '../../../../models';
@@ -16,6 +16,8 @@ import {
   TableHead,
   TableCell,
 } from '../../../ui/table';
+import { Card } from './system-card';
+import { PartCacheCard } from './PartCacheCard';
 
 type DotColor = 'green' | 'gray' | 'red';
 
@@ -55,17 +57,6 @@ function rowStatusColor(status: string, clustered: boolean): DotColor {
   if (s.includes('online')) return 'green';
   if (s.includes('error') || s.includes('stop')) return 'red';
   return 'gray';
-}
-
-function Card({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="rounded-md border border-border bg-background p-4">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      {children}
-    </div>
-  );
 }
 
 function SecondaryTile({
@@ -180,7 +171,20 @@ export function AdminSystemTab() {
     requests,
     disk,
     supervisor,
+    partCache,
   } = data;
+
+  const dbSpaceCard =
+    dbSpace.available &&
+    dbSpace.logsTableRowEstimate !== null &&
+    dbSpace.logsTableBytes !== null &&
+    dbSpace.databaseTotalBytes !== null
+      ? {
+          rows: dbSpace.logsTableRowEstimate,
+          tableBytes: dbSpace.logsTableBytes,
+          totalBytes: dbSpace.databaseTotalBytes,
+        }
+      : null;
 
   const instancesCaption = supervisor.clustered
     ? `Cluster mode · ${
@@ -340,25 +344,27 @@ export function AdminSystemTab() {
         />
       </div>
 
-      {/* DB Space card — omitted entirely when the DB role lacks size-inspection rights.
-          Wrapped in the same 3-column grid as the core cards so it takes up one card's
-          width instead of stretching full-page-wide with a large empty area. */}
-      {dbSpace.available &&
-        dbSpace.logsTableRowEstimate !== null &&
-        dbSpace.logsTableBytes !== null &&
-        dbSpace.databaseTotalBytes !== null && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Storage row: DB Space and Part cache cards in the same 3-column grid as the core
+          cards, so each takes one card's width instead of stretching full-page-wide.
+          DB Space is omitted when the DB role lacks size-inspection rights; Part cache is
+          omitted only for an older server that does not send `partCache`. The row renders
+          when either card has content. */}
+      {(dbSpaceCard || partCache) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {dbSpaceCard && (
             <Card label="DB Space">
               <div className="mt-2 text-sm font-bold text-foreground">
-                Logs table: {dbSpace.logsTableRowEstimate.toLocaleString()} rows
-                · {formatBytes(dbSpace.logsTableBytes)}
+                Logs table: {dbSpaceCard.rows.toLocaleString()} rows ·{' '}
+                {formatBytes(dbSpaceCard.tableBytes)}
               </div>
               <div className="mt-1 text-sm font-bold text-foreground">
-                Database total: {formatBytes(dbSpace.databaseTotalBytes)}
+                Database total: {formatBytes(dbSpaceCard.totalBytes)}
               </div>
             </Card>
-          </div>
-        )}
+          )}
+          {partCache && <PartCacheCard partCache={partCache} />}
+        </div>
+      )}
 
       {/* Per-instance breakdown table */}
       <div>

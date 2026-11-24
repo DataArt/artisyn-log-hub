@@ -95,7 +95,7 @@ jobs:
 
   # Work Hub (work-hub/, NFR-4/NFR-5): its own product with its own toolchain, so its own job — it
   # is never part of fast-checks, the root build or Log Hub's dist/. The same `static` checks as the
-  # work-hub-* entries of .claude/repo_config/repo-health-checks.json except the release build: lint
+  # work-hub-* entries of .claude/repo_config/work-hub-health-checks.json except the release build: lint
   # (rustfmt, clippy, eslint, agent-name and licence checks), typecheck and the algorithm tests. No
   # DB, no Docker: the Rust build embeds the SPA with allow_missing, so web/dist is not needed.
   # Rust comes from work-hub/rust-toolchain.toml (1.92.0 + rustfmt + clippy) through the rustup

@@ -150,6 +150,9 @@ open-source release; see the changelog in the in-app help for the upgrade steps.
 | `IMPORT_MAX_ENTRIES` | `20000` | **New.** Most entries in an import zip. |
 | `IMPORT_MAX_UNCOMPRESSED_BYTES` | 20 GiB | **New.** Total uncompressed size of an import zip. |
 | `IMPORT_MAX_ENTRY_BYTES` | 400 MiB | **New.** Uncompressed size of one entry in an import zip. |
+| `SESSION_PART_CACHE_ENABLED` | on | Disposable file cache of served session-log parts, so repeated reads skip the database. Only `false` turns it off. |
+| `SESSION_PART_CACHE_DIR` | `<UPLOAD_QUEUE_DIR>/part-cache` | Cache folder, relative to the working directory. Safe to delete at any time; it is not backed up. |
+| `SESSION_PART_CACHE_TTL_DAYS`, `SESSION_PART_CACHE_MAX_MB`, `SESSION_PART_CACHE_SWEEP_INTERVAL_MS` | `14`, `1024`, 3 h | Files not read for TTL days are removed; the total is capped at MAX_MB (least recently read first); the sweep runs at startup and every interval. |
 | `EXPORT_IMPORT_DIR` | `export-import` | Temporary files of repository export and import jobs. |
 | `EXPORT_IMPORT_JOB_TTL_MS`, `EXPORT_IMPORT_CLEANUP_INTERVAL_MS` | 30 min, 5 min | Export and import jobs and their files are deleted after the TTL. |
 

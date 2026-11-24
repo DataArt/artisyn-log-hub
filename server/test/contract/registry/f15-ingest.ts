@@ -683,5 +683,138 @@ export const f15Ingest: ContractFamily = {
       body: NDJSON,
       expect: { status: 401 },
     },
+    // --- POST /api/v2/logs/append (2026-11-24-traffic-optimization DD-1): the delta of a
+    // claude / claude-subagent log from 0-based line `startLine`. The contract is the same
+    // enqueue as `POST /api/v2/logs`, plus `start_line` on the row; whether the delta fits the
+    // stored log is decided later by the (parked) worker — @S-INGEST-02 / @S-INGEST-04.
+    {
+      id: 'F15-append',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-append',
+        type: 'claude',
+        startLine: '3',
+        contentSha256: NDJSON_SHA256,
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201, bodyMatches: { warnings: [] } },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-append'`,
+              check: [
+                `status = 'pending'`,
+                `log_type = 'claude'`,
+                'user_id = @author.id',
+                'start_line = 3',
+                `size_bytes = ${Buffer.byteLength(NDJSON)}`,
+                `content_sha256 = '${NDJSON_SHA256}'`,
+                'upload_id IS NULL',
+                'error_message IS NULL',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // Same foreign-session answer as `POST /api/v2/logs`: a warning, nothing staged.
+      id: 'F15-append-foreign-session',
+      route: 'POST /api/v2/logs/append',
+      actor: 'memberKey',
+      query: { sessionId: '@s01.sessionId', type: 'claude', startLine: '0' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201 },
+      noDb: true,
+    },
+    {
+      // Same deleted-session answer as `POST /api/v2/logs` (DD-27/DD-25).
+      id: 'F15-append-deleted-session',
+      route: 'POST /api/v2/logs/append',
+      actor: 'ownerKey',
+      query: {
+        sessionId: '@s05.sessionId',
+        type: 'claude',
+        startLine: '0',
+        uploadFeedback: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: {
+          complete: true,
+          sessionDeleted: true,
+          failedUploads: [],
+        },
+      },
+      noDb: true,
+    },
+    {
+      id: 'F15-append-missing-start-line',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-append', type: 'claude' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 400,
+        bodyMatches: { message: 'Missing startLine query parameter' },
+      },
+    },
+    {
+      id: 'F15-append-bad-start-line',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-append', type: 'claude', startLine: '-1' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 400,
+        bodyMatches: { message: 'startLine must be a non-negative integer' },
+      },
+    },
+    {
+      id: 'F15-append-non-claude-type',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-append', type: 'artisyn', startLine: '0' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 400,
+        bodyMatches: {
+          message:
+            'Append is supported only for claude and claude-subagent logs',
+        },
+      },
+    },
+    {
+      id: 'F15-append-empty-body',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-append', type: 'claude', startLine: '0' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: '   ',
+      expect: {
+        status: 400,
+        bodyMatches: { message: 'Request body must not be empty' },
+      },
+    },
+    {
+      id: 'F15-append-no-key',
+      route: 'POST /api/v2/logs/append',
+      actor: 'anon',
+      query: { sessionId: 'w1-new-append', type: 'claude', startLine: '0' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 401 },
+    },
   ],
 };

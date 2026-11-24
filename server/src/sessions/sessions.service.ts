@@ -51,6 +51,7 @@ import {
   topAncestorIdsSql,
 } from '../logs/session-tree.sql';
 import { UploadQueueService } from '../logs/upload-queue.service';
+import { PartCacheService } from '../logs/part-cache/part-cache.service';
 
 type AuditRow = {
   sessionPk: number;
@@ -95,6 +96,7 @@ export class SessionsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly uploadQueueService: UploadQueueService,
+    private readonly partCache: PartCacheService,
   ) {}
 
   async deleteSession(
@@ -375,7 +377,12 @@ export class SessionsService {
       .where(inArray(sessionToolUsage.sessionId, ids));
 
     // d. Delete logs (cascades log_repositories and log_contexts automatically)
-    await tx.delete(logs).where(inArray(logs.sessionId, ids));
+    //    Their on-disk part-cache folders go too (fire-and-forget, never throws).
+    const deletedLogRows = await tx
+      .delete(logs)
+      .where(inArray(logs.sessionId, ids))
+      .returning({ id: logs.id });
+    this.partCache.removeLogFolders(deletedLogRows.map((row) => row.id));
 
     // e. Delete orphan contexts (contexts not referenced by any log_contexts row)
     const remainingContextIds = tx

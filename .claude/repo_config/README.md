@@ -15,6 +15,7 @@ concurrency rules) is the plugin's own
 | File | Consumed by | Purpose |
 |---|---|---|
 | `repo-health-checks.json` | `adlc-lh:check-health`, `adlc-lh:workcycle`, `adlc-lh:implement*`, `adlc-lh:post-impl-check`, `check-fix-build` | The canonical build/lint/test checks with their `group`, `finalOnly` and `timeoutSeconds`, plus `environmentNotes`. |
+| `work-hub-health-checks.json` | nothing by default — only on explicit request (pass its `checks`/`environmentNotes` to `adlc-lh:check-health-wf`) | Work Hub's (`work-hub/`) checks, same shape as `repo-health-checks.json`; kept out of it so Log Hub's checks never build or run Work Hub. |
 | `project-env.json` | `adlc-lh:plan*`, `adlc-lh:implement*`, `adlc-lh:review*`, `adlc-lh:workcycle` | Environment facts: `appUrl`, `tmpDir`, `kbIndexPath`, thresholds. |
 | `requirements-template.md` | `adlc-lh:scratch` | Template for a new task's `requirements.md`. |
 | `review-dimensions.yaml` | `adlc-lh:review-deep` | Review dimensions for the full review workflow. |

@@ -42,10 +42,14 @@ export const HOOK_API_ROUTES: ReadonlyArray<{
 
 /**
  * Log-ingest POST routes. These parse at `getLogsBodyLimit()` in `LogsModule` and are
- * excluded from the global parsers. `api/v2/logs` is the only upload route: the v1
- * route was removed.
+ * excluded from the global parsers. `api/v2/logs` (full) and `api/v2/logs/append`
+ * (delta) are the upload routes: the v1 route was removed.
  */
 export const LOG_INGEST_ROUTES: ReadonlyArray<{
   path: string;
   method: RequestMethod;
-}> = [{ path: 'api/v2/logs', method: RequestMethod.POST }];
+}> = [
+  { path: 'api/v2/logs', method: RequestMethod.POST },
+  // 2026-11-24-traffic-optimization: the append route takes the same NDJSON body.
+  { path: 'api/v2/logs/append', method: RequestMethod.POST },
+];

@@ -7,6 +7,7 @@
  * gzip with or without `Content-Encoding`, chunks) and read the stored result through the `db`
  * fixture, whose search_path is the stand schema.
  */
+import { gzipSync } from 'zlib';
 import type { APIRequestContext, APIResponse } from '@playwright/test';
 import type { Pool } from 'pg';
 
@@ -36,6 +37,48 @@ export function postLogs(
       ...headers,
     },
     data: body,
+  });
+}
+
+export interface AppendUpload {
+  /** `X-API-Key`; null sends none. */
+  key: string | null;
+  sessionId: string;
+  type: string;
+  /** 0-based record index the delta starts at; omitted = no `startLine` param (a 400 case). */
+  startLine?: number | string;
+  /** The delta: NDJSON text of the new lines. */
+  body: string | Buffer;
+  /** Gzip the body and send `Content-Encoding: gzip`, as the hook does for a big delta. */
+  gzip?: boolean;
+  /** sha256 hex of the (uncompressed) delta body. */
+  contentSha256?: string;
+  /** Extra query params (`uploadFeedback`, …). */
+  params?: LogParams;
+}
+
+/**
+ * `POST /api/v2/logs/append` (2026-11-24-traffic-optimization): stages a delta of a `claude` /
+ * `claude-subagent` log that continues the stored log at record `startLine`. The worker applies
+ * it as stored body + delta, or fails the row as `upload-full` when the stored log does not
+ * have exactly `startLine` records.
+ */
+export function postLogsAppend(
+  api: APIRequestContext,
+  { key, sessionId, type, startLine, body, gzip = false, contentSha256, params = {} }: AppendUpload,
+): Promise<APIResponse> {
+  const query: LogParams = { sessionId, type, ...params };
+  if (startLine !== undefined) query.startLine = startLine;
+  if (contentSha256 !== undefined) query.contentSha256 = contentSha256;
+  const raw = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
+  return api.post('/api/v2/logs/append', {
+    params: query,
+    headers: {
+      'Content-Type': 'application/x-ndjson',
+      ...(key ? { 'X-API-Key': key } : {}),
+      ...(gzip ? { 'Content-Encoding': 'gzip' } : {}),
+    },
+    data: gzip ? gzipSync(raw) : raw,
   });
 }
 

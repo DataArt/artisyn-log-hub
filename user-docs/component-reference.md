@@ -81,7 +81,7 @@ A NestJS application on Node.js 26 (the image uses `node:26.13.1-alpine3.24`). I
 | Location (container) | Host bind mount | Content |
 |---|---|---|
 | PostgreSQL | `$LOG_HUB_DATA_DIR/pgdata` | All application data. |
-| `/app/dist/upload-queue` | `$LOG_HUB_DATA_DIR/upload-queue` | Uploads awaiting ingestion. |
+| `/app/dist/upload-queue` | `$LOG_HUB_DATA_DIR/upload-queue` | Uploads awaiting ingestion. Its `part-cache/` subfolder is a disposable cache of session-log parts already served (`SESSION_PART_CACHE_*`, 1 GB and 14 days without a read by default): it refills on the next reads, need not be backed up and can be deleted at any time. |
 | `/app/dist/export-import` | `$LOG_HUB_DATA_DIR/export-import` | Short-lived repository export/import staging zips (deleted after `EXPORT_IMPORT_JOB_TTL_MS`). |
 | `/app/dist/logs` | `$LOG_HUB_DATA_DIR/logs` | Server application and SQL logs. |
 
@@ -106,7 +106,9 @@ Main areas:
 - **My API Keys** — hook installation wizard and API key management.
 - **Hook State** — per-repository hook health: version, recommendations, upload errors.
 - **Admin panel** (admins only) — Users, Teams, Repos, Auth, Model Pricing, Data Retention,
-  Upload Queue, Error Logs, System (build, cluster).
+  Upload Queue, Error Logs, System (build, cluster, DB space and the **Part cache** card: on or
+  off, size against its cap and file count, TTL and the oldest last read, the last sweep and
+  what it removed, files removed with deleted data, and the cache folder).
 - **Help** — this documentation.
 
 ## 5. PostgreSQL database

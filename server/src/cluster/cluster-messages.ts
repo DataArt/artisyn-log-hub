@@ -1,3 +1,4 @@
+import type { PartCacheCounters } from '../logs/part-cache/part-cache.types';
 import type { SupervisorInfo } from '../system-info/system-info.types';
 
 /**
@@ -16,6 +17,8 @@ export interface WorkerStatsMessage {
   instance: number;
   pid: number;
   rssBytes: number;
+  /** Part cache counters since the worker's start; absent from an older worker build. */
+  partCache?: PartCacheCounters;
 }
 
 export interface SupervisorSnapshotMessage {

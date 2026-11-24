@@ -290,6 +290,34 @@ const PARTS_MANIFEST_SQL = `
       OR (t.depth > 0 AND l.log_type = 'claude-subagent')
    ORDER BY t.depth > 0, l.log_type = 'artisyn', s.session_id`;
 
+/** s02's parts manifest (`parts`) by PARTS_MANIFEST_SQL, field by field. */
+const PARTS_MANIFEST_READ: ReadSpec = {
+  sql: PARTS_MANIFEST_SQL,
+  args: ['@s02.id'],
+  shape: 'array',
+  path: 'parts',
+  fields: {
+    sessionId: 'session_id',
+    logType: 'log_type',
+    rev: 'rev',
+    parentSessionId: 'parent_session_id',
+    agentDescription: 'agent_description',
+    workflowPhase: 'workflow_phase',
+    workflowRunId: 'workflow_run_id',
+  },
+  strict: true,
+};
+
+/**
+ * 2026-11-24 traffic-optimization (DD-10, DD-23): a gzip-accepting client (superagent sends
+ * `Accept-Encoding: gzip, deflate`) gets a gzipped JSON answer — the contract suite sets
+ * API_GZIP_MIN_BYTES=1 — and every `/api` JSON answer varies on Accept-Encoding.
+ */
+const GZIPPED = { 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' };
+
+/** `Accept-Encoding: identity`: the same answer, uncompressed. */
+const IDENTITY = { 'Content-Encoding': null, Vary: 'Accept-Encoding' };
+
 /** The parts API of s04 (owner, R1): `/logs/parts/<partSessionId>/<logType>`. */
 const PART_ROUTE =
   'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts/:partSessionId/:logType';
@@ -303,7 +331,9 @@ export const f17Sessions: ContractFamily = {
       route: 'GET /api/v1/repositories/:repoId/sessions',
       actor: 'owner',
       params: { repoId: '@R1.id' },
-      expect: { status: 200, minRows: 3 },
+      // 2026-11-24 traffic-optimization (DD-10, DD-23): gzipped for a gzip-accepting client,
+      // the suite runs with API_GZIP_MIN_BYTES=1.
+      expect: { status: 200, minRows: 3, headers: GZIPPED },
       read: {
         sql: `SELECT r.session_id, r.first_prompt, r.start_time, r.end_time, r.git_branch,
                      u.email AS user_email, r.user_id,
@@ -901,24 +931,25 @@ export const f17Sessions: ContractFamily = {
       expect: {
         status: 200,
         minRows: 3,
+        headers: GZIPPED,
         bodyMatches: { derivedLagging: false },
       },
-      read: {
-        sql: PARTS_MANIFEST_SQL,
-        args: ['@s02.id'],
-        shape: 'array',
-        path: 'parts',
-        fields: {
-          sessionId: 'session_id',
-          logType: 'log_type',
-          rev: 'rev',
-          parentSessionId: 'parent_session_id',
-          agentDescription: 'agent_description',
-          workflowPhase: 'workflow_phase',
-          workflowRunId: 'workflow_run_id',
-        },
-        strict: true,
+      read: PARTS_MANIFEST_READ,
+    },
+    {
+      // DD-10: `Accept-Encoding: identity` gets the same decoded manifest uncompressed.
+      id: 'F17-session-log-parts-identity',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      headers: { 'Accept-Encoding': 'identity' },
+      expect: {
+        status: 200,
+        minRows: 3,
+        headers: IDENTITY,
+        bodyMatches: { derivedLagging: false },
       },
+      read: PARTS_MANIFEST_READ,
     },
     {
       // The manifest's top-level shape: exactly the small figures `/logs` carries plus `parts`,
