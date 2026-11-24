@@ -29,6 +29,10 @@
 // check the parts read path on GS-05: on open only the manifest and the root parts load; a part
 // answers gzip; legacy `/logs` and the delta full snapshot equal the parts; a foreign user gets
 // 4xx; an upload of one loaded agent refetches only its part (FR-4); and the derived-lag notice.
+// Step 13a (2026-11-24 traffic-optimization FR-12) checks the `/api` JSON gzip on the wire: the
+// manifest (of its own root with 30 sub-agents) and the sessions list (of its own 15-session
+// repository) gzip + Vary above 8192 bytes, identity below it and without
+// Accept-Encoding; a part is gzipped once and the streamed /logs answer not at all.
 // Steps 16–21 (2026-11-24 session-parts-disk-cache) check the parts disk cache under
 // <runDir>/upload-queue/part-cache: a read fills it and later reads are served from it (mode A
 // proves the bytes do not come from Postgres), no pre-warm on upload and the old revision's file
@@ -67,9 +71,10 @@ import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { standMode } from '../helpers/auth-mode';
 import { loadExpected, materializeGolden } from '../helpers/golden';
-import { ownRepoId, promptSessionBodies, type PromptSession } from '../helpers/prompt-session';
+import { ownRepoId, promptSessionBodies, uploadPromptSession, uploadSubagent, type PromptSession } from '../helpers/prompt-session';
 import { holdSessionTreeLock } from '../helpers/ingest';
 import { waitForQueueIdle } from '../helpers/queue';
+import { expectJsonGzipPair, rawGet } from '../helpers/raw-http';
 import { hms, infoValue, int, logTurns, num, openSession, turnMetric, uploadGoldenRepo, usd4 } from '../helpers/session-view';
 
 const HIDDEN_TEXTS = [
@@ -1156,6 +1161,41 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     }
   });
 
+  await test.step('13a. FR-12 (2026-11-24 traffic-optimization): the parts manifest and the sessions list are gzip + Vary above 8192 bytes, identity (with Vary) for a small answer and without Accept-Encoding, decoded JSON identical; a part is gzipped once (one gunzip parses); the streamed /logs answer has no Content-Encoding', async () => {
+    // GS-05's manifest (two agents) and the golden repository's list (three sessions) stay under
+    // 8192 bytes; a root with 30 sub-agents and a repository of 15 sessions do not.
+    const gzRun = randomBytes(4).toString('hex');
+    const tree: PromptSession = { sessionId: `ss03-gz-${gzRun}`, prompt: `gzip tree ${gzRun}`, repoUrl: `https://git.arrakis.test/scn/${gzRun}/ss03-gzip` };
+    const gzKey = await createApiKey(owner.api);
+    for (let n = 0; n < 15; n += 1) {
+      const s = n === 0 ? tree : { ...tree, sessionId: `${tree.sessionId}-s${n}`, prompt: `${tree.prompt} (${n})` };
+      await uploadPromptSession(api, gzKey.key, s, { db, userId: owner.id });
+    }
+    for (let n = 1; n <= 30; n += 1) {
+      await uploadSubagent(api, gzKey.key, { sessionId: `ss03-gz-${gzRun}-agent${String(n).padStart(2, '0')}`, parentSessionId: tree.sessionId, prompt: `agent ${n}` }, { db, userId: owner.id });
+    }
+    const treeRepoId = await ownRepoId(owner.api, tree.repoUrl);
+    const manifest = await expectJsonGzipPair(stand.url, owner, `/api/v1/repositories/${treeRepoId}/sessions/${encodeURIComponent(tree.sessionId)}/logs/parts`, true);
+    expect(manifest.bytes, 'the 30-agent manifest is above the threshold').toBeGreaterThanOrEqual(8192);
+    expect((manifest.json as PartsManifest).parts).toHaveLength(32);
+    const list = await expectJsonGzipPair(stand.url, owner, `/api/v1/repositories/${treeRepoId}/sessions`, true);
+    expect(list.bytes, 'the 15-session list is above the threshold').toBeGreaterThanOrEqual(8192);
+    expect(list.json as unknown[]).toHaveLength(15);
+    const small = await expectJsonGzipPair(stand.url, owner, `/api/v1/repositories/${treeRepoId}/sessions?branch=scn-no-such-branch`, false);
+    expect(small.json, 'a branch nobody used: an empty list').toEqual([]);
+
+    const part = await rawGet(stand.url, owner, partUrl(sid5, 'claude'), 'gzip');
+    expect(part.status).toBe(200);
+    expect(part.headers['content-encoding']).toBe('gzip');
+    const lines = JSON.parse(zlib.gunzipSync(part.body).toString('utf8')) as unknown[];
+    expect(lines, 'one gunzip gives the JSON lines: not compressed twice').toEqual(await fetchPart(sid5, 'claude'));
+
+    const legacy = await rawGet(stand.url, owner, logsBase, 'gzip');
+    expect(legacy.status).toBe(200);
+    expect(legacy.headers['content-encoding'], 'the streamed /logs answer is not gzipped').toBeUndefined();
+    expect((JSON.parse(legacy.body.toString('utf8')) as LegacyLogs).main.length).toBeGreaterThan(0);
+  });
+
   await test.step('14. FR-4: with every part loaded (Statistics), one upload of W1 then Refresh refetches the manifest and the W1 part only', async () => {
     await openSession(page, owner, repo.repoId, sid5, { tab: 'usage' });
     await expect(page.getByTestId('session-usage-tab')).toBeVisible({ timeout: 20_000 });
@@ -1364,6 +1404,27 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     const lines = await fetchPart(sid5, 'claude');
     await readUntil(sid5, 'claude', () => readCacheFile(file)?.equals(row.bodyGz) ?? false, 'cache file = body_gz');
     await expect.poll(() => tempFiles(path.dirname(file)), { message: 'no temp file left', timeout: 5_000 }).toEqual([]);
+
+    // Admin view: the live scan sees the file and the cluster-summed counters see the fill and a
+    // hit (workers push counters every 10 s, so poll with a read each time).
+    const cacheAdmin = await users.user('admin', { label: 'ss03-cache-admin' });
+    await expect
+      .poll(async () => {
+        await fetchPart(sid5, 'claude');
+        const res = await cacheAdmin.api.get('/api/v1/admin/system');
+        expect(res.status(), 'GET /admin/system').toBe(200);
+        const pc = ((await res.json()) as {
+          partCache: { current: { fileCount: number; sizeBytes: number } | null; counters: { hits: number; fills: number } };
+        }).partCache;
+        return (
+          pc.current !== null &&
+          pc.current.fileCount >= 1 &&
+          pc.current.sizeBytes >= row.bodyGz.length &&
+          pc.counters.hits >= 1 &&
+          pc.counters.fills >= 1
+        );
+      }, { message: 'admin partCache: live size counts the file, counters show a fill and a hit', timeout: 30_000, intervals: [1_000] })
+      .toBe(true);
 
     if (mode !== 'a') return;
     // DD-16: the body guard fires only on UPDATE OF body, so body_gz can change under the same revision.

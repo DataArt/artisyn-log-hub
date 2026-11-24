@@ -257,6 +257,8 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(card.getByTestId('part-cache-status')).toHaveText('Enabled');
     await expect(card.getByTestId('part-cache-size')).toHaveText(/ of .* · \d+ files/);
+    await expect(card.getByTestId('part-cache-requests')).toHaveText(/\d+ hits · \d+ misses \(hit rate .+\) · \d+ files written/);
+    await expect(card).toContainText('Size as of');
   });
 
   await test.step('5. UI: all 9 tabs activate; no NaN / undefined / null on screen, no page errors', async () => {

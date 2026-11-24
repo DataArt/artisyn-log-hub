@@ -38,8 +38,17 @@ This skill's steps:
 - `Write the implementation plan`
 - `Review the plan and fix gaps`
 
-If the first review pass reports issues, write a separate `Second review pass` step line for the
-second pass — so the extra pass is visible, not hidden inside the first.
+If the first review pass finds real architecture issues and you run a second one, write a separate
+`Second review pass` step line for it — so the extra pass is visible, not hidden inside the first.
+
+## What the plan is for
+
+The plan is a short document a human skims to catch a wrong direction before any code is written:
+a new piece of infrastructure, a new dependency or a whole new mechanism the requirements do not
+justify, where a pattern the project already has would do. It records the architecture-level
+decisions and how the work is split into chunks — nothing more. The implementing agent is capable:
+told roughly what to do, where, and what the acceptance criteria are, it works out the how itself.
+Do not write step-by-step instructions, file-by-file change lists or exact line references.
 
 ## IMPORTANT
 
@@ -166,12 +175,14 @@ Task folder: TASK_DIR
    not eyeball or approximate it — actually compute it and state the exact result. Never write "roughly" or
    "approximately" for a value that can be calculated exactly.
 
-Return your findings as your final message — compact and reference-dense, no filler prose — with these sections:
+Return your findings as your final message — compact, no filler prose — with these sections:
 
 - **Requirements summary** — one-paragraph restatement of what's being built
 - **Wireframes** — notes on referenced wireframes, or "None referenced"
 - **Knowledgebase** — each relevant article: path + the convention/pattern to follow
-- **Existing patterns** — each relevant file: path:line + one-line description of the pattern to reuse
+- **Existing patterns** — the mechanisms, modules and conventions the project already has that this task
+  should reuse: file path (plus the symbol name where it helps) + one line on the pattern. The patterns that
+  shape the design, not an inventory of every file the change will touch
 - **Open gaps** — anything you could not find (e.g. no existing pattern for X) that the plan will need to
   decide on from scratch
 
@@ -201,7 +212,8 @@ How:
 - Save results in `TASK_DIR`: the deliverable document when the analysis is the task (named
   `<topic>-analysis.md` and the like), otherwise `research/<topic>.md`, plus any scripts under `research/`.
   Raw data, screenshots and anything with personal data go to the project's tmp dir, never the task folder.
-- Carry the outcome into the plan: conclusions become Design Decisions, numbers are cited where they are used.
+- Carry the outcome into the plan: conclusions become Architecture decisions, numbers are cited where they are
+  used.
 - If something cannot be found out now (it needs the user's input, an environment you cannot reach, data that
   does not exist yet), stop and tell the user what is missing — do not write a chunk that does it instead.
 
@@ -210,89 +222,95 @@ left no question that needs an experiment.
 
 ### 3 — Generate the implementation plan
 
-Use the research report as your starting context. Carry the `path:line` references the plan needs into the plan
-itself, so it is self-contained — nothing downstream re-reads the research.
+Use the research report as your starting context, and do not treat it as a ceiling on your codebase
+knowledge: if a decision depends on something it does not answer — an unclear API shape, a missing pattern, a
+KB gap — look it up yourself (Read/Grep/Glob) rather than guessing. Research to decide, not to transcribe: the
+plan names modules and areas, and the chunk agents locate the exact code themselves.
 
-**Do not treat the report as a ceiling on your codebase knowledge.** If while writing the plan you hit a question
-it doesn't answer — an unclear API shape, a missing pattern, a KB gap — go research it yourself (Read/Grep/Glob)
-rather than guessing or leaving it vague.
+Keep the plan short. Write it to `IMPL_PLAN` with these sections, in this order:
 
-Write the plan to `IMPL_PLAN` with these sections:
+- **TL;DR**: ALWAYS the very first section in the file. 3-8 terse bullets with the architecture-level choices a
+  reviewer must check — this is the part the user actually reads. Cover what applies: new modules/services, new
+  dependencies and why, a one-line DB change summary, new or changed API endpoints, anything else with a high
+  blast radius (auth, a breaking or backward-incompatible change, a new external integration, a new piece of
+  infrastructure or a new mechanism). For every choice that is not the obvious one, add in a few words the
+  simpler alternative that was rejected and why. One bullet is mandatory: a one-line summary of the
+  external-surface changes (details in External surface), or "no external surface changes". Otherwise skip a
+  category that does not apply rather than writing "none" for each; when the change only reuses existing
+  patterns, one bullet saying so is enough.
+- **Reference**: link to the requirements doc (the `REQUIREMENTS` file).
+- **Architecture decisions**: the technical choices too small for TL;DR, one sentence each — which existing
+  project pattern is reused, or why none fits and something new is introduced. Do not repeat TL;DR bullets
+  here. Rationale only where a reader would otherwise re-litigate the choice. Then the internal contracts
+  shared between chunks, each stated once and briefly: function/service signatures, shared type shapes,
+  internal keys. API, DB and every other external contract is not repeated here — it lives in External
+  surface, and chunks refer to it there.
+- **External surface**: MANDATORY, never omitted. EVERY change to what the outside world sees or what this
+  code depends on outside itself, at contract level — what the contract is, not how it is implemented:
+  - **API** — each new, changed or removed endpoint: method, path, request params/body, response shape,
+    auth/permission.
+  - **DB** — each new, changed or removed table or column: type, nullability/default, constraints/indexes,
+    plus the migration/backfill path.
+  - **Other** — anything else that is called or that calls this code: external services and integrations, the
+    published interface other installed components use (a client/agent protocol and the like), config keys
+    and environment variables, CLI flags, file formats, events/messages.
 
-- **TL;DR**: ALWAYS the very first section in the file, before Reference. 4-8 terse bullets giving a
-  reviewer the key things to scrutinize without reading the rest — e.g. new services/modules and
-  the functions they expose, new npm packages and why, a one-line DB changes summary (new
-  tables/columns or "none"), new/changed API endpoints, and any other high-blast-radius change
-  (auth, breaking API change, new external integration). Skip a bullet category that doesn't apply
-  (e.g. no new libs → no bullet for it) rather than writing "none" for everything. This is a
-  navigation aid, not a summary of the whole plan — do not restate Design Decisions or Implementation
-  Chunks here.
-- **Reference**: link to the requirements doc (the `REQUIREMENTS` file) at the top
-- **Design Decisions**: the concrete choices the requirements left open — one sentence per decision, rationale
-  only where a future reader would otherwise re-litigate the choice — plus any implementation contract shared by
-  multiple chunks (a key/default table, an API shape, a regex), stated once here and referenced from chunk items
-- **Files to create/modify**: table — path, purpose, brief note per file. Never name a `.md` file the plan
-  creates so that its basename starts with `report`, `summary`, `findings` or `analysis` (any case): Claude
-  Code's Write tool refuses such names to every subagent ("Subagents should return findings as text, not write
-  report files"), so an `implement-deep` chunk cannot create it. Put the topic first — `<topic>-analysis.md`,
-  `<topic>-report.md`, `review.md`
-- **API changes**: endpoint, HTTP method, request params, response shape
-- **Database changes**: table/collection, columns/fields, types, constraints, migration steps
-- **Dependencies**: any new npm packages to add (if none, omit this section)
-- **Test coverage plan**: the tests the change needs, under the project's test policy (CLAUDE.md, e.g. a
-  "Test policy" section) when it has one — it overrides this default. Prefer extending existing tests over adding
-  new ones; for each item name the kind of test the policy allows and the existing file/doc/scenario it extends,
-  and never plan a test kind the policy forbids (prose/bullets, not checkboxes — the concrete test-writing action
-  items go into chunks)
-- **Visual/UX notes**: layout, spacing, component states — only if the task has UI changes
-- **Wireframes**: changes in the wireframes if needed.
-- **Implementation Chunks**: the full action-item list, split into sequential chunks — see step 3.5. This is
-  always the last section in the file, and it is the ONLY place action items appear.
+  For each item state whether it is backward compatible and, if it is not, how older clients and existing
+  data are handled. When nothing external changes, write "None" explicitly, so the reviewer sees it was
+  considered. This is the one part of the plan that is complete rather than brief: an item missing here is a
+  contract nobody reviewed.
+- **Test coverage plan**: a few plain bullets (no checkboxes — Implementation Chunks is the only place with
+  checkboxes) — the tests the change needs under the project's test policy (CLAUDE.md,
+  e.g. a "Test policy" section) when it has one; it overrides this default. Prefer extending existing tests
+  over adding new ones; name the kind of test the policy allows and the existing file/doc/scenario it extends,
+  and never plan a test kind the policy forbids.
+- **Visual/UX notes**: layout, component states, wireframe changes — only if the task has UI changes.
+- **Implementation Chunks**: how the work is grouped — see step 3.5. Always the last section in the file.
 
-Omit sections that are not applicable (e.g. no DB change → skip Database changes).
+Omit sections that do not apply — except TL;DR, External surface and Implementation Chunks, which are always
+present. Do not add a files-to-change table, a per-file change list or exact line
+references — the implementing agent finds the code. One naming rule does belong in the plan: if it calls for a
+new `.md` file, its basename must not start with `report`, `summary`, `findings` or `analysis` (any case) —
+Claude Code refuses such Writes to subagents, so a chunk agent could not create it. Put the topic first
+(`<topic>-analysis.md`).
 
 ### 3.5 — Implementation Chunks section
 
-This section is mandatory — `/adlc-lh:implement` treats it as the authoritative, ready-to-execute chunk list and
-will not re-derive chunks from scratch.
+This section is mandatory — `/adlc-lh:implement` and `/adlc-lh:implement-deep` treat it as the authoritative
+chunk list and will not re-derive chunks from scratch. Each chunk runs in a fresh agent context, and a final
+check verifies every checkbox item against the code.
 
-Every action item lives here and ONLY here — items are never listed in another section and then copied.
+**A chunk is:**
 
-**Item format:**
+- a one-line goal — what exists or works once the chunk is done;
+- a `Where:` line — the modules/areas it touches. Approximate is fine ("the orders service and its API
+  controller"); list individual files only when that is the shortest way to say it;
+- 2–6 checkbox items, `- [ ] <outcome>`. Each item is an **acceptance criterion** — an observable outcome that
+  can be checked against the code or the running app — not an instruction for how to get there. Say what must
+  be true, refer to a contract by name ("per External surface", "per Architecture decisions") instead of
+  repeating it, and leave the how to the implementing agent.
 
-- Every action item is a checkbox: `- [ ] <action>`
-- **Hard cap: 60 words per item.** The concrete action, file/location, and any value/name it needs — nothing
-  else. Instead of inlining large details, reference a plan section or decision by name (e.g. "columns per
-  Database changes", "per Design Decision 3"). Rationale, tradeoffs, and "why this over that" belong in Design
-  Decisions, never in a checkbox.
-- Each item must be implementable without reading requirements.md — if it isn't, the missing fact belongs in the
-  item (within the cap), in Design Decisions, or in the plan section the item references.
-- **No discovery items.** An item never asks to investigate, analyse, survey, measure, compare, decide, observe
-  the app or data, or build a PoC — step 2.5 did that. Applying known results (code, KB rows from the analysis)
-  and verification (run tests, a visual check of the change) are fine.
+**No discovery items.** An item never asks to investigate, analyse, survey, measure, compare, decide, observe
+the app or data, or build a PoC — step 2.5 did that. Applying known results and verification (tests pass, a
+visual check of the change) are fine.
 
 **Chunking rules:**
 
-- group by module
-- group by functionality
-- tasks from chunk N+1 depend on tasks from chunk N
-- Tightly coupled items stay in the same chunk; files that are edited together (e.g. a service and its module
-  registration) stay in the same chunk.
-- **One chunk = one area of the code.** `/adlc-lh:implement-deep` runs every chunk in a fresh agent context
-  on purpose: an agent works best when it reads only the part of the codebase its chunk changes, and is not
-  carrying another chunk's exploration in its context. That only pays off if the split follows the code: a
-  chunk's items should sit in one module/package/layer, and an agent should be able to do the whole chunk
-  without studying the code another chunk owns.
+- **One chunk = one area of the code.** An agent works best when it reads only the part of the codebase its
+  chunk changes; a chunk should sit in one module/package/layer and be doable without studying the code
+  another chunk owns. Things that are edited together stay in the same chunk.
+- **Ordered by dependency.** Chunk N+1 builds on chunk N — typically schema → services → API → frontend →
+  tests, with the chunk(s) that add or extend tests last.
 - **Pin the seams in the plan, not in the code.** A later chunk sees an earlier one only as its name and its
-  list of changed files. Any interface a later chunk consumes from an earlier one — function/endpoint
-  signatures, DTO/type shapes, table and column names, event or config keys — must be stated in the plan
-  (Design Decisions, API changes, Database changes), so the later agent builds against the plan instead of
-  reverse-engineering the earlier chunk's code.
-- **4–8 items per chunk.** If a natural group has more than 8 items, split it at a sub-boundary instead of
-  exceeding 8.
-- Order chunks: Schema → Services → API → Frontend → Tests. Tests are always the last chunk(s).
+  list of changed files. Any interface a later chunk consumes from an earlier one — signatures, type shapes,
+  table and column names, event or config keys — is stated in the plan (External surface for external
+  contracts, Architecture decisions for internal ones), so the later agent
+  builds against the plan instead of reverse-engineering the earlier chunk's code.
+- **Granular, not fragmented.** Split so that each chunk is a reviewable unit of change; if a chunk needs more
+  than 6 acceptance criteria, split it at a sub-boundary. Do not create a chunk for a trivial edit that
+  belongs with its neighbour.
 
-Format:
+Keep this format exactly — the chunk names and checkbox items are extracted from it:
 
 ```markdown
 ## Implementation Chunks
@@ -303,56 +321,76 @@ Format:
 | 2 | <short chunk name> | <count> | ... |
 
 ### Chunk 1 — <short chunk name>
-- [ ] <item>
-- [ ] <item>
+<one-line goal>
+Where: <modules / areas>
+- [ ] <acceptance criterion>
+- [ ] <acceptance criterion>
 
 ### Chunk 2 — <short chunk name>
-- [ ] <item>
+<one-line goal>
+Where: <modules / areas>
+- [ ] <acceptance criterion>
 ...
 ```
 
 ### 4 — Review pass (subagent)
 
-After writing the plan, spawn a review subagent with this exact prompt (substitute FILE_PATH with the actual plan file
-path):
+After writing the plan, spawn a review subagent with this exact prompt (substitute FILE_PATH with the plan file
+path and REQ_FILE with `REQUIREMENTS`):
 
 ---
 
-You are reviewing a technical implementation plan for gaps.
+You are doing a sanity review of the architecture in an implementation plan. The plan is deliberately short:
+it states decisions and acceptance criteria, not implementation steps. Do not ask for more detail, exact file
+lists or line references — the implementing agent works those out. Look for a wrong direction, not for
+missing minutiae. The one exception is the "External surface" section: that one must be complete.
 
 Plan file: FILE_PATH
+Requirements: REQ_FILE
+
+Read both, then the project's CLAUDE.md and the knowledgebase articles and code the plan's decisions rest on —
+enough to judge whether the project already has a pattern for what the plan introduces.
 
 Check for:
 
-1. Missing files that would obviously be needed
-2. API changes without corresponding type/interface definitions
-3. DB changes without migration steps
-4. Missing test coverage for new API endpoints, or planned tests of a kind the project's test policy (CLAUDE.md)
-   does not allow
-5. Frontend components referenced but not listed
-6. Implementation Chunks section: chunk ordering respects Schema → Services → API → Frontend → Tests, and each
-   chunk has 4–8 items. Each chunk stays in one area of the code (an agent could do it without studying code
-   another chunk owns), and every interface a later chunk consumes from an earlier one (signatures, type
-   shapes, table/column names, keys) is stated in the plan rather than left to be discovered in the code
-7. Missing constants, configuration parameters.
-8. Any chunk item over 60 words, or containing rationale/tradeoff prose instead of a bare action (referencing a
-   plan section or decision by name is fine and encouraged)
-9. Any chunk item that could not be implemented from the plan alone (its own text plus the sections it
-   references) without reading requirements.md
-10. TL;DR section is present, is the first section in the file, and its bullets match what the rest of
-    the plan actually contains (no new lib/service/DB change mentioned later that's missing from TL;DR,
-    and no TL;DR bullet unsupported by the plan body)
-11. Any chunk item that is discovery rather than applying a known result — an analysis, survey, measurement,
-    comparison, UI/data walk-through or PoC whose outcome the plan does not already state. That work belongs to
-    planning, not to a chunk
+1. Over-engineering: anything the plan builds that the requirements do not ask for, or a solution noticeably
+   heavier than the problem.
+2. New infrastructure, a new dependency or a new mechanism (a storage, a service, a library, a background
+   process, a protocol, a framework-level technique) that the requirements do not justify — especially where
+   the project already has a pattern that would do. Name the existing pattern.
+3. Decisions that ignore or contradict existing project patterns, the knowledgebase or the rules in CLAUDE.md.
+4. Backward-compatibility risk: a change to an API, a stored format, a schema or a client-facing contract
+   that would break older installed versions or existing data, with no compatibility path stated — or a
+   schema change with no migration/backfill path stated.
+5. External surface: the section is present (or says "None" explicitly) and complete. Every endpoint, table,
+   column, integration, published interface, config key/env var, CLI flag, file format or event change that
+   the requirements, the decisions or the chunks imply is listed there with its contract and a
+   backward-compatibility note. A change that is implied but not listed, a contract too vague to build or
+   review against, a missing compatibility note, or "None" where the chunks plainly change something
+   external is an issue.
+6. Chunks: each stays in one area of the code, the order follows dependencies, the granularity is sensible
+   (neither one giant chunk nor a pile of trivial ones), and every interface a later chunk consumes from an
+   earlier one is stated in the plan rather than left to be discovered in the code.
+7. Chunk items are acceptance criteria that can be verified, and none is discovery work (an analysis, survey,
+   measurement, comparison, UI/data walk-through or PoC whose outcome the plan does not already state).
+8. Tests: the test plan fits the project's test policy (CLAUDE.md) — no forbidden kind of test, and no changed
+   behaviour left without one of the allowed kinds.
+9. TL;DR is the first section and matches the body: it carries the one-line external-surface summary (or "no
+   external surface changes"), no new module, dependency, DB or API change appears later but is missing from
+   it, and no TL;DR bullet is unsupported by the body.
 
-Report issues as a numbered list. If no meaningful issues, say "No gaps found."
+Report issues as a numbered list, most serious first, and mark each one `ARCHITECTURE` (items 1-5: a wrong or
+unjustified direction, or a missing or incomplete External surface) or `MINOR` (everything else). If there are no meaningful issues, say so in one line and list nothing.
 Do NOT modify the plan file.
 
 ---
 
-If the subagent reports issues, fix them in the plan file and run another review pass. Repeat up to 2 total passes (stop
-when the subagent says "No gaps found" or after 2 passes, whichever comes first).
+Fix what the review reports in the plan file. When an `ARCHITECTURE` issue is a real judgment call rather than
+a clear mistake, keep your decision if you can defend it, state the rejected alternative in TL;DR, and mention
+the disagreement in your final report.
+
+Run a second review pass only if the first one reported `ARCHITECTURE` issues and you changed the plan because
+of them. Never more than 2 passes.
 
 ### 5 — Return
 

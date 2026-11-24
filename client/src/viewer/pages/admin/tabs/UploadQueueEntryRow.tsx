@@ -6,12 +6,6 @@ import { Button } from '../../../ui/button';
 import { TableRow, TableCell } from '../../../ui/table';
 import { UploadQueueEntryDetailModal } from './UploadQueueEntryDetailModal';
 
-// Mirrors the hook/server's hardcoded chunk size (10MB) — used only to
-// approximate "bytes received so far" for the chunk-progress sub-line, since
-// the server derives bytesReceived on the fly during saveChunk() but does not
-// persist it as a column (see upload-queue.service.ts).
-const CHUNK_SIZE_BYTES = 10 * 1024 * 1024;
-
 const STATUS_DOT_CLASSES: Record<UploadQueueStatus, string> = {
   pending: 'bg-gray-400',
   processing: 'bg-blue-600',
@@ -88,11 +82,10 @@ export function UploadQueueEntryRow({ row }: { row: UploadQueueEntry }) {
           row.chunksReceived != null &&
           row.totalChunks != null && (
             <div className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
-              Chunk {row.chunksReceived} of {row.totalChunks} received (
-              {formatBytes(
-                Math.min(row.chunksReceived * CHUNK_SIZE_BYTES, row.sizeBytes),
-              )}{' '}
-              / {formatBytes(row.sizeBytes)})
+              {/* No byte count: the server does not keep the received bytes, and
+                  a chunk's size is not fixed (the hook sizes gzipped slices by
+                  their wire size), so any estimate from the chunk count is wrong. */}
+              Chunk {row.chunksReceived} of {row.totalChunks} received
             </div>
           )}
       </TableCell>

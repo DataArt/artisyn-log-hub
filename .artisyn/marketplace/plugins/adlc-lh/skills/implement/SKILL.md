@@ -53,9 +53,11 @@ missing, skip the steps that depend on it (noted below).
 ## Simplicity guard
 
 None of the following stop the simple track — the user has already judged this task simple, and
-that judgment stands. If while implementing you discover the change actually requires database
-schema/migration changes, API contract changes, non-trivial cross-module rework, or keeps growing
-past the plan's scope, keep going, but include this exact warning in your final report (fill in
+that judgment stands. Plain external-surface changes (a new column, a new endpoint, a new config
+key) are not a reason on their own. If while implementing you discover tricky data work (a
+migration or backfill that transforms existing data, a data-integrity or consistency risk,
+concurrent writes to the same data), or the change becomes very large (many modules, or keeps
+growing past the plan's scope), keep going, but include this exact warning in your final report (fill in
 the concrete reasons): "Task does not look that simple because <reasons>. I recommend considering
 the full flow (`/adlc-lh:plan-deep $ARGUMENTS` to re-plan, then `/adlc-lh:implement-deep $ARGUMENTS`) for any
 remaining or future work like this."
@@ -134,8 +136,11 @@ the user to (re)generate the plan. Do NOT derive chunks yourself.
 
 ### 2 — Implement, item by item
 
-Work through the chunk items in order, inline in this session. Follow the plan's file list and
-design decisions; follow existing code patterns in the touched files. Honor any project skills
+Work through the chunk items in order, inline in this session. The items are acceptance criteria
+and a chunk's `Where:` line is approximate — you decide how to achieve each one and locate the
+code yourself. Follow the plan's "Architecture decisions" ("Design Decisions" in older plans) and
+the existing code patterns in the touched files; read the relevant part of the requirements doc
+when an item needs more context. Honor any project skills
 whose triggers apply to what you are doing (code conventions, UI changes, browser use) — invoke
 them as their descriptions demand; this skill does not name them.
 

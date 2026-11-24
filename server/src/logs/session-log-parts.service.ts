@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { pipeline, Readable } from 'stream';
 import * as zlib from 'zlib';
+import { acceptsGzip } from '../common/accept-encoding';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { textList } from './analytics/scoped-sessions.sql';
@@ -12,6 +13,7 @@ import type {
   SessionLogPart,
   SessionLogPartsManifest,
 } from './dto/session-log-parts.dto';
+import { partCacheCounters } from './part-cache/part-cache-counters';
 import { PartCacheService } from './part-cache/part-cache.service';
 import type { TreeLogRowMeta } from './session-tree-logs-meta';
 import { writeChunk } from './streaming/response-stream';
@@ -41,20 +43,6 @@ export function partNotModified(req: Request, meta: TreeLogRowMeta): boolean {
     .split(',')
     .map((v) => v.trim().replace(/^W\//, ''));
   return values.some((v) => v === etag || v === '*');
-}
-
-/** True when the request's `Accept-Encoding` admits gzip (not with `q=0`). */
-function acceptsGzip(req: Request): boolean {
-  const raw = req.headers['accept-encoding'];
-  const header = Array.isArray(raw) ? raw.join(',') : (raw ?? '');
-  for (const token of header.split(',')) {
-    const [name, ...params] = token.trim().toLowerCase().split(';');
-    if (name.trim() !== 'gzip' && name.trim() !== '*') continue;
-    const q = params.map((p) => p.trim()).find((p) => p.startsWith('q='));
-    if (q !== undefined && Number(q.slice(2)) === 0) continue;
-    return true;
-  }
-  return false;
 }
 
 /** The headers every part answer carries (200 and 304), mirroring `precompressed-static.ts`. */
@@ -213,8 +201,10 @@ export class SessionLogPartsService {
   ): Promise<void> {
     if (this.cache.enabled && meta.bodyRev !== null && meta.gzReady) {
       if (await this.streamFromCache(req, res, meta.logId, meta.bodyRev)) {
+        partCacheCounters.hit();
         return;
       }
+      partCacheCounters.miss();
     }
 
     // The ETag names the revision of the bytes actually sent: the row may have been rewritten

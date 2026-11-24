@@ -269,6 +269,30 @@ export interface SystemInfoPartCacheSweep {
   error: string | null;
 }
 
+/** Live read-only scan of the part cache folder. */
+export interface SystemInfoPartCacheCurrent {
+  /** ISO time the scan finished. */
+  scannedAt: string;
+  sizeBytes: number;
+  fileCount: number;
+  /** ISO of the oldest last-read time, `null` when the cache is empty. */
+  oldestReadAt: string | null;
+  /** Message of a scan failure, else `null`. */
+  error: string | null;
+}
+
+/** Part cache request counters summed over the cluster workers that have reported. */
+export interface SystemInfoPartCacheCounters {
+  /** Cacheable parts served from a cache file. */
+  hits: number;
+  /** Cacheable parts served from the database. */
+  misses: number;
+  /** Cache files written. */
+  fills: number;
+  /** Worker processes the sum covers. */
+  workers: number;
+}
+
 /** `partCache` field of `GET /api/v1/admin/system`. */
 export interface SystemInfoPartCache {
   enabled: boolean;
@@ -277,6 +301,10 @@ export interface SystemInfoPartCache {
   maxBytes: number;
   ttlDays: number;
   sweepIntervalMs: number;
+  /** Live scan of the folder (reused for a few seconds); `null` when disabled, absent from an older server. */
+  current?: SystemInfoPartCacheCurrent | null;
+  /** Hit / miss / fill since each worker's start, summed over the cluster; absent from an older server. */
+  counters?: SystemInfoPartCacheCounters;
   /** `null` when no sweep has run yet, the state file is unreadable, or the cache is disabled. */
   lastSweep: SystemInfoPartCacheSweep | null;
   /** Removed together with deleted sessions / repos / accounts by the answering worker since its start. */

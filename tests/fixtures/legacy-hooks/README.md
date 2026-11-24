@@ -12,6 +12,7 @@ Never edit or refresh these files: they stand for users who keep an old hook for
 | `2.6.1` | `de89d03` (`577386b^`) | the last version before 2.8.0 (there is no 2.7.x); v2 uploads with 900 KB chunks |
 | `2.28.0` | `b61f344` | the last version without OTEL traces / realtime (`POST /api/v2/otel-realtime`); OTEL logs only through chunk uploads; also the last per-project-receiver hook |
 | `2.32.3` | `ca6f6fb` | the last version before 3.0.0: no upload job queue (every `Stop` uploads in-process under the per-repo lock), and its shared `otel-receiver.js` writes no `heartbeat.json` and runs no jobs |
+| `3.1.0` | `c957bce` (tag `v1.5.1`) | the hook of the last release before append uploads (3.3.0; 3.2.0 was never released): every `Stop` re-sends a grown transcript whole through `POST /api/v2/logs`, never `/api/v2/logs/append` |
 
 Add a version with `node scripts/scenarios/freeze-legacy-hook.mjs --commit <sha> [--label <version>]`
 (see `tests/scenarios/README.md`).

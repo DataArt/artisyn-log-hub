@@ -1,18 +1,39 @@
-import type { SystemInfoPartCache } from '../../../../models';
+import type {
+  SystemInfoPartCache,
+  SystemInfoPartCacheCounters,
+} from '../../../../models';
 import { DateTime } from '../../../components/DateTime';
 import { formatBytes } from '../../../lib/format';
 import { Card } from './system-card';
 
 const LINE = 'mt-1 text-sm font-bold text-foreground';
 
-/** Admin System tab card for the session-part disk cache (size and age are as of the last sweep). */
+function hitRate({ hits, misses }: SystemInfoPartCacheCounters): string {
+  const total = hits + misses;
+  return total === 0 ? '—' : `${Math.round((hits / total) * 100)}%`;
+}
+
+/**
+ * Admin System tab card for the session-part disk cache. Size, file count and oldest read come
+ * from the server's live scan (`current`); an older server without it falls back to the last
+ * sweep's numbers.
+ */
 export function PartCacheCard({
   partCache,
 }: {
   partCache: SystemInfoPartCache;
 }) {
-  const { enabled, dir, maxBytes, ttlDays, lastSweep, removedByDataDeletion } =
-    partCache;
+  const {
+    enabled,
+    dir,
+    maxBytes,
+    ttlDays,
+    current,
+    counters,
+    lastSweep,
+    removedByDataDeletion,
+  } = partCache;
+  const size = current ?? lastSweep;
 
   return (
     <Card label="Part cache" testId="part-cache-card">
@@ -25,14 +46,25 @@ export function PartCacheCard({
       {enabled && (
         <>
           <div className={LINE} data-testid="part-cache-size">
-            {lastSweep
-              ? `${formatBytes(lastSweep.sizeBytes)} of ${formatBytes(maxBytes)} · ${lastSweep.fileCount} files`
+            {size
+              ? `${formatBytes(size.sizeBytes)} of ${formatBytes(maxBytes)} · ${size.fileCount} files`
               : `— of ${formatBytes(maxBytes)}`}
           </div>
+          {current?.error && (
+            <div className="mt-1 text-xs text-red-500">
+              Scan error: {current.error}
+            </div>
+          )}
           <div className={LINE} data-testid="part-cache-ttl">
             TTL {ttlDays} days · oldest read{' '}
-            <DateTime value={lastSweep?.oldestReadAt ?? null} />
+            <DateTime value={size?.oldestReadAt ?? null} />
           </div>
+          {counters && (
+            <div className={LINE} data-testid="part-cache-requests">
+              {counters.hits} hits · {counters.misses} misses (hit rate{' '}
+              {hitRate(counters)}) · {counters.fills} files written
+            </div>
+          )}
           <div className={LINE} data-testid="part-cache-last-sweep">
             {lastSweep ? (
               <>
@@ -57,7 +89,15 @@ export function PartCacheCard({
             {formatBytes(removedByDataDeletion.bytes)}
           </div>
           <div className="text-[11px] text-muted-foreground">
-            Size and oldest read as of last sweep
+            {current ? (
+              <>
+                Size as of <DateTime value={current.scannedAt} />
+              </>
+            ) : (
+              'Size and oldest read as of last sweep'
+            )}
+            {counters &&
+              ` · requests since worker start (${counters.workers} worker${counters.workers === 1 ? '' : 's'})`}
           </div>
         </>
       )}

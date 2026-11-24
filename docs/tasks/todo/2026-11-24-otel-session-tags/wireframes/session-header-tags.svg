@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560" font-family="system-ui, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .h1   { font-size: 15px; fill: #111827; font-weight: 600; }
+    .h2   { font-size: 12px; fill: #111827; font-weight: 600; }
+    .note { font-size: 10px; fill: #6b7280; font-style: italic; }
+    .lbl  { font-size: 9px; fill: #6b7280; letter-spacing: 0.06em; }
+    .val  { font-size: 11px; fill: #111827; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .chip { font-size: 11px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .tab  { font-size: 13px; fill: #4b5563; }
+    .tabA { font-size: 13px; fill: #111827; font-weight: 600; }
+    .ann  { font-size: 10px; fill: #b45309; }
+    .txt  { font-size: 11px; fill: #374151; }
+    .muted{ font-size: 10px; fill: #9ca3af; }
+  </style>
+  <rect width="1100" height="560" fill="#ffffff"/>
+
+  <text x="24" y="28" class="h1">Session detail header — session tags row (FR-5, AC-5)</text>
+  <text x="24" y="45" class="note">Same SessionDetailHeader.tsx layout as today (HeaderStat grid). New: one "Tags" row under the stats, next to the existing attribute chips. Light theme.</text>
+
+  <!-- ============ WITH TAGS ============ -->
+  <text x="24" y="80" class="h2">Session with OTEL user tags</text>
+  <rect x="24" y="90" width="1052" height="250" fill="#ffffff" stroke="#e5e7eb" rx="4"/>
+  <rect x="24" y="90" width="1052" height="150" fill="#f9fafb"/>
+
+  <!-- stats row 1 -->
+  <text x="44" y="114" class="lbl">START</text>
+  <text x="44" y="131" class="val">2026-11-21 12:46:58</text>
+  <text x="200" y="114" class="lbl">END</text>
+  <text x="200" y="131" class="val">2026-11-21 12:47:03</text>
+  <text x="356" y="114" class="lbl">USER</text>
+  <text x="356" y="131" class="val">dt@dataart.com</text>
+  <line x1="480" y1="106" x2="480" y2="134" stroke="#e5e7eb"/>
+  <text x="496" y="114" class="lbl">MODEL</text>
+  <text x="496" y="131" class="val">claude-opus-5-5</text>
+  <text x="622" y="114" class="lbl">PROMPTS</text>
+  <text x="622" y="131" class="val">1</text>
+  <text x="690" y="114" class="lbl">WORK TIME</text>
+  <text x="690" y="131" class="val">0:00:05</text>
+  <!-- stats row 2 -->
+  <text x="44" y="156" class="lbl">TOKENS IN/OUT/CACHE</text>
+  <text x="44" y="173" class="val">4 / 158 / 51,026 / 13,055</text>
+  <text x="250" y="156" class="lbl">COST</text>
+  <text x="250" y="173" class="val">$0.1178</text>
+  <text x="320" y="156" class="lbl">MAX CONTEXT</text>
+  <text x="320" y="173" class="val">32,178</text>
+
+  <!-- NEW tags row -->
+  <rect x="34" y="186" width="1032" height="44" fill="none" stroke="#6366f1" stroke-dasharray="4 3" rx="4"/>
+  <text x="44" y="212" class="lbl">TAGS</text>
+  <!-- tag chip: feature=checkout-v2 -->
+  <rect x="84" y="199" width="158" height="20" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="94" y="213" class="chip" fill="#6366f1">feature</text>
+  <text x="146" y="213" class="chip" fill="#9ca3af">=</text>
+  <text x="156" y="213" class="chip" fill="#3730a3">checkout-v2</text>
+  <!-- second value of same key (FR-3) -->
+  <rect x="250" y="199" width="158" height="20" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="260" y="213" class="chip" fill="#6366f1">feature</text>
+  <text x="312" y="213" class="chip" fill="#9ca3af">=</text>
+  <text x="322" y="213" class="chip" fill="#3730a3">checkout-v3</text>
+  <!-- other key -->
+  <rect x="416" y="199" width="136" height="20" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="426" y="213" class="chip" fill="#6366f1">team</text>
+  <text x="462" y="213" class="chip" fill="#9ca3af">=</text>
+  <text x="472" y="213" class="chip" fill="#3730a3">payments</text>
+  <text x="566" y="213" class="muted">from OTEL resource attributes</text>
+
+  <!-- existing attribution chips -->
+  <rect x="44" y="246" width="0" height="0"/>
+  <text x="44" y="262" class="note">existing Session Attributes row (unchanged):</text>
+  <rect x="250" y="250" width="108" height="18" rx="3" fill="#e0f2fe"/>
+  <text x="256" y="263" class="chip" fill="#0369a1">kind: feature</text>
+  <rect x="364" y="250" width="96" height="18" rx="3" fill="#e0f2fe"/>
+  <text x="370" y="263" class="chip" fill="#0369a1">area: client</text>
+
+  <!-- session tab bar -->
+  <line x1="24" y1="286" x2="1076" y2="286" stroke="#e5e7eb"/>
+  <rect x="40" y="296" width="24" height="24" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="70" y="296" width="24" height="24" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="104" y="296" width="124" height="24" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="114" y="312" class="txt">Cost</text>
+  <text x="214" y="312" class="txt">⌄</text>
+  <text x="246" y="313" class="tabA">Summary</text>
+  <line x1="240" y1="326" x2="320" y2="326" stroke="#111827" stroke-width="2"/>
+  <text x="340" y="313" class="tab">Statistics</text>
+  <text x="420" y="313" class="tab">Call Tree</text>
+  <text x="500" y="313" class="tab">Context Growth</text>
+  <text x="620" y="313" class="tab">Dashboard</text>
+  <text x="706" y="313" class="tab">OTEL</text>
+  <text x="760" y="313" class="tab">More ⌄</text>
+
+  <!-- annotations -->
+  <text x="700" y="198" class="ann">◀ chip = key=value; tooltip: "source: otel"</text>
+  <text x="700" y="212" class="ann">◀ two values of one key are both kept (FR-3)</text>
+  <text x="700" y="226" class="ann">◀ keys/values escaped, long values truncated with … + title</text>
+
+  <!-- ============ WITHOUT TAGS ============ -->
+  <text x="24" y="376" class="h2">Session without OTEL / without user tags — nothing extra</text>
+  <rect x="24" y="386" width="1052" height="110" fill="#f9fafb" stroke="#e5e7eb" rx="4"/>
+  <text x="44" y="410" class="lbl">START</text>
+  <text x="44" y="427" class="val">2026-11-21 01:13:48</text>
+  <text x="200" y="410" class="lbl">END</text>
+  <text x="200" y="427" class="val">2026-11-21 01:14:30</text>
+  <text x="356" y="410" class="lbl">USER</text>
+  <text x="356" y="427" class="val">dt@dataart.com</text>
+  <text x="496" y="410" class="lbl">MODEL</text>
+  <text x="496" y="427" class="val">claude-sonnet-5-5</text>
+  <text x="44" y="452" class="lbl">TOKENS IN/OUT/CACHE</text>
+  <text x="44" y="469" class="val">6 / 212 / 40,110 / 9,870</text>
+  <text x="250" y="452" class="lbl">COST</text>
+  <text x="250" y="469" class="val">$0.1116</text>
+  <text x="700" y="469" class="ann">no "Tags" label, no empty-state text (AC-5)</text>
+
+  <text x="24" y="530" class="note">Tags are read from the session response (e.g. tags: { key, value, source }[]) under the same access rules as the session itself.</text>
+</svg>

@@ -1,11 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { uploadQueue } from '../database/schema/index';
-import { UploadQueueService } from '../logs/upload-queue.service';
+import {
+  UPLOAD_FULL_REASON,
+  UploadQueueService,
+} from '../logs/upload-queue.service';
 
 export type UploadQueueStatus =
   | 'pending'
@@ -179,7 +182,14 @@ export class UploadQueueAdminService {
         attempts: 0,
         updatedAt: new Date(),
       })
-      .where(eq(uploadQueue.status, 'failed'))
+      // An `upload-full` row is not retryable: its delta no longer matches the stored log,
+      // and the hook re-sends the whole file once the failure is delivered to it.
+      .where(
+        and(
+          eq(uploadQueue.status, 'failed'),
+          sql`${uploadQueue.errorMessage} IS DISTINCT FROM ${UPLOAD_FULL_REASON}`,
+        ),
+      )
       .returning({ id: uploadQueue.id });
 
     return { updatedCount: result.length };

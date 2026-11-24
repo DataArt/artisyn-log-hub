@@ -2171,6 +2171,9 @@ export const uploadQueue = pgTable(
     // Migration 0096: set true once this failed (error_kind server) row was returned to the
     // hook in `failedUploads`, so each failure is reported once.
     failureDelivered: boolean('failure_delivered').notNull().default(false),
+    // Migration 0097: append upload (POST /api/v2/logs/append) — the 0-based record index the
+    // staged delta starts at; NULL = whole-file upload.
+    startLine: integer('start_line'),
   },
   (table) => [
     index('idx_upload_queue_status_received_at').on(

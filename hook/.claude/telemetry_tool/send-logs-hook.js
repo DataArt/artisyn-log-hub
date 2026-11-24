@@ -57,6 +57,10 @@ const { uploadFile, uploadFileChunked, uploadFileMaybeCompressed, CHUNK_SIZE_BYT
 const { collectScopedFiles, findProjectSlugDirs, transcriptBelongsToRepo } = require('./session-files');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
 const {
+  uploadWithAppend, stateAfterFull, appendStateForEntry, readScopedAppendState, failedUploadsIncludeKey,
+  formatAppendResultLine, formatAppendFallbackLine,
+} = require('./append-upload');
+const {
   MANIFEST_V2_NAME, decideUploadSkip, paramsSha256, readManifestV1, writeManifestV1, readManifestV2, writeManifestV2,
   recordScopedClaudeUpload, forgetFailedUploadsInMaps, forgetFailedUploads,
 } = require('./upload-skip');
@@ -1514,6 +1518,9 @@ function applyScopedUploadFeedback(telemetryDir, result, manifestKey, sessionId,
  * never the `artisyn` file (the full scan's body carries prepends this flush does not), never
  * `tool-calls`. The server's upsert is idempotent, so any overlap is free.
  *
+ * The session's own transcript tries the append path first (`uploadWithAppend`, append state read
+ * from the v2 manifest) and records the resulting append state with its entry.
+ *
  * @param {string|null} cwd
  * @param {string} sessionId
  * @param {string} serverUrl
@@ -1559,6 +1566,45 @@ async function runSessionEndFlush(cwd, sessionId, serverUrl, apiKey, timeoutMs, 
     }
 
     const bodyBytes = Buffer.byteLength(body);
+
+    // Append path for the session's own transcript (Design Decisions 18–20); any doubt falls
+    // through to the full upload below.
+    if (isOwnTranscript) {
+      const appended = await uploadWithAppend({
+        buf: body,
+        state: readScopedAppendState(telemetryDir, sessionId),
+        manifestKey, serverUrl, apiKey, namespace, sessionId,
+        parentSessionId: null, workflowRunId: null, agentMeta: null,
+        timeoutMs, hookSessionId: sessionId, cwd, telemetryDir,
+      });
+      const recordAppend = (newState) => {
+        if (preReadMtimeMs === null) return;
+        try {
+          recordScopedClaudeUpload(telemetryDir, sessionId, bodyBytes, preReadMtimeMs, newState);
+        } catch (err) {
+          hookLog(HOOK_FILE, sessionId, 'warn', `${manifestKey}: manifest not recorded: ${err.message}`, cwd);
+        }
+      };
+      let fallbackReason;
+      if (appended.kind === 'none') {
+        recordAppend(appended.newState);
+        continue;
+      } else if (appended.kind === 'appended') {
+        applyScopedUploadFeedback(telemetryDir, appended.result, manifestKey, sessionId, cwd);
+        hookLog(HOOK_FILE, sessionId, 'result', formatAppendResultLine(manifestKey, appended), cwd);
+        if (!failedUploadsIncludeKey(appended.result.failedUploads, manifestKey)) {
+          out.uploaded++;
+          recordAppend(appended.newState);
+          continue;
+        }
+        fallbackReason = 'failed-feedback'; // Design Decision 19
+      } else {
+        fallbackReason = appended.reason;
+      }
+      const fallbackLine = formatAppendFallbackLine(manifestKey, fallbackReason);
+      if (fallbackLine) hookLog(HOOK_FILE, sessionId, 'result', fallbackLine, cwd);
+    }
+
     const result = bodyBytes > CHUNK_SIZE_BYTES
       ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null, telemetryDir, manifestKey)
       : await uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null);
@@ -1570,9 +1616,12 @@ async function runSessionEndFlush(cwd, sessionId, serverUrl, apiKey, timeoutMs, 
       hookLog(HOOK_FILE, sessionId, 'result', `${manifestKey}: uploaded ${(bodyBytes / 1024).toFixed(0)} KB`, cwd);
       // DD-26 scoped-path recording. Sanitizing only detects drops here: a body with a dropped
       // line is not what the full scan would send, so it is left for the next `Stop` to record.
+      // The append state goes with it (Design Decisions 15, 19): none when the server reported
+      // this very file as failed.
       if (isOwnTranscript && preReadMtimeMs !== null && sanitizeNdjson(body).dropped.length === 0) {
+        const fullState = failedUploadsIncludeKey(result.failedUploads, manifestKey) ? null : stateAfterFull(body);
         try {
-          recordScopedClaudeUpload(telemetryDir, sessionId, bodyBytes, preReadMtimeMs);
+          recordScopedClaudeUpload(telemetryDir, sessionId, bodyBytes, preReadMtimeMs, fullState);
         } catch (err) {
           hookLog(HOOK_FILE, sessionId, 'warn', `${manifestKey}: manifest not recorded: ${err.message}`, cwd);
         }
@@ -2338,6 +2387,81 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     }
     /** The byte length actually read — what both manifests record (DD-26), not the scan size. */
     const readSize = body.length;
+    /** The raw file bytes, before sanitizing — what the append state describes. */
+    const rawBuf = body;
+
+    // Append path (traffic optimization, Design Decisions 18–21): a `claude` / `claude-subagent`
+    // transcript only grows, so when the v2 entry knows how much the server already holds, only
+    // the new complete lines are sent. Any doubt returns `full-needed` and the full upload below
+    // runs exactly as before.
+    const isClaudeLog = namespace === 'claude' || namespace === 'claude-subagent';
+    /** Why the full upload runs instead of an append (null: not a claude log). */
+    let appendFallbackReason = null;
+    if (isClaudeLog) {
+      const appended = await uploadWithAppend({
+        buf: rawBuf,
+        state: appendStateForEntry(manifestV2.get(manifestKey), fileParamsSha256),
+        manifestKey, serverUrl, apiKey, namespace, sessionId,
+        parentSessionId: parentSessionId || null,
+        workflowRunId: workflowRunId || null,
+        agentMeta, timeoutMs, hookSessionId, cwd, telemetryDir,
+      });
+      const recordAppendState = (newState) => {
+        manifest.set(manifestKey, readSize);
+        manifestV2.set(manifestKey, {
+          size: readSize,
+          mtimeMs: statMtimeMs,
+          paramsSha256: fileParamsSha256,
+          appendBytes: newState.bytes,
+          appendLines: newState.lines,
+          appendSha256: newState.sha256,
+        });
+        flushManifest(false);
+      };
+      if (appended.kind === 'none') {
+        // No new complete line since the last upload: nothing to send.
+        recordAppendState(appended.newState);
+        skippedCount++;
+        return { success: true, reason: null };
+      }
+      if (appended.kind === 'appended') {
+        const appendResult = appended.result;
+        // DD-25 feedback for OTHER keys, as on the full path; this file's own key is Design
+        // Decision 19's business and is checked right after.
+        if (Array.isArray(appendResult.failedUploads) && appendResult.failedUploads.length > 0) {
+          const forgotten = forgetFailedUploadsInMaps(manifest, manifestV2, appendResult.failedUploads, manifestKey);
+          if (forgotten.length > 0) {
+            manifestDirtyCount += forgotten.length;
+            flushManifest(false);
+            hookLog(HOOK_FILE, hookSessionId, 'result', formatFailedUploadsLine(forgotten), cwd);
+          }
+        }
+        if (appendResult.sessionDeleted === true) {
+          hookLog(HOOK_FILE, hookSessionId, 'result', formatSessionDeletedLine(manifestKey), cwd);
+        }
+        hookLog(HOOK_FILE, hookSessionId, 'result', formatAppendResultLine(manifestKey, appended), cwd);
+        if (failedUploadsIncludeKey(appendResult.failedUploads, manifestKey)) {
+          // Design Decision 19: the server could not process an earlier upload of this file, so
+          // its copy is not what the append state says — re-send the whole file now.
+          appendFallbackReason = 'failed-feedback';
+        } else {
+          recordAppendState(appended.newState);
+          uploadedCount++;
+          return {
+            success: true,
+            reason: null,
+            warnings: appendResult.warnings,
+            statusCode: appendResult.statusCode,
+            unreachable: false,
+            errorCode: appendResult.errorCode,
+          };
+        }
+      } else {
+        appendFallbackReason = appended.reason;
+      }
+      const fallbackLine = formatAppendFallbackLine(manifestKey, appendFallbackReason);
+      if (fallbackLine) hookLog(HOOK_FILE, hookSessionId, 'result', fallbackLine, cwd);
+    }
 
     // No trailing-partial-line trim for otel any more: the receiver writes each chunk to a .tmp
     // and renames it into place, so a `.jsonl` chunk is always complete by construction. The old
@@ -2491,6 +2615,17 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
         const recordedSize = isToolCalls ? size : readSize;
         const v2Entry = { size: recordedSize, mtimeMs: isToolCalls ? 0 : statMtimeMs, paramsSha256: fileParamsSha256 };
         if (isToolCalls && typeof fp === 'string') v2Entry.fp = fp;
+        // Append state after a full upload of a claude log (Design Decisions 15 and 19): none when
+        // the server reported this very file as failed, or when the file ends in a parseable record
+        // without a newline (`stateAfterFull` → null). The next upload is then a full one again.
+        if (isClaudeLog && !failedUploadsIncludeKey(result.failedUploads, manifestKey)) {
+          const fullState = stateAfterFull(rawBuf);
+          if (fullState) {
+            v2Entry.appendBytes = fullState.bytes;
+            v2Entry.appendLines = fullState.lines;
+            v2Entry.appendSha256 = fullState.sha256;
+          }
+        }
         manifest.set(manifestKey, recordedSize);
         manifestV2.set(manifestKey, v2Entry);
         flushManifest(false);

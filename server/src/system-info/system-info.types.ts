@@ -7,7 +7,10 @@
  * importing this file.
  */
 import type { BuildInfo } from '../common/build-info';
-import type { PartCacheView } from '../logs/part-cache/part-cache.types';
+import type {
+  PartCacheCounters,
+  PartCacheView,
+} from '../logs/part-cache/part-cache.types';
 
 export interface SystemInfoResponse {
   /** expected = computeInstanceCount(cpus.visible); actual = supervisor.processes.length */
@@ -57,10 +60,11 @@ export interface SystemInfoResponse {
   };
   supervisor: SupervisorInfo;
   /**
-   * Session log part disk cache: config, the last sweep's state (read from the
-   * cache's state file, `null` when absent/unreadable or the cache is disabled —
-   * size, file count and oldest last read are "as of last sweep", an admin
-   * request never scans the folder) and files/bytes removed by data deletion.
+   * Session log part disk cache: config, `current` (a live read-only scan of the
+   * folder, reused for a few seconds), `counters` (hit / miss / fill since each
+   * worker's start, summed over the cluster), the last sweep's state (read from
+   * the cache's state file, `null` when absent/unreadable or the cache is
+   * disabled) and files/bytes removed by data deletion.
    * `removedByDataDeletion` is per answering worker process since its start.
    */
   partCache: PartCacheView;
@@ -84,4 +88,6 @@ export interface WorkerProcessSummary {
   lastRestartAt: string | null;
   /** 'starting' | 'online' | 'restarting' | 'stopped', or 'online (single process)' in fallback */
   status: string;
+  /** the worker's last pushed part cache counters since its start; absent until it has reported */
+  partCache?: PartCacheCounters;
 }

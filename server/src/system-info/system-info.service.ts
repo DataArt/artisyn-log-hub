@@ -10,6 +10,10 @@ import { readBuildInfo } from '../common/build-info';
 import { computeInstanceCount } from '../common/instance-count';
 import { workerStatsReporter } from '../cluster/worker-stats-reporter';
 import { PG_POOL } from '../database/database.constants';
+import {
+  partCacheCounters,
+  sumPartCacheCounters,
+} from '../logs/part-cache/part-cache-counters';
 import { PartCacheService } from '../logs/part-cache/part-cache.service';
 import { requestMetricsTracker } from './request-metrics.middleware';
 import { SupervisorInfo, SystemInfoResponse } from './system-info.types';
@@ -41,13 +45,20 @@ export class SystemInfoService implements OnModuleDestroy {
   }
 
   async getSystemInfo(): Promise<SystemInfoResponse> {
+    const supervisor = this.getSupervisorInfo();
+    const instanceEnv = process.env.NODE_APP_INSTANCE;
+    const partCacheCountersView = sumPartCacheCounters(
+      supervisor,
+      partCacheCounters.snapshot(),
+      instanceEnv === undefined || instanceEnv === ''
+        ? null
+        : Number(instanceEnv),
+    );
     const [db, dbSpace, partCache] = await Promise.all([
       this.getDbInfo(),
       this.getDbSpace(),
-      this.partCache.getAdminView(),
+      this.partCache.getAdminView(partCacheCountersView),
     ]);
-
-    const supervisor = this.getSupervisorInfo();
     const cpusVisible = os.availableParallelism();
 
     return {

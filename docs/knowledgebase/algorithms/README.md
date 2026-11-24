@@ -55,7 +55,8 @@ format where the two differ).
 | [ndjson-tolerance](ndjson-tolerance.md) | hook `ndjson-sanitize.js`, `server/src/logs/ndjson-parser.ts` | `node --test`, jest |
 | [upload-error-classify](upload-error-classify.md) | `server/src/logs/upload-error.ts` | jest |
 | [ingest-hash-skip](ingest-hash-skip.md) | `server/src/logs/ingest-skip.ts` (`decideIngestSkip`), `ingest-version.ts` (`INGEST_VERSION`); caller `LogsService.checkUnchanged` | jest |
-| [hook-upload-skip](hook-upload-skip.md) | hook `upload-skip.js` (`decideUploadSkip`, `canResumePending`, `paramsSha256`); callers `send-logs-hook.js`, `prompt-upload-hook.js`, `upload-logs.js` | `node --test` |
+| [ingest-append](ingest-append.md) | `server/src/logs/ingest-append.ts` (`decideIngestAppend`); caller `LogsService.upsert` (append mode, `UpsertIngestMeta.appendStartLine`) | jest |
+| [hook-upload-skip](hook-upload-skip.md) | hook `upload-skip.js` (`decideUploadSkip`, `canResumePending`, `paramsSha256`), `append-upload.js` (`planAppend`, `stateAfterFull`, `chooseAppendEncoding`); callers `send-logs-hook.js`, `prompt-upload-hook.js`, `upload-logs.js` | `node --test` |
 | [log-retention](log-retention.md) | `server/src/log-retention/log-retention-plan.ts` | jest |
 | [rebuild-load-governor](rebuild-load-governor.md) | `server/src/common/load-governor/rebuild-pace.ts` (`decideRebuildPace`), driven by `rebuild-governor.ts` | jest |
 | [login-backoff](login-backoff.md) | `server/src/auth/login-backoff.service.ts`; Work Hub twin `work-hub/server/src/auth/backoff.rs` | jest, `cargo test` |

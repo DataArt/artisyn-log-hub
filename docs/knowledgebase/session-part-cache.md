@@ -6,7 +6,7 @@ tags:
   - server
   - logs
   - cache
-generated: { by: "claude-code", at: "2026-11-24T18:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-24T22:55:00+04:00" }
 ---
 
 # Session Log Part Disk Cache
@@ -145,15 +145,31 @@ between. A rolled-back delete only costs a refill; anything still missed ages ou
 fails with `EPERM`).
 
 `GET /api/v1/admin/system` → `partCache` (`PartCacheView`): `enabled`, resolved `dir`,
-`maxBytes`, `ttlDays`, `sweepIntervalMs`, `lastSweep` (the state file, `null` when missing,
-unreadable or disabled) and `removedByDataDeletion` (**this worker** since its start — it can
-differ between reloads in cluster mode). The admin request never scans the folder: size, file
-count and oldest read are "as of last sweep". The client keeps its own copy of the type
-(`client/src/models/admin.ts`).
+`maxBytes`, `ttlDays`, `sweepIntervalMs`, `current`, `counters`, `lastSweep` (the state file,
+`null` when missing, unreadable or disabled) and `removedByDataDeletion` (**this worker** since
+its start — it can differ between reloads in cluster mode). The client keeps its own copy of the
+type (`client/src/models/admin.ts`, `current` / `counters` optional for an older server).
+
+- `current` (`PartCacheCurrentState`: `scannedAt`, `sizeBytes`, `fileCount`, `oldestReadAt`,
+  `error`) is a live read-only walk of `<dir>/<logId>/*.json.gz` (readdir + stat, never deletes).
+  One walk is reused for 5 s per worker and concurrent admin requests share it, so the System
+  tab's 10 s poll costs at most one walk per worker per poll. `null` when disabled.
+- `counters` (`PartCacheCountersView`: `hits`, `misses`, `fills`, `workers`) — module singleton
+  `partCacheCounters` (`part-cache-counters.ts`, outside DI): `streamPart` counts a hit when a
+  cacheable part (numeric revision, valid gzip copy, cache enabled) is served from its file and a
+  miss when it falls through to Postgres; a fill is a new file written. Each worker pushes its
+  counters with its RSS in the `artisyn:worker-stats` IPC message (optional `partCache` field,
+  validated by `isPartCacheCounters` in the primary); `WorkerSlotRegistry` keeps them per slot
+  (reset on re-fork) and puts them on `supervisor.processes[].partCache`.
+  `sumPartCacheCounters()` adds them up, using the answering worker's live numbers instead of its
+  own ≤ 10 s old entry; outside cluster mode only the process itself counts (`workers: 1`).
+  Counters start from zero on every worker start.
 
 The Admin → System tab shows the **Part cache** card next to DB Space (`data-testid` root
-`part-cache-card`; lines `part-cache-status`, `-size`, `-ttl`, `-last-sweep`, `-deleted`, `-dir`).
-Disabled, only the status and the folder show.
+`part-cache-card`; lines `part-cache-status`, `-size` (from `current`, falling back to
+`lastSweep` for an older server), `-ttl`, `-requests` (hits · misses · hit rate · files written),
+`-last-sweep`, `-deleted`, `-dir`; footer "Size as of <scan time>"). Disabled, only the status and
+the folder show.
 
 ## Logging (DD-11)
 

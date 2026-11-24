@@ -92,16 +92,25 @@ function buildPlanCheckPrompt(planFile, chunks) {
   return `You are independently checking that an implementation plan was actually carried out in the code.
 You did not write this code. Do not modify any file — read only.
 
-Plan file: \`${planFile}\` — read its "Design Decisions" section and every plan section the items below
-reference (API changes, Database changes, Test coverage plan, ...).
+Plan file: \`${planFile}\` — read its "Architecture decisions" section (named "Design Decisions" in older
+plans), its "External surface" section (older plans have "API changes" / "Database changes" instead) and
+every other plan section the items below reference (Test coverage plan, ...). When a criterion needs more context to judge, you may read the relevant part of the task's
+requirements.md (next to the plan file).
 
 How to find what changed: \`git status --short\` and \`git diff\` (read-only git only), then read new
 (untracked) files directly. The working tree may also hold unrelated changes made before this run — ignore
 them; judge only whether each item below is present.
 
-For EACH item below, find the code that implements it and decide whether it is fully done. Judge by the code,
-never by a checkbox in the plan file or by a comment claiming it is done. An item that is there but contradicts
-a Design Decision, or a test item whose test is missing or does not exercise what the item says, is a gap.
+Each item below is an acceptance criterion: it states an outcome, not the steps to reach it. For EACH item,
+find the code that delivers it and decide whether the outcome is fully achieved — how it was implemented is the
+implementer's call, and any file locations the plan names are approximate, so a different file or approach
+than the plan hints at is not a gap. Judge by the code, never by a checkbox in the plan file or by a comment
+claiming it is done. An outcome that is there but contradicts an Architecture decision (Design Decision), or a
+test item whose test is missing or does not exercise what the item says, is a gap. The External surface
+section is a contract, not a hint: where the code an item delivers differs from it — an endpoint's method,
+path, params, response shape or permission; a table or column's name, type, nullability, default or
+constraint; a migration/backfill path; a config key, protocol or format; a stated backward-compatibility
+handling — report that as a gap of the item it belongs to.
 
 Report every gap with the item text verbatim and the concrete problem (file paths). Do not report style
 nitpicks, refactoring ideas or anything outside the items listed — only "this item is not (fully) done".
@@ -193,11 +202,19 @@ or the \`Workflow\` tool, and do not run any final-only check.
 
 ### Context to read
 
-- From the plan file, read the "Design Decisions" section, your own chunk's section, and any plan section your
-  items reference (e.g. API changes, Database changes, Test coverage plan, Visual/UX notes) — skip other
-  chunks' sections.
-- Do NOT read the task's requirements.md unless one of your items is genuinely ambiguous without it — your
-  item list plus the plan sections above are the contract.
+- From the plan file, read the "Architecture decisions" section (named "Design Decisions" in older plans),
+  the "External surface" section (older plans have "API changes" / "Database changes" instead), your own
+  chunk's section (its goal and \`Where:\` line, when it has them), and any other plan section your items
+  reference (e.g. Test coverage plan, Visual/UX notes) — skip other chunks' sections.
+- Your items are acceptance criteria — outcomes to achieve, not step-by-step instructions. You decide how:
+  the design within your chunk is yours, as long as it follows the plan's decisions and shared contracts and
+  the project's existing patterns. The External surface section is the exception: it is an exact contract —
+  build endpoints, tables/columns, migrations, config keys, protocols and formats exactly as stated there,
+  including the stated backward-compatibility handling. If it cannot be built as stated, report "blocked"
+  rather than changing the contract on your own. Locations in the plan are approximate — find the actual code by searching
+  for symbols, not by trusting a path or line.
+- You MAY read the relevant part of the task's requirements.md (next to the plan file) when an acceptance
+  criterion needs more context — read the part that concerns your chunk, not the whole history.
 - The plan splits chunks by code area so each chunk agent reads only its own part of the codebase. Read the
   code your items touch and what it directly calls; for what earlier chunks built, read the files listed under
   "Already done" and the interfaces the plan pins down. Do not survey areas that belong to other chunks.

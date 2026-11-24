@@ -21,6 +21,8 @@ export type {
   PendingRegistration,
   SystemInfo,
   SystemInfoPartCache,
+  SystemInfoPartCacheCounters,
+  SystemInfoPartCacheCurrent,
   SystemInfoPartCacheSweep,
   SystemInfoWorkerProcess,
   UploadQueueEntry,

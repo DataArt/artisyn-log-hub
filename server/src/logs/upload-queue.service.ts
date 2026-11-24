@@ -20,6 +20,13 @@ export const FAILED_UPLOADS_MAX = 20;
 export const CONTENT_HASH_MISMATCH = 'content-hash-mismatch';
 
 /**
+ * `error_message` of an append row (`start_line` set) whose delta no longer fits the stored log.
+ * Delivered once through `failedUploads` (the hook re-sends the whole file), then deleted; never
+ * shown as a warning and never reprocessed by the admin action.
+ */
+export const UPLOAD_FULL_REASON = 'upload-full';
+
+/**
  * Log types whose queued uploads are coalesced (DD-16): each upload is the whole file, so only
  * the newest queued one of a `(user_id, session_id, log_type)` key needs processing. `artisyn`
  * and `claude-otel` are never coalesced.
@@ -145,11 +152,15 @@ export class UploadQueueService {
    * `contentSha256` (DD-24) is the sha256 hex the hook declared for the body; a malformed value
    * is ignored. The queue worker fails the row with `content-hash-mismatch` when the staged body
    * does not match it.
+   *
+   * `startLine` is set only for an append upload (`POST /api/v2/logs/append`): the body is the
+   * delta starting at that 0-based line of the stored log. `null` marks a full upload.
    */
   async saveRawUpload(
     rawBody: string,
     meta: SaveRawUploadMeta,
-    contentSha256?: string | null,
+    contentSha256: string | null = null,
+    startLine: number | null = null,
   ): Promise<void> {
     const bodyBytes = Buffer.byteLength(rawBody, 'utf8');
     // Leading epoch-millis timestamp keeps filenames
@@ -187,6 +198,7 @@ export class UploadQueueService {
       agentDescription: meta.agentDescription ?? null,
       workflowPhase: meta.workflowPhase ?? null,
       contentSha256: normalizeContentSha256(contentSha256),
+      startLine,
     });
   }
 
@@ -488,7 +500,12 @@ export class UploadQueueService {
       })
       .from(uploadQueue)
       .where(
-        and(eq(uploadQueue.userId, userId), eq(uploadQueue.status, 'failed')),
+        and(
+          eq(uploadQueue.userId, userId),
+          eq(uploadQueue.status, 'failed'),
+          // `upload-full` rows are a re-send request delivered via `failedUploads`, not a warning.
+          sql`${uploadQueue.errorMessage} IS DISTINCT FROM ${UPLOAD_FULL_REASON}`,
+        ),
       );
 
     const rejectedRows = await this.db
@@ -522,13 +539,18 @@ export class UploadQueueService {
    * `error_kind = 'server'` not reported yet, flagged `failure_delivered` in the same
    * `UPDATE … RETURNING` — so each failure reaches the hook once even under concurrent
    * requests (`SKIP LOCKED`). The hook re-sends those files. Old hooks never ask for it.
+   *
+   * Delivered `upload-full` rows ({@link UPLOAD_FULL_REASON}) are deleted right after: the
+   * hook's full re-send replaces them, so they have nothing left to report.
    */
   async takeFailedUploadsForFeedback(
     userId: number,
   ): Promise<FailedUploadFeedback[]> {
     const result = await this.db.execute<{
+      id: number;
       session_id: string;
       log_type: string;
+      error_message: string | null;
     }>(sql`
       UPDATE upload_queue SET failure_delivered = true
       WHERE id IN (
@@ -541,8 +563,17 @@ export class UploadQueueService {
         LIMIT ${FAILED_UPLOADS_MAX}
         FOR UPDATE SKIP LOCKED
       )
-      RETURNING session_id, log_type
+      RETURNING id, session_id, log_type, error_message
     `);
+    const uploadFullIds = result.rows
+      .filter((row) => row.error_message === UPLOAD_FULL_REASON)
+      .map((row) => Number(row.id));
+    if (uploadFullIds.length > 0) {
+      // Their staged files were already unlinked when the row failed.
+      await this.db
+        .delete(uploadQueue)
+        .where(inArray(uploadQueue.id, uploadFullIds));
+    }
     const seen = new Set<string>();
     const feedback: FailedUploadFeedback[] = [];
     for (const row of result.rows) {
@@ -581,6 +612,7 @@ export class UploadQueueService {
           AND status = 'pending'
           AND id <> ${row.id}
           AND received_at < ${row.receivedAt}
+          AND start_line IS NULL
         FOR UPDATE SKIP LOCKED
       )
       RETURNING file_name, size_bytes, received_at

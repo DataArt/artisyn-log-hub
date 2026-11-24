@@ -11,8 +11,8 @@
  *   alignSliceBoundary() — newline-/UTF-8-safe end offset for a slice of an NDJSON body.
  *   readGzipRatio() / writeGzipRatio() — remembered compression ratio (`<telemetryDir>/gzip-stat.json`)
  *                          used to predict slice sizes on the next run.
- *   isEncodingRejection() / resetGzipSupport() — classifier and reset for the process-level
- *                          "this server does not accept gzip" flag.
+ *   isEncodingRejection() / resetGzipSupport() / isGzipUnsupported() — classifier, reset and
+ *                          getter for the process-level "this server does not accept gzip" flag.
  *   planCompressedSlices() — adaptive slice plan for a chunked upload: predicts an uncompressed
  *                          slice length from a ratio, compresses, shrinks on overshoot.
  *   planIdentitySlices() — fixed-size newline-aligned plan used by the uncompressed fallback.
@@ -301,7 +301,20 @@ const V2_VALIDATION_MESSAGES = [
   'Missing totalSize on first chunk',
   'Unknown uploadId',
   'totalChunks mismatch for uploadId',
+  // `POST /api/v2/logs/append` (2026-11-24-traffic-optimization).
+  'Append is supported only for claude and claude-subagent logs',
+  'Missing startLine query parameter',
+  'startLine must be a non-negative integer',
 ];
+
+/**
+ * Read the process-level "the peer rejected a gzipped body" flag (`append-upload.js` decides the
+ * delta's encoding with it; the flag itself stays a module `let`).
+ * @returns {boolean}
+ */
+function isGzipUnsupported() {
+  return gzipUnsupported;
+}
 
 /**
  * Decide whether a failed `uploadFile()` result means "this server cannot accept a gzipped body",
@@ -494,6 +507,10 @@ function planIdentitySlices(body, sliceSize) {
  *   pass it on a single upload and on chunk 0, `null` on later chunks. Left `undefined` on a plain
  *   (not gzipped) single upload, it is computed here from `body`. An old server ignores the param.
  *   Every request also sends `&uploadFeedback=1` (DD-25), which an old server ignores too.
+ * @param {number|null} [appendStartLine] - 2026-11-24-traffic-optimization: when a number, the
+ *   request goes to `POST /api/v2/logs/append` with `&startLine=<n>` and `body` is the delta of a
+ *   `claude` / `claude-subagent` log starting at that 0-based record. Omitted or null: the normal
+ *   `/api/v2/logs` route. A pre-append server answers the append route with 404.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], complete?: boolean,
  *   unknownSnapshotId?: string, unknownOkfSnapshotId?: string, statusCode?: number|null, snippet?: string,
  *   sentEncoding?: 'gzip'|null, unreachable?: boolean, errorCode?: string,
@@ -507,13 +524,18 @@ function planIdentitySlices(body, sliceSize) {
  *   `unknownSnapshotId`, when the server's 201 JSON carries one, is DD-8's answer to the
  *   `snapshotQuery` this request sent; `unknownOkfSnapshotId` is the same answer for its OKF id.
  */
-function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, chunkMeta, bodyEncoding, snapshotQuery, agentMeta, contentSha256) {
+function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, chunkMeta, bodyEncoding, snapshotQuery, agentMeta, contentSha256, appendStartLine) {
   const sentEncoding = bodyEncoding === 'gzip' ? 'gzip' : null;
   const declaredSha256 = contentSha256 === undefined && !chunkMeta && sentEncoding === null
     ? bodyContentSha256(body)
     : contentSha256;
+  const isAppend = typeof appendStartLine === 'number';
   return new Promise((resolve) => {
-    let urlStr = `${serverUrl}/api/v2/logs?type=${encodeURIComponent(namespace)}&sessionId=${encodeURIComponent(sessionId)}`;
+    const routePath = isAppend ? '/api/v2/logs/append' : '/api/v2/logs';
+    let urlStr = `${serverUrl}${routePath}?type=${encodeURIComponent(namespace)}&sessionId=${encodeURIComponent(sessionId)}`;
+    if (isAppend) {
+      urlStr += `&startLine=${encodeURIComponent(appendStartLine)}`;
+    }
     if (parentSessionId) {
       urlStr += `&parentSessionId=${encodeURIComponent(parentSessionId)}`;
     }
@@ -975,8 +997,31 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
   const startChunkIndex = chunkIndex;
   let allowRestart = resumed;
 
+  // Every line names the uploadId, so a row in the admin Upload Queue tab can be matched to this
+  // log. A pending record that cannot be resumed leaves its server row `partially_uploaded` until
+  // the server's TTL sweep — say so, with why.
+  if (existing && !resumed && typeof existing.uploadId === 'string') {
+    const why = existing.totalSize !== totalSize
+      ? `file changed (${existing.totalSize} → ${totalSize} B)`
+      : existing.sha256 !== bodySha256 ? 'file content changed' : 'pending record not resumable';
+    hookLog(
+      HOOK_FILE, hookSessionId, 'warn',
+      `${manifestKey}: chunked upload ${existing.uploadId} abandoned at chunk ${existing.nextChunkIndex}/${existing.totalChunks}: ${why}`
+      + ' — its server row stays partially_uploaded until the TTL sweep',
+      cwd,
+    );
+  }
+  hookLog(
+    HOOK_FILE, hookSessionId, 'result',
+    resumed
+      ? `${manifestKey}: chunked upload ${uploadId} resumed at chunk ${chunkIndex}/${totalChunks} (${totalSize} B)`
+      : `${manifestKey}: chunked upload ${uploadId} started: ${totalChunks} chunks, ${totalSize} B`,
+    cwd,
+  );
+
   /** Drop the pending record and start a fresh upload of the same body from chunk 0. */
-  const restartFresh = () => {
+  const restartFresh = (why) => {
+    hookLog(HOOK_FILE, hookSessionId, 'warn', `${manifestKey}: chunked upload ${uploadId} restarted under a new uploadId: ${why}`, cwd);
     pending.delete(manifestKey);
     writePendingUploads(telemetryDir, pendingPath, pending, hookSessionId, cwd);
     uploadId = crypto.randomUUID();
@@ -1007,7 +1052,7 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
       // record, mint a new uploadId, restart from chunk 0, once, within this same call. Keeps
       // precedence over the encoding branch, and the stored plan stays valid.
       if (allowRestart && chunkIndex === startChunkIndex && result.statusCode === 400) {
-        restartFresh();
+        restartFresh(`resumed chunk ${chunkIndex} answered HTTP 400`);
         continue;
       }
 
@@ -1017,7 +1062,7 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
       if (result.statusCode === 413 && budgetRetries < GZIP_MAX_BUDGET_RETRIES && wireBudget > GZIP_MIN_WIRE_BUDGET) {
         budgetRetries++;
         wireBudget = Math.max(GZIP_MIN_WIRE_BUDGET, Math.floor(wireBudget / 2));
-        restartFresh();
+        restartFresh(`chunk ${chunkIndex} answered HTTP 413, wire budget halved to ${wireBudget} B`);
         slices = makePlan();
         totalChunks = slices.length;
         continue;
@@ -1029,7 +1074,7 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
         if (encodingRestarts < 1) {
           encodingRestarts++;
           fallback = true;
-          restartFresh();
+          restartFresh(`chunk ${chunkIndex}: server rejected gzip, re-sending plain`);
           slices = planIdentitySlices(body, wireBudget);
           totalChunks = slices.length;
           continue;
@@ -1051,12 +1096,20 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
         failed.unreachable = true;
         failed.errorCode = result.errorCode;
       }
+      const status = typeof result.statusCode === 'number' ? `HTTP ${result.statusCode}` : 'no response';
+      hookLog(
+        HOOK_FILE, hookSessionId, 'fail',
+        `${manifestKey}: chunked upload ${uploadId} stopped at chunk ${chunkIndex}/${totalChunks} (${status}): ${result.reason}`
+        + (chunkIndex > 0 ? ' — the next run resumes it only if the file is unchanged' : ''),
+        cwd,
+      );
       return withFeedback(failed);
     }
 
     if (result.complete) {
       pending.delete(manifestKey);
       writePendingUploads(telemetryDir, pendingPath, pending, hookSessionId, cwd);
+      hookLog(HOOK_FILE, hookSessionId, 'result', `${manifestKey}: chunked upload ${uploadId} complete at chunk ${chunkIndex + 1}/${totalChunks}`, cwd);
       const final = {
         success: true,
         reason: null,
@@ -1393,6 +1446,7 @@ module.exports = {
   readGzipRatio,
   writeGzipRatio,
   isEncodingRejection,
+  isGzipUnsupported,
   resetGzipSupport,
   planCompressedSlices,
   planIdentitySlices,

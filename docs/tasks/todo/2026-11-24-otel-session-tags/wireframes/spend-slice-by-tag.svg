@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" font-family="system-ui, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .h1   { font-size: 15px; fill: #111827; font-weight: 600; }
+    .h2   { font-size: 12px; fill: #111827; font-weight: 600; }
+    .note { font-size: 10px; fill: #6b7280; font-style: italic; }
+    .txt  { font-size: 12px; fill: #374151; }
+    .sm   { font-size: 11px; fill: #374151; }
+    .th   { font-size: 10px; fill: #6b7280; letter-spacing: 0.04em; }
+    .td   { font-size: 12px; fill: #111827; }
+    .tdB  { font-size: 12px; fill: #111827; font-weight: 600; }
+    .mono { font-size: 12px; fill: #111827; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .ann  { font-size: 10px; fill: #b45309; }
+    .muted{ font-size: 10px; fill: #9ca3af; }
+    .sec  { font-size: 9px; fill: #6b7280; letter-spacing: 0.06em; }
+  </style>
+  <rect width="1100" height="640" fill="#ffffff"/>
+
+  <text x="24" y="28" class="h1">Cost and session count by tag key — Spend "Slice by" and Analytics "Group by" (FR-7, AC-7)</text>
+  <text x="24" y="45" class="note">Spend tab (SpendTab.tsx) and Analytics toolbar (AnalyticsControls.tsx) as today; only a "Tag" slice / group-by dimension is added. Light theme.</text>
+
+  <!-- ============ SPEND ============ -->
+  <text x="24" y="80" class="h2">A. Repository / team Spend tab — Slice by Tag: feature</text>
+  <rect x="24" y="90" width="660" height="520" fill="#ffffff" stroke="#e5e7eb" rx="4"/>
+
+  <!-- period -->
+  <rect x="40" y="104" width="148" height="24" rx="5" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="52" y="120" class="sm">Day</text>
+  <text x="92" y="120" class="sm">Week</text>
+  <rect x="136" y="106" width="50" height="20" rx="4" fill="#2563eb"/>
+  <text x="143" y="120" font-size="11" fill="#ffffff">Month</text>
+  <text x="200" y="121" class="sm">‹  ›</text>
+  <text x="236" y="122" class="tdB">November 2026</text>
+
+  <rect x="40" y="142" width="628" height="40" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="56" y="167" class="txt">Spent this month <tspan font-weight="600" fill="#111827">$1.13</tspan> · previous $0.00</text>
+
+  <text x="40" y="210" class="tdB">Daily spend</text>
+  <rect x="40" y="220" width="628" height="110" fill="#f9fafb" stroke="#f3f4f6"/>
+  <rect x="520" y="250" width="22" height="80" fill="#3b82f6"/>
+  <rect x="548" y="290" width="22" height="40" fill="#3b82f6"/>
+  <text x="60" y="280" class="muted">(daily chart unchanged)</text>
+
+  <!-- slice by -->
+  <text x="40" y="358" class="sm">Slice by</text>
+  <rect x="88" y="345" width="48" height="20" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="96" y="359" class="sm">Model</text>
+  <rect x="140" y="345" width="38" height="20" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="147" y="359" class="sm">User</text>
+  <rect x="182" y="345" width="66" height="20" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="189" y="359" class="sm">Repository</text>
+  <rect x="252" y="345" width="50" height="20" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="259" y="359" class="sm">Branch</text>
+  <rect x="306" y="345" width="64" height="20" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="313" y="359" class="sm">Sub-agent</text>
+  <rect x="374" y="345" width="38" height="20" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="381" y="359" class="sm">Skill</text>
+  <rect x="416" y="345" width="76" height="20" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="423" y="359" class="sm">MCP server</text>
+  <!-- NEW -->
+  <rect x="496" y="345" width="104" height="20" rx="4" fill="#eff6ff" stroke="#2563eb"/>
+  <text x="503" y="359" font-size="11" fill="#1d4ed8">Tag: feature ⌄</text>
+  <rect x="492" y="341" width="112" height="28" rx="6" fill="none" stroke="#6366f1" stroke-dasharray="4 3"/>
+
+  <!-- table -->
+  <text x="40" y="394" class="th">FEATURE</text>
+  <text x="360" y="394" class="th" text-anchor="end">SESSIONS</text>
+  <text x="480" y="394" class="th" text-anchor="end">COST</text>
+  <text x="600" y="394" class="th" text-anchor="end">SHARE</text>
+  <line x1="40" y1="402" x2="610" y2="402" stroke="#e5e7eb"/>
+  <text x="40" y="424" class="mono">search-rework</text>
+  <text x="360" y="424" class="td" text-anchor="end">2</text>
+  <text x="480" y="424" class="td" text-anchor="end">$0.51</text>
+  <text x="600" y="424" class="td" text-anchor="end">45.1 %</text>
+  <line x1="40" y1="434" x2="610" y2="434" stroke="#f3f4f6"/>
+  <text x="40" y="456" class="mono">checkout-v2</text>
+  <text x="360" y="456" class="td" text-anchor="end">3</text>
+  <text x="480" y="456" class="td" text-anchor="end">$0.37</text>
+  <text x="600" y="456" class="td" text-anchor="end">32.4 %</text>
+  <line x1="40" y1="466" x2="610" y2="466" stroke="#f3f4f6"/>
+  <text x="40" y="488" class="mono">checkout-v3</text>
+  <text x="360" y="488" class="td" text-anchor="end">1</text>
+  <text x="480" y="488" class="td" text-anchor="end">$0.14</text>
+  <text x="600" y="488" class="td" text-anchor="end">12.6 %</text>
+  <line x1="40" y1="498" x2="610" y2="498" stroke="#f3f4f6"/>
+  <text x="40" y="520" font-size="12" fill="#6b7280" font-style="italic">(untagged)</text>
+  <text x="360" y="520" class="td" text-anchor="end">1</text>
+  <text x="480" y="520" class="td" text-anchor="end">$0.11</text>
+  <text x="600" y="520" class="td" text-anchor="end">9.9 %</text>
+  <line x1="40" y1="530" x2="610" y2="530" stroke="#d1d5db"/>
+  <text x="40" y="552" class="tdB">Total</text>
+  <text x="360" y="552" class="tdB" text-anchor="end">6</text>
+  <text x="480" y="552" class="tdB" text-anchor="end">$1.13</text>
+  <text x="600" y="552" class="tdB" text-anchor="end">100.0 %</text>
+  <text x="40" y="580" class="muted">ⓘ 1 session carries two feature values (rows count 7, Total 6 sessions) — split vs counted in both: open question.</text>
+  <text x="40" y="596" class="ann">▲ Total row must equal the period total cost (AC-7)</text>
+
+  <!-- ============ TAG PICKER ============ -->
+  <text x="712" y="80" class="h2">B. "Tag ⌄" chip menu — pick the key</text>
+  <rect x="712" y="90" width="210" height="24" rx="4" fill="#eff6ff" stroke="#2563eb"/>
+  <text x="722" y="106" font-size="11" fill="#1d4ed8">Tag: feature ⌄</text>
+  <rect x="712" y="118" width="210" height="98" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <rect x="713" y="126" width="208" height="22" fill="#eef2ff"/>
+  <text x="724" y="141" class="mono">feature</text>
+  <text x="900" y="141" class="muted" text-anchor="end">6</text>
+  <text x="724" y="166" class="mono">team</text>
+  <text x="900" y="166" class="muted" text-anchor="end">2</text>
+  <text x="724" y="196" class="muted">keys with sessions in this period</text>
+  <text x="712" y="234" class="ann">▲ chip hidden when no session in scope has tags</text>
+
+  <!-- ============ ANALYTICS ============ -->
+  <text x="712" y="276" class="h2">C. Analytics toolbar — Group by menu gets a TAGS section</text>
+  <rect x="712" y="288" width="40" height="26" rx="4" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="724" y="306" class="sm">1d</text>
+  <rect x="752" y="288" width="40" height="26" rx="0" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="764" y="306" class="sm">1w</text>
+  <rect x="792" y="288" width="40" height="26" rx="0" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="802" y="306" class="sm">1m</text>
+  <rect x="842" y="288" width="140" height="26" rx="4" fill="#ffffff" stroke="#6366f1"/>
+  <text x="852" y="306" class="sm">Group by tag: feature</text>
+  <text x="970" y="306" class="sm">⌄</text>
+
+  <rect x="842" y="318" width="234" height="204" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="854" y="338" class="sm">No grouping</text>
+  <text x="854" y="358" class="sm">Group by branch</text>
+  <text x="854" y="378" class="sm">Group by user</text>
+  <line x1="842" y1="388" x2="1076" y2="388" stroke="#e5e7eb"/>
+  <text x="854" y="404" class="sec">ATTRIBUTES (existing)</text>
+  <text x="854" y="422" class="sm">Group by kind</text>
+  <line x1="842" y1="432" x2="1076" y2="432" stroke="#e5e7eb"/>
+  <text x="854" y="448" class="sec">TAGS</text>
+  <rect x="843" y="454" width="232" height="22" fill="#eef2ff"/>
+  <text x="854" y="469" class="sm">✓ Group by tag: feature</text>
+  <text x="854" y="492" class="sm">Group by tag: team</text>
+  <text x="854" y="512" class="muted">URL: groupBy=tag:feature (like attr:)</text>
+
+  <text x="712" y="550" class="ann">▲ cost / session-count charts stack one series per tag value</text>
+  <text x="712" y="564" class="ann">   plus "(untagged)"; which charts/reports get it is an open question</text>
+</svg>

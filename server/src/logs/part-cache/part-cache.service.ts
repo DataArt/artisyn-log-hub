@@ -21,7 +21,10 @@ import {
   readPartCacheConfig,
   type PartCacheConfig,
 } from './part-cache.config';
+import { partCacheCounters } from './part-cache-counters';
 import type {
+  PartCacheCountersView,
+  PartCacheCurrentState,
   PartCacheHit,
   PartCacheRemovedCount,
   PartCacheSweepState,
@@ -29,6 +32,8 @@ import type {
 } from './part-cache.types';
 
 const SWEEP_INTERVAL_NAME = 'part-cache-sweep';
+/** How long one admin-view folder scan is reused (the System tab polls every 10 s). */
+const CURRENT_SCAN_REUSE_MS = 5_000;
 const DAY_MS = 86_400_000;
 const REV_RE = /^\d+$/;
 /** Rename failures that mean "the target is there / held open" (Windows: EPERM over an open file). */
@@ -98,6 +103,11 @@ export class PartCacheService
     files: 0,
     bytes: 0,
   };
+  /** Last admin-view scan, reused for `CURRENT_SCAN_REUSE_MS`. */
+  private currentScan: {
+    at: number;
+    result: Promise<PartCacheCurrentState>;
+  } | null = null;
 
   constructor(private readonly schedulerRegistry: SchedulerRegistry) {
     this.config = readPartCacheConfig();
@@ -255,6 +265,7 @@ export class PartCacheService
     }
 
     if (added) {
+      partCacheCounters.fill();
       this.estimatedBytes += gz.length;
       if (this.estimatedBytes > this.config.maxBytes) {
         void this.sweep('cap');
@@ -542,16 +553,89 @@ export class PartCacheService
 
   // ---------------------------------------------------------------- admin view (DD-10)
 
-  async getAdminView(): Promise<PartCacheView> {
+  /** `counters` is the cluster-wide sum, built by the caller from the supervisor snapshot. */
+  async getAdminView(counters: PartCacheCountersView): Promise<PartCacheView> {
     const { enabled, dir, maxBytes, ttlDays, sweepIntervalMs } = this.config;
+    const [current, lastSweep] = enabled
+      ? await Promise.all([this.scanCurrent(), this.readState()])
+      : [null, null];
     return {
       enabled,
       dir,
       maxBytes,
       ttlDays,
       sweepIntervalMs,
-      lastSweep: enabled ? await this.readState() : null,
+      current,
+      counters,
+      lastSweep,
       removedByDataDeletion: { ...this.removedByDataDeletion },
+    };
+  }
+
+  /**
+   * Live size of the cache for the admin view: a read-only walk (readdir + stat, no deletions)
+   * of `<dir>/<logId>/*.json.gz`. The result is reused for `CURRENT_SCAN_REUSE_MS` and
+   * concurrent callers share one walk, so an admin tab polling every 10 s costs at most one
+   * walk per worker per few seconds. Never throws: a failure is reported in `error`.
+   */
+  private scanCurrent(): Promise<PartCacheCurrentState> {
+    const cached = this.currentScan;
+    if (cached && Date.now() - cached.at < CURRENT_SCAN_REUSE_MS) {
+      return cached.result;
+    }
+    const result = this.walkCurrent();
+    this.currentScan = { at: Date.now(), result };
+    return result;
+  }
+
+  private async walkCurrent(): Promise<PartCacheCurrentState> {
+    let sizeBytes = 0;
+    let fileCount = 0;
+    let oldest: number | null = null;
+    let error: string | null = null;
+    try {
+      let entries: fs.Dirent[];
+      try {
+        entries = await fs.promises.readdir(this.config.dir, {
+          withFileTypes: true,
+        });
+      } catch (err) {
+        if (errCode(err) !== 'ENOENT') throw err;
+        entries = [];
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !PART_CACHE_LOG_DIR_RE.test(entry.name)) {
+          continue;
+        }
+        const logDir = path.join(this.config.dir, entry.name);
+        let names: string[];
+        try {
+          names = await fs.promises.readdir(logDir);
+        } catch (err) {
+          if (errCode(err) === 'ENOENT') continue;
+          throw err;
+        }
+        for (const name of names) {
+          if (!PART_CACHE_FILE_RE.test(name)) continue;
+          try {
+            const stat = await fs.promises.stat(path.join(logDir, name));
+            sizeBytes += stat.size;
+            fileCount++;
+            if (oldest === null || stat.mtimeMs < oldest) oldest = stat.mtimeMs;
+          } catch (err) {
+            if (errCode(err) !== 'ENOENT') throw err;
+          }
+        }
+      }
+    } catch (err) {
+      error = errMessage(err);
+    }
+    return {
+      scannedAt: new Date().toISOString(),
+      sizeBytes,
+      fileCount,
+      oldestReadAt: oldest === null ? null : new Date(oldest).toISOString(),
+      error,
     };
   }
 

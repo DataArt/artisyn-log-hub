@@ -4,6 +4,7 @@ import {
   WORKER_RESTART_BACKOFF_MAX_MS,
   WORKER_RESTART_BACKOFF_START_MS,
 } from './cluster.constants';
+import type { PartCacheCounters } from '../logs/part-cache/part-cache.types';
 import type {
   SupervisorInfo,
   WorkerProcessSummary,
@@ -22,6 +23,8 @@ export interface SlotState {
   lastRestartAt: string | null;
   /** Last self-reported RSS, null until the slot has reported. */
   rssBytes: number | null;
+  /** Last self-reported part cache counters, null until reported (or from an older build). */
+  partCache: PartCacheCounters | null;
   consecutiveFastCrashes: number;
   /** `now()` of the most recent fork; null before the first one. */
   forkedAt: number | null;
@@ -58,6 +61,7 @@ export class WorkerSlotRegistry {
       restarts: 0,
       lastRestartAt: null,
       rssBytes: null,
+      partCache: null,
       consecutiveFastCrashes: 0,
       forkedAt: null,
     }));
@@ -76,6 +80,7 @@ export class WorkerSlotRegistry {
       slot.lastRestartAt = new Date(this.now()).toISOString();
     }
     slot.pid = pid;
+    slot.partCache = null; // a new process counts from zero
     slot.status = 'starting';
     slot.forkedAt = this.now();
   }
@@ -133,12 +138,21 @@ export class WorkerSlotRegistry {
     return { action: 'refork', delayMs };
   }
 
-  /** Overwrites the slot's RSS (and pid, confirming which process reported). */
-  onStats(instance: number, pid: number, rssBytes: number): void {
+  /**
+   * Overwrites the slot's RSS and part cache counters (and pid, confirming which process
+   * reported). A report without counters (older worker build) clears them.
+   */
+  onStats(
+    instance: number,
+    pid: number,
+    rssBytes: number,
+    partCache?: PartCacheCounters,
+  ): void {
     const slot = this.slots[instance];
     if (!slot) return;
     slot.pid = pid;
     slot.rssBytes = rssBytes;
+    slot.partCache = partCache ? { ...partCache } : null;
   }
 
   beginShutdown(): void {
@@ -174,6 +188,7 @@ export class WorkerSlotRegistry {
       restarts: slot.restarts,
       lastRestartAt: slot.lastRestartAt,
       status: slot.status,
+      ...(slot.partCache ? { partCache: { ...slot.partCache } } : {}),
     }));
     return { clustered: true, processes };
   }

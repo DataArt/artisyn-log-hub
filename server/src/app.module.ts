@@ -24,6 +24,7 @@ import {
   LOG_INGEST_ROUTES,
 } from './common/body-limits';
 import { LoadGovernorModule } from './common/load-governor/load-governor.module';
+import { apiGzipMinBytes, createJsonGzipMiddleware } from './common/json-gzip';
 import { throwMiddlewareErrors } from './common/middleware-errors';
 import { precompressedCacheHeaders } from './common/precompressed-static';
 import { securityHeaders } from './common/security-headers';
@@ -198,6 +199,12 @@ export class AppModule
     // First position: headers must be attached even when a later middleware or
     // guard short-circuits the request (401s, body-parser errors).
     consumer.apply(securityHeaders).forRoutes('*');
+
+    // Gzip of /api JSON answers at or above API_GZIP_MIN_BYTES (wraps res.json). Registered
+    // here, not in main.ts, so the contract and e2e test apps get it too.
+    consumer
+      .apply(createJsonGzipMiddleware({ thresholdBytes: apiGzipMinBytes() }))
+      .forRoutes('*');
 
     // TRUST_PROXY wins over COOKIE_SECURE when enabled: behind a reverse proxy the
     // cookie's secure flag is derived per-request from X-Forwarded-Proto

@@ -16,6 +16,9 @@
 //   - the uncompressed size of a gzip upload is read from `upload_queue_measurements.size_bytes`
 //     (the queue row's size, recorded when the row is processed and deleted).
 //
+// Step 10 (2026-11-24-traffic-optimization): the 400s of `POST /api/v2/logs/append`, in the
+// controller's check order (type, startLine, body).
+//
 // Replaces:
 //   - server/test/logs.e2e-spec.ts (400 sessionId/type/empty, > 100 KB, 413, NUL ×2, limit: ≈ 11)
 //   - server/test/logs-gzip.e2e-spec.ts (13)
@@ -30,6 +33,7 @@ import {
   logRowCount,
   ndjson,
   postLogs,
+  postLogsAppend,
   processedSizes,
   queueRowCount,
   sessionRowCount,
@@ -238,5 +242,30 @@ test('@S-INGEST-03 hostile and huge bodies: empty, malformed, NUL, four gzip sha
     for (const name of valid) expect(await logRowCount(db, sid(name)), name).toBe(1);
     const { rows } = await db.query<{ n: string }>('SELECT count(*) AS n FROM logs WHERE user_id = $1', [owner.id]);
     expect(Number(rows[0].n)).toBe(valid.length);
+  });
+
+  await test.step('10. Append route 400s: non-claude type, missing / bad startLine, empty and whitespace delta → nothing stored', async () => {
+    const delta = ndjson([{ type: 'user', uuid: `ing03-${run}-d1`, message: { role: 'user', content: 'delta' } }]);
+    const append = (name: string, type: string, startLine: number | string | undefined, body: string) =>
+      postLogsAppend(api, { key, sessionId: sid(name), type, startLine, body });
+    await refusedWith(
+      400,
+      /^Append is supported only for claude and claude-subagent logs$/,
+      await append('ap', 'artisyn', 0, delta),
+      'artisyn type',
+    );
+    await refusedWith(
+      400,
+      /^Append is supported only for claude and claude-subagent logs$/,
+      await append('ap', 'tool-calls', 0, delta),
+      'tool-calls type',
+    );
+    await refusedWith(400, /^Missing startLine query parameter$/, await append('ap', 'claude', undefined, delta), 'no startLine');
+    for (const bad of ['abc', '-1', '1.5', '1234567890', '']) {
+      await refusedWith(400, /^startLine must be a non-negative integer$/, await append('ap', 'claude', bad, delta), `startLine «${bad}»`);
+    }
+    await refusedWith(400, /must not be empty/, await append('ap', 'claude', 0, ''), 'empty delta');
+    await refusedWith(400, /must not be empty/, await append('ap', 'claude-subagent', 3, ' \n \n'), 'whitespace delta');
+    await nothingStored('ap');
   });
 });

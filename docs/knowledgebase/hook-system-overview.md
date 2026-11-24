@@ -1,11 +1,11 @@
 ---
 type: "Architecture Guide"
 title: "Hook System Overview"
-description: "Current behaviour of the Claude Code hook: where its source lives versus the installed and dogfooded copies, event wiring, the non-obvious scripts, path resolution, the upload pipeline (namespaces, manifest, lock, chunking/gzip, injected lines), local files and the design rules (fail-open, transparent code, every Node.js LTS, CommonJS)."
+description: "Current behaviour of the Claude Code hook: where its source lives versus the installed and dogfooded copies, event wiring, the non-obvious scripts, path resolution, the upload pipeline (namespaces, manifest, append path, lock, chunking/gzip, injected lines), local files and the design rules (fail-open, transparent code, every Node.js LTS, CommonJS)."
 tags:
   - hooks
   - otel
-generated: { by: "claude-code", at: "2026-11-23T22:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-24T20:00:00+04:00" }
 ---
 
 # Hook System Overview
@@ -169,7 +169,8 @@ rules you would not guess:
 
 ## Upload pipeline
 
-All uploads go to `POST /api/v2/logs` (contract: [hook-api-versioning.md](hook-api-versioning.md);
+All uploads go to `POST /api/v2/logs`, except the deltas of `claude` / `claude-subagent`
+transcripts, which go to `POST /api/v2/logs/append` (hook `3.3.0`+, § "Append path") (contract: [hook-api-versioning.md](hook-api-versioning.md);
 server side: [upload-queue.md](upload-queue.md)). `send-logs-hook.js` exits 0 even when uploads
 fail.
 
@@ -258,6 +259,57 @@ fail.
 - **Write batching** (`flushManifest()`, `MANIFEST_FLUSH_EVERY` / `MANIFEST_FLUSH_INTERVAL_MS`):
   the whole map is rewritten on every write, so per-file writes made cost scale with history.
   Batched rather than deferred to the end so a run killed mid-way keeps credit for what it shipped.
+
+### Append path (hook `3.3.0`+)
+
+A `claude` / `claude-subagent` transcript only grows, so when the hook knows how much of it the
+server already holds it sends only the new complete lines to `POST /api/v2/logs/append`
+(contract: [hook-api-versioning.md](hook-api-versioning.md) § "`POST /api/v2/logs/append`";
+server: [upload-queue.md](upload-queue.md) § "Append rows"). Code:
+`hook/.claude/telemetry_tool/append-upload.js`; pure rules in
+[algorithms/hook-upload-skip.md](algorithms/hook-upload-skip.md) (`planAppend`, `stateAfterFull`,
+`chooseAppendEncoding`).
+
+- **State.** A `.claude-logs.sent.v2` entry may carry `appendBytes` (raw bytes of the file the
+  server holds, always up to a newline), `appendLines` (records in them — `sanitizeNdjson().records`,
+  the server's `jsonb_array_length`) and `appendSha256` (sha256 of those raw bytes). All three or
+  none; `readManifestV2` drops an invalid set. A call site uses the state only when the entry's
+  `paramsSha256` matches the current params (`appendStateForEntry`).
+- **Plan.** `planAppend` falls back to the full upload when there is no state, append is off for
+  this server, a chunked upload of the key is pending in `.claude-logs.pending`, the file is shorter
+  than `appendBytes` or its first `appendBytes` bytes hash differently. Otherwise the delta is the
+  sanitized text of the complete lines after `appendBytes`; a trailing partial line waits for its
+  newline, and a growth with no record (blank / torn lines only) sends nothing but advances the
+  state.
+- **Sending** (`uploadWithAppend`). `startLine` = `appendLines`, `contentSha256` of the delta.
+  Gzip only for a delta ≥ 16,384 bytes, not loopback, not latched off (`isGzipUnsupported()`), and
+  only when smaller; an encoding rejection retries the same delta once uncompressed. A delta over
+  512,000 bytes uncompressed or a wire body over `CHUNK_SIZE_BYTES` takes the full path.
+- **`append-off.json`** (`<telemetryDir>`): `{ "<serverUrl without trailing slash>":
+  <untilEpochMs> }`, temp + rename. A `404` or `413` from the append route (an older server) sets
+  it for 1 h (`APPEND_OFF_MS`), logs `append route not available on <origin> (HTTP <code>) — append
+  uploads off for 1 h` and the full upload runs. Missing or malformed file = append on.
+- **Fallback reasons** (`hook.log`: `<key>: append not used (<reason>) — full upload`, never
+  written for `no-state`): `no-state`, `append-off`, `pending-chunked`, `shorter`,
+  `hash-changed`, `over-budget`, `route-missing` (404/413), `http-<status>`, `timeout`,
+  `network`, `error` (an exception), and `failed-feedback` — the append `201` carried a
+  `failedUploads` entry for this very file, so the server's copy is not what the state says and
+  the full upload runs at once. A successful append logs `<key>: appended <records> lines from
+  line <startLine>: <plainBytes> B → <wireBytes> B gz` (or `… B uncompressed`).
+- **After a full upload** the v2 entry gets `stateAfterFull(buf)` — none when the file ended in a
+  parseable record without a newline (the server holds a record the counter cannot place), or when
+  the answer's `failedUploads` names this file.
+- **Three call sites**, `claude` / `claude-subagent` only (`artisyn`, `tool-calls`,
+  `claude-otel` and `.meta.json` stay on the full route):
+  1. the `Stop` scan's `processFile` (`send-logs-hook.js`), after `decideUploadSkip` (a skipped
+     file never reaches it): `none` records the new state and counts the file as skipped,
+     `appended` records it, `full-needed` runs the unchanged sanitize → upload → manifest code;
+  2. the `UserPromptSubmit` background upload (`prompt-upload-hook.js`), for the session's own
+     transcript;
+  3. the `SessionEnd` scoped flush (`runSessionEndFlush`), for the session's own transcript.
+
+  The scoped paths read the state with `readScopedAppendState` and record it as the 5th argument
+  of `recordScopedClaudeUpload`, under the existing scoped recording rule.
 
 ### Concurrency and triggers
 
@@ -360,7 +412,8 @@ costs work, never correctness):
 | File | Owner | Purpose |
 |---|---|---|
 | `.claude-logs.sent` | `send-logs-hook.js` | Upload manifest (size only; read by every hook version) |
-| `.claude-logs.sent.v2` | `send-logs-hook.js`, `upload-skip.js` | Upload manifest v2 (size, pre-read mtime, params hash, `tool-calls` fingerprint; hook `3.2.0`+) |
+| `.claude-logs.sent.v2` | `send-logs-hook.js`, `upload-skip.js` | Upload manifest v2 (size, pre-read mtime, params hash, `tool-calls` fingerprint; hook `3.2.0`+; append state `appendBytes` / `appendLines` / `appendSha256`, hook `3.3.0`+) |
+| `append-off.json` | `append-upload.js` | Per-server 1 h cooldown of append uploads after a `404` / `413` (hook `3.3.0`+) |
 | `.claude-logs.pending` | `upload-logs.js` | In-progress chunked uploads (v2 JSON; an old positional file is ignored) |
 | `gzip-stat.json` | `upload-logs.js` | Last compression ratio, seeds the next slice-size prediction |
 | `.upload.lock` | `upload-logs.js` | Upload mutual exclusion |

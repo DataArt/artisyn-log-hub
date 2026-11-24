@@ -12,8 +12,9 @@ import { seedRepoWithSessions, type SeededRepo } from './helpers/seed';
 // UI edits run as the repo `owner` (ROLES.owner.email) via saved storageState.
 test.use({ storageState: storageStatePath('owner') });
 
-// The three tests share state: test 1 adds `test_category_1`, test 2 removes it,
-// test 3 adds `png_files`. They must run in order in a single worker.
+// The three tests share one seeded repo: test 1 adds `test_category_1`, test 2 removes it,
+// test 3 adds `png_files`. They must run in order in a single worker. Test 1 is @core and
+// so absent from the `extended` project — test 2 therefore seeds its own precondition.
 test.describe.configure({ mode: 'serial' });
 
 // Deterministic seed data: no discovery, no runtime skip.
@@ -172,6 +173,17 @@ test('@core adds a file category and verifies recalculation', async ({ page }) =
 // ────────────────────────────────────────────────────────────
 
 test('removing category reverts analytics to normal', async ({ page }) => {
+  // Test 1 is tagged @core, so it runs only in the `core` project; the `extended`
+  // project (grepInvert /@core/) runs this test without it. Establish the
+  // precondition (`test_category_1` saved as a personal override) via the API so
+  // this test stands on its own in either project.
+  const putRes = await ownerCtx.put(`/api/v1/repositories/${repoId}/settings/user`, {
+    data: {
+      config: { fileCategories: [{ name: 'test_category_1', patterns: [CATEGORY_PATTERN] }] },
+    },
+  });
+  expect(putRes.ok()).toBe(true);
+
   // Step 1 — Navigate to settings, File Categories sub-tab
   await page.goto(`/#/repos/${repoId}?mtab=settings&stab=file-categories`);
   await waitForSpinnerGone(page);
@@ -180,7 +192,7 @@ test('removing category reverts analytics to normal', async ({ page }) => {
   // Wait for the settings to fully load (loading spinner gone means query finished)
   await waitForSpinnerGone(page);
 
-  // Test 1 (serial) added `test_category_1` — it must be present now.
+  // `test_category_1` was saved above — it must be present now.
   const categoryInput = page.locator('input[placeholder="Category name"]');
   await expect(categoryInput.first()).toBeVisible({ timeout: 5_000 });
   await expect(categoryInput.first()).toHaveValue('test_category_1');

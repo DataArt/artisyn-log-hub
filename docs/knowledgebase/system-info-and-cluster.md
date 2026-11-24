@@ -5,7 +5,7 @@ description: "Native node:cluster launch (server/src/cluster/), the System Info 
 tags:
   - server
   - cluster
-generated: { by: "human:denistsyplakov", at: "2026-11-20T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-24T22:55:00+04:00" }
 ---
 
 # System Info & Cluster Parallel Launch
@@ -71,7 +71,9 @@ The primary runs with `NODE_APP_INSTANCE` unset, so its own `AppLogger` writes t
 optional, so a primary-side fatal line is already discoverable in Admin → Error Logs.
 
 **Restart policy (`WorkerSlotRegistry`).** Per-slot state is
-`{ instance, pid, status, restarts, lastRestartAt, rssBytes, consecutiveFastCrashes, forkedAt }` with
+`{ instance, pid, status, restarts, lastRestartAt, rssBytes, partCache, consecutiveFastCrashes, forkedAt }` with
+`partCache` the worker's last pushed part cache counters (optional field of the worker-stats IPC
+message, cleared on re-fork; see [session-part-cache.md](session-part-cache.md)) and
 `status` one of `'starting' | 'online' | 'restarting' | 'stopped'`. On exit:
 
 - shutting down → `ignore` (no counter is touched);

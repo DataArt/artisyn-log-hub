@@ -6,7 +6,7 @@ tags:
   - hooks
   - api
   - otel
-generated: { by: "human:denistsyplakov", at: "2026-11-23T12:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-24T20:00:00+04:00" }
 ---
 
 # Hook API Versioning (v2 logs upload, v1 removed)
@@ -54,6 +54,13 @@ The URL itself is the version signal — no version-detection logic needed on ei
 `1.7.0`+ simply builds its upload URL against `/api/v2/logs` instead of `/api/v1/logs`
 (`uploadFile()`, one literal path change).
 
+The same reasoning made append uploads (hook `3.3.0`+) a **separate route**,
+`POST /api/v2/logs/append`, rather than a new query param on `POST /api/v2/logs`: an older server
+ignores unknown params, so a delta sent there with a `startLine` param would be stored as the
+whole transcript — silent data loss. On a separate route an older server answers `404` (or `413`,
+see the 3.3.0 row below), which the hook reads as "append not supported" and falls back to the
+full upload. Details: § "`POST /api/v2/logs/append`" below.
+
 The v2 route's query and response shapes are typed in `server/src/logs/logs-v2.controller.ts` (rules in
 `docs/knowledgebase/server-endpoint-map.md`); see `docs/knowledgebase/hook-system-overview.md` for
 the general hook architecture (including the `broken-upload-file` recommendation rule this
@@ -76,12 +83,13 @@ mechanism feeds).
 | `>= 2.31.0` | `POST /api/v2/logs` + optional `agentDescription` / `workflowPhase` on `claude-subagent` uploads (plain and chunked) | unchanged | As `>= 1.7.0`; an invalid, empty or repeated value is ignored, never a `400`; an older server ignores both params — see the sub-agent meta section below |
 | `>= 3.1.0` | unchanged — the root `artisyn` upload's `okf-snapshot` line gains optional bundle `okfVersion` / `title` / `description` and file `meta` | unchanged | As `>= 1.7.0`; any server stores the body verbatim and an older one ignores the fields; the snapshot id changes once (one full resend) — see "OKF snapshot metadata" below |
 | `>= 3.2.0` | `POST /api/v2/logs` + optional `contentSha256` (single upload and chunk 0) and `uploadFeedback=1` (every request) | `201`, `{ …, failedUploads?, sessionDeleted? }` (only when `uploadFeedback=1` was sent) | As `>= 1.7.0`, plus: a body that does not match its `contentSha256` fails server-side (`content-hash-mismatch`), and that failure and any other server-side failure of the caller's uploads come back in `failedUploads`, which makes the hook re-send those files; a deleted session answers `sessionDeleted: true`. An older server ignores both params and sends neither field — see "`contentSha256` / `uploadFeedback`" below |
+| `>= 3.3.0` | `POST /api/v2/logs/append` for the new lines of `claude` / `claude-subagent` files (falls back to `POST /api/v2/logs`) | `201`, same shape as a single `POST /api/v2/logs` upload | As `>= 3.2.0`; a delta that does not fit the stored log is never a synchronous error: it fails server-side as `upload-full` and comes back once in `failedUploads`, and the hook re-sends the whole file. An older server answers the unknown route `404` — or `413` when its 512,000-byte global text parser sees the body first — and the hook uploads the full file and turns append off for that server for 1 h (`append-off.json`). Deltas are capped at 512,000 bytes uncompressed for exactly that reason — see "`POST /api/v2/logs/append`" below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
 limit by default — overridable via `LOGS_MAX_BODY_MB`, see `server/src/common/logs-body-limit.ts`)
 — `logs.module.ts`'s `configure()` registers that middleware for `LOG_INGEST_ROUTES`
-(only `api/v2/logs`). Note that in practice the parser that consumes the hook's `application/x-ndjson`
+(`POST api/v2/logs` and, since the append change, `POST api/v2/logs/append`). Note that in practice the parser that consumes the hook's `application/x-ndjson`
 body is the one `AppModule.configure()` applies to `forRoutes('*')`, which wins the race against
 `LogsModule`'s — which is why the gzip sniffer below is registered in `AppModule`, not `LogsModule`.
 
@@ -92,7 +100,7 @@ forms, and neither is a contract change (same URL, params, statuses, response sh
   `true` and nothing here disables it), no server code involved;
 - with that header stripped by an intermediary — detected by the `inflateSniffedGzip` middleware
   (`server/src/logs/gzip-sniff.middleware.ts`, registered in `AppModule.configure()` for
-  `LOG_INGEST_ROUTES`, i.e. `POST api/v2/logs`) from the `1f 8b` magic bytes and inflated before the
+  `LOG_INGEST_ROUTES`, i.e. `POST api/v2/logs` and `POST api/v2/logs/append`) from the `1f 8b` magic bytes and inflated before the
   body parser sees it.
 
 Two new failure responses come with it: `400 Malformed gzip request body` for a body
@@ -109,7 +117,7 @@ from body-parser):
 
 | Routes | Limit | Registered in |
 |---|---|---|
-| Log ingest — `LOG_INGEST_ROUTES` (`POST api/v2/logs` only; v1 was removed) | `getLogsBodyLimit()` (`LOGS_MAX_BODY_MB`, default 2500 MB) | `LogsModule.configure()` — json, `text({type:['application/x-ndjson','text/plain']})` and urlencoded |
+| Log ingest — `LOG_INGEST_ROUTES` (`POST api/v2/logs`, `POST api/v2/logs/append`; v1 was removed) | `getLogsBodyLimit()` (`LOGS_MAX_BODY_MB`, default 2500 MB) | `LogsModule.configure()` — json, `text({type:['application/x-ndjson','text/plain']})` and urlencoded |
 | Hook JSON APIs — `HOOK_API_ROUTES` (`POST api/v2/turn-end-cost-advisor`, `POST api/v2/session-attribution`, `POST api/v1/log-echo`, `POST api/v2/otel-realtime`) | `HOOK_API_BODY_LIMIT` = 1,048,576 bytes | `AppModule.configure()` |
 | Everything else | `GLOBAL_BODY_LIMIT` = 512,000 bytes | `AppModule.configure()` — the global json/urlencoded/text parsers `.exclude()` both lists above |
 
@@ -781,6 +789,49 @@ Hook side:
 | Hook `3.2.0` → older server | The param is ignored and the fields are absent; nothing changes |
 | Hook `3.2.0` → server with this change | Failed uploads are re-sent automatically; deleted sessions are logged once per upload |
 
+## `POST /api/v2/logs/append` — append uploads (hook `3.3.0`+)
+
+Task `2026-11-24-traffic-optimization` (impl-plan DD-1, DD-2, DD-16 to DD-19). A `claude` /
+`claude-subagent` transcript only grows, so hook `3.3.0` sends only its new complete lines, with
+the 0-based record index they start at. Server side: [upload-queue.md](upload-queue.md)
+§ "Append rows"; hook side: [hook-system-overview.md](hook-system-overview.md) § "Append path".
+
+- **Route.** `LogsV2Controller.postLogsAppend`, `ApiKeyAuthGuard`, `@HttpCode(201)`. Query: the
+  params of a non-chunked `POST /api/v2/logs` (`sessionId`, `type`, `parentSessionId`,
+  `workflowRunId`, `agentDescription`, `workflowPhase`, `snapshotId` / `snapshotFull`,
+  `okfSnapshotId` / `okfSnapshotFull`, `contentSha256` of the delta, `uploadFeedback`) plus the
+  required `startLine`; no chunk params. The hook sends no snapshot params here. Body: NDJSON,
+  optionally gzipped — the route is in `LOG_INGEST_ROUTES` (`server/src/common/body-limits.ts`),
+  so it gets the logs body limit, the text / NDJSON parsers and the gzip sniffer.
+- **Checks, in order** (all `400`):
+  1. `Missing sessionId query parameter` / `Missing type query parameter` (as `POST /api/v2/logs`);
+  2. `Append is supported only for claude and claude-subagent logs`;
+  3. `Missing startLine query parameter`;
+  4. `startLine must be a non-negative integer` (anything but `^\d{1,9}$`);
+  5. `Request body must not be empty` (as `POST /api/v2/logs`).
+
+  The new texts of steps 2–4 sit next to the existing ones in the hook's `V2_VALIDATION_MESSAGES`
+  (`upload-logs.js`), so such a `400` never latches the hook's `gzipUnsupported` flag.
+- **Answers.** The same as a single `POST /api/v2/logs` upload: `201 { warnings, failedUploads?,
+  unknownSnapshotId?, unknownOkfSnapshotId? }`; a foreign session `201 { warnings }`; a deleted
+  session the deleted-session answer. A delta that does not continue the stored log is **never**
+  a synchronous status: the queue worker fails it as `upload-full`, it is reported once in
+  `failedUploads` (no `warnings` entry) and the hook re-sends the whole file.
+- **Old server.** The route does not exist, so Nest answers `404`. A pre-append server parses the
+  body of an unknown route with its global text parser (`GLOBAL_BODY_LIMIT`, 512,000 bytes) before
+  routing, so a bigger body would get `413` instead. The hook therefore caps a delta at
+  `APPEND_MAX_PLAIN_BYTES` = 512,000 bytes uncompressed (and its wire body at `CHUNK_SIZE_BYTES`;
+  a bigger one takes the full path, reason `over-budget`) and treats both `404` and `413` from this
+  route as "route missing": it writes `<telemetryDir>/append-off.json` (`{ "<serverUrl>":
+  <untilEpochMs> }`, 1 h), logs `append route not available on <origin> (HTTP <code>) — append
+  uploads off for 1 h` and does the full upload.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 3.3.0` → any server | Whole-file uploads only, as before |
+| Hook `3.3.0` → older server | One `404` / `413` per server per hour, each followed by the full upload; nothing is lost |
+| Hook `3.3.0` → server with this change | Deltas for transcripts; any doubt (no state, changed prefix, shorter file, pending chunked upload, error, `failedUploads` naming the file) falls back to the full upload |
+
 ## `GET /api/v2/tool-monitoring/config` and the `tool-calls` log kind — CLI tool wrapper (hook `2.27.0`+)
 
 The Tools/MCP tab ([tool-monitoring.md](tool-monitoring.md); plan
@@ -934,3 +985,4 @@ user's machine. Only facts not already covered by the sections above; current be
 | `3.0.0` | `Stop` and `SessionEnd` hand their upload to the shared receiver as a job (`~/.artisyn/upload/queue/`) when its heartbeat is fresh; the receiver is the single uploader per OS user, runs each job with the job's own repo's `send-logs-hook.js --run-job`, retries with backoff and parks given-up jobs in `failed/` (`upload-jobs-failed` recommendation); `LOCK_WAIT_SESSION_END_MS` 20 s → 800 ms with a job on a busy lock; a fallback `Stop` takes over stuck jobs; the shared receiver starts regardless of `otelEnabled` and stays up queue-only on a port conflict; 3 s connect timeout and one `aborted: server unreachable` stop per run; `SessionStart` Node.js warning (`node-version-check.js`, merged `systemMessage`); `hook-status` gains `nodeVersion` and `uploadQueue` ([upload-job-queue.md](upload-job-queue.md)). Log Hub `1.5.0` ships it; no server API change | Uploads in process on every `Stop` / `SessionEnd`; a `SessionEnd` waits up to 20 s for a busy lock; with no connection every file pays its own timeout; no receiver when `otelEnabled: false`; never touches the queue, but shares `.upload.lock` with `3.0.0` jobs, so the two never upload one repo at once |
 | `3.1.0` | OKF front-matter window 512 → 8192 bytes; `okf-snapshot` gains bundle `okfVersion` / `title` / `description` and file `meta`; `okf-state.json` hash-cache entries gain a 4th element (`meta`); 8 MiB metadata size guard (see "OKF snapshot metadata"); a backlog session's `artisyn` re-upload carries the OKF lines too | A backlog session re-uploaded by a later run stays without an OKF snapshot; an `index.md` with `okf_version:` past byte 512 is not detected as a bundle; no metadata, so the OKF tabs show no titles, hints or deprecated / stale_after chips; reads only elements 0–2 of a 4-element cache entry, so a downgrade keeps its cache hits |
 | `3.2.0` | Manifest v2 `.claude-logs.sent.v2` (size, pre-read mtime, params hash, `tool-calls` fingerprint) next to the unchanged `.claude-logs.sent`, skip rule `decideUploadSkip` ([algorithms/hook-upload-skip.md](algorithms/hook-upload-skip.md)); the prompt upload and the `SessionEnd` flush record the current session's own `claude` transcript; `contentSha256` on single uploads / chunk 0 and `sha256` in `.claude-logs.pending` (resume only on an equal hash); `uploadFeedback=1` on every request, `failedUploads` re-sent, `sessionDeleted` logged (see the two sections above); 201 read cap 2000 bytes → 64 KiB | Skips a file on equal size alone, so a same-length rewrite or a late `.meta.json` change is never re-sent; the next `Stop` re-sends the transcript the prompt upload already sent; resumes a pending chunked upload on equal size; a server-side ingest failure is re-sent only when the file changes; reads only `.claude-logs.sent` and writes it as before, so it coexists with `3.2.0` (the v2 entries it does not refresh are re-adopted or re-sent once) |
+| `3.3.0` | Append uploads of `claude` / `claude-subagent` files (`append-upload.js`, `POST /api/v2/logs/append`); v2 manifest entries gain optional `appendBytes` / `appendLines` / `appendSha256`; `append-off.json` 1 h cooldown per server after a `404` / `413`; `sanitizeNdjson()` returns `records`; `recordScopedClaudeUpload()` takes an optional append state; `uploadFile()` an optional `appendStartLine` (see the section above) | Sends the whole transcript every time it grows. Reads a v2 manifest written by `3.3.0` (its `readManifestV2` ignores unknown fields) and writes entries without the append fields, after which `3.3.0` does one full upload of that file and re-learns the state |

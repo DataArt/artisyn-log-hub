@@ -18,6 +18,7 @@ import type {
 } from './cluster-messages';
 import { SHUTDOWN_GRACE_MS } from './cluster.constants';
 import { WorkerSlotRegistry } from './worker-slot-registry';
+import { isPartCacheCounters } from '../logs/part-cache/part-cache-counters';
 
 const CONTEXT = 'ClusterPrimary';
 
@@ -109,7 +110,12 @@ export function runClusterPrimary(logger: AppLogger): void {
         return;
       }
       if (!isWorkerStatsMessage(msg)) return;
-      registry.onStats(msg.instance, msg.pid, msg.rssBytes);
+      registry.onStats(
+        msg.instance,
+        msg.pid,
+        msg.rssBytes,
+        isPartCacheCounters(msg.partCache) ? msg.partCache : undefined,
+      );
       broadcastSnapshot();
     });
 
