@@ -1,18 +1,6 @@
 {
   "snyk-oss/prod": [],
-  "snyk-oss/dev": [
-    {
-      "severity": "high",
-      "id": "SNYK-JS-PARSE5-22742152",
-      "title": "Uncaught Exception",
-      "package": "parse5",
-      "version": "8.0.1",
-      "fixedIn": [
-        "8.1.1"
-      ],
-      "project": "client/package.json"
-    }
-  ],
+  "snyk-oss/dev": [],
   "snyk-oss/kit": [],
   "snyk-container/image": []
 }
