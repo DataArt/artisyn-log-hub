@@ -19,13 +19,19 @@
 //   - a whitespace-only `git.repo` is dropped after normalisation (`logs.service.ts`), a numeric
 //     one before it (`extractRepoUrls`).
 //
+// Steps 12–16 (2026-11-23 session-logs-streaming) cover the ingest hash skip
+// (algorithm doc ingest-hash-skip.md), the newer-upload-wins guard, coalescing of a burst
+// (`superseded` measurements), the re-extract drain on new artisyn edit records and the
+// workflows backfill / gzip drains converging legacy rows.
+//
 // Replaces:
 //   - server/test/logs.e2e-spec.ts block «artisyn log extraction» (17)
 //   - server/src/logs/artisyn-extractor.spec.ts (repository, branch and time extraction: ≈ 8)
 import { randomBytes } from 'crypto';
+import { gunzipSync } from 'zlib';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
-import { ndjson, postLogs, sessionRowCount } from '../helpers/ingest';
+import { holdSessionTreeLock, measurementOutcomes, ndjson, postLogs, queueRowCount, sessionRowCount, storedBody } from '../helpers/ingest';
 import { ownRepoId } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
 import { infoValue, openSession } from '../helpers/session-view';
@@ -50,7 +56,7 @@ test('@S-INGEST-02 first v2 upload: repository, branch, user, context; re-upload
   users,
   page,
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const run = randomBytes(4).toString('hex');
   const host = 'git.arrakis.test';
   const sshUrl = `git@${host}:scn/${run}/shop.git`;
@@ -463,5 +469,204 @@ test('@S-INGEST-02 first v2 upload: repository, branch, user, context; re-upload
       ts: new Date(at('15:20:00')).toISOString(),
     });
     expect(row.end_time?.toISOString(), 'end_time never follows an otel-status timestamp').toBe(endTime);
+  });
+
+  // Steps 12–16 (2026-11-23 session-logs-streaming, FR-5 / FR-6 / FR-8): the server hash skip,
+  // the newer-upload-wins guard, coalescing of a burst, the re-extract on new edit records and
+  // the convergence of legacy rows through the background drains. Own sessions, so the steps
+  // above keep their numbers.
+  const sidEdit = `sess-edit-${run}`;
+  const writeId = `toolu_w_${run}`;
+  const artisynEdit = (extra: object[] = []) =>
+    ndjson([
+      { event: 'prompt_start', timestamp: at('16:00:00'), session_id: sidEdit, prompt: `Edit records ${run}`, git: { repo: httpsUrl, branch: 'main' } },
+      ...extra,
+      { event: 'prompt_stop', timestamp: at('16:03:00'), session_id: sidEdit },
+    ]);
+  // A Write call (no patch in the transcript, so its lines are uncovered until the hook's
+  // edit record arrives) and a Workflow call (a stored workflow run).
+  const claudeEdit = (answer: string) =>
+    ndjson([
+      { type: 'user', uuid: `${sidEdit}-u1`, sessionId: sidEdit, timestamp: at('16:00:00'), message: { role: 'user', content: [{ type: 'text', text: `Edit records ${run}` }] } },
+      {
+        type: 'assistant', uuid: `${sidEdit}-a1`, parentUuid: `${sidEdit}-u1`, sessionId: sidEdit, timestamp: at('16:01:00'),
+        message: {
+          id: `msg-edit-${run}-1`, role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 50, output_tokens: 20 },
+          content: [
+            { type: 'tool_use', id: writeId, name: 'Write', input: { file_path: 'src/new.ts', content: 'a\nb\nc\nd\ne\n' } },
+            { type: 'tool_use', id: `toolu_wf_${run}`, name: 'Workflow', input: { name: 'ShipIt' } },
+          ],
+        },
+      },
+      {
+        type: 'user', uuid: `${sidEdit}-u2`, parentUuid: `${sidEdit}-a1`, sessionId: sidEdit, timestamp: at('16:02:00'),
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: writeId, content: 'File created' }] },
+      },
+      {
+        type: 'assistant', uuid: `${sidEdit}-a2`, parentUuid: `${sidEdit}-u2`, sessionId: sidEdit, timestamp: at('16:03:00'),
+        message: { id: `msg-edit-${run}-2`, role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 60, output_tokens: 10 }, content: [{ type: 'text', text: answer }] },
+      },
+    ]);
+  const claudeRow = async (sessionId: string) =>
+    (
+      await db.query<{
+        id: number;
+        updated_at: Date;
+        body_rev: string | null;
+        body_sha256: string | null;
+        body_received_at: Date | null;
+        stats: unknown;
+      }>(
+        `SELECT l.id, l.updated_at, l.body_rev::text AS body_rev, l.body_sha256, l.body_received_at, to_jsonb(ss) AS stats
+           FROM logs l JOIN sessions s ON s.id = l.session_id
+           LEFT JOIN session_stats ss ON ss.session_id = s.id
+          WHERE s.session_id = $1 AND l.log_type = 'claude'`,
+        [sessionId],
+      )
+    ).rows[0];
+  const outcomesOf = (sessionId: string) => measurementOutcomes(db, sessionId);
+  const countOf = (list: string[], outcome: string) => list.filter((o) => o === outcome).length;
+
+  await test.step('12. An identical claude re-upload is skipped: logs.updated_at, body_rev and session_stats stay; after a forced re-process of the same body the hash is kept and the next identical upload is skipped again', async () => {
+    // The artisyn log first, so the transcript is extracted against the tree's edit revision.
+    await send(key.key, sidEdit, 'artisyn', artisynEdit());
+    await queueA();
+    const body = claudeEdit(`Done ${run}`);
+    await send(key.key, sidEdit, 'claude', body);
+    await queueA();
+    await expect.poll(() => outcomesOf(sidEdit)).toEqual(['success', 'success']);
+    const before = await claudeRow(sidEdit);
+    expect(before.body_sha256, 'the processed upload stores its body hash').toMatch(/^[0-9a-f]{64}$/);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await send(key.key, sidEdit, 'claude', body);
+    await queueA();
+    await expect.poll(async () => countOf(await outcomesOf(sidEdit), 'skipped'), 'measured as skipped').toBe(1);
+    const after = await claudeRow(sidEdit);
+    expect(after.updated_at.getTime(), 'updated_at kept').toBe(before.updated_at.getTime());
+    expect(after.body_rev, 'body_rev kept').toBe(before.body_rev);
+    expect(after.stats, 'session_stats untouched').toEqual(before.stats);
+
+    // A stale extraction revision forces the "process" path for the same body: the upsert
+    // rewrites the same hash with a new body_received_at, and the logs_body_guard trigger keeps it.
+    await db.query('UPDATE logs SET stats_edit_sha256 = NULL WHERE id = $1', [before.id]);
+    await send(key.key, sidEdit, 'claude', body);
+    await queueA();
+    await expect.poll(async () => countOf(await outcomesOf(sidEdit), 'success'), 'the same body processed again').toBe(3);
+    const reprocessed = await claudeRow(sidEdit);
+    expect(reprocessed.body_sha256, 'the trigger kept the hash on the re-write').toBe(before.body_sha256);
+    await send(key.key, sidEdit, 'claude', body);
+    await queueA();
+    await expect.poll(async () => countOf(await outcomesOf(sidEdit), 'skipped'), 'the next identical upload is skipped').toBe(2);
+  });
+
+  await test.step('13. An upload older than the stored body (body_received_at in the future) writes nothing and is measured superseded', async () => {
+    const stored = await claudeRow(sidEdit);
+    const bodyBefore = await storedBody(db, sidEdit, 'claude');
+    await db.query("UPDATE logs SET body_received_at = now() + interval '1 hour' WHERE id = $1", [stored.id]);
+    try {
+      await send(key.key, sidEdit, 'claude', claudeEdit(`Older answer ${run}`));
+      await queueA();
+      await expect.poll(async () => countOf(await outcomesOf(sidEdit), 'superseded')).toBe(1);
+      expect(await storedBody(db, sidEdit, 'claude'), 'the newer body stays').toEqual(bodyBefore);
+      expect((await claudeRow(sidEdit)).body_rev, 'no body write').toBe(stored.body_rev);
+    } finally {
+      await db.query('UPDATE logs SET body_received_at = $2 WHERE id = $1', [stored.id, stored.body_received_at]);
+    }
+  });
+
+  await test.step('14. Three quick uploads of one transcript: one processed row (the newest body) plus two superseded measurements', async () => {
+    const sidBlock = `sess-block-${run}`;
+    const sidBurst = `sess-burst-${run}`;
+    // The queue processes one row at a time: a blocker upload whose tree lock the scenario
+    // holds keeps the tick busy, so all three uploads of the burst are queued together.
+    const release = await holdSessionTreeLock(db, sidBlock);
+    try {
+      await send(key.key, sidBlock, 'claude', claudeFor(sidBlock, `Blocker ${run}`, '17:00:00'));
+      await expect
+        .poll(async () => (await db.query<{ status: string }>('SELECT status FROM upload_queue WHERE session_id = $1', [sidBlock])).rows[0]?.status)
+        .toBe('processing');
+      for (const n of [1, 2, 3]) {
+        await send(key.key, sidBurst, 'claude', claudeFor(sidBurst, `Burst ${n} ${run}`, '17:10:00'));
+      }
+    } finally {
+      await release();
+    }
+    await queueA();
+    await expect.poll(async () => (await outcomesOf(sidBurst)).sort()).toEqual(['success', 'superseded', 'superseded']);
+    const stored = (await storedBody(db, sidBurst, 'claude')) as Array<{ message: { content: Array<{ text: string }> } }>;
+    expect(stored[0].message.content[0].text, 'the newest body is stored').toBe(`Burst 3 ${run}`);
+    expect(await queueRowCount(db, sidBurst), 'no queued leftovers').toBe(0);
+  });
+
+  await test.step('15. An artisyn upload adding an edit_result record re-extracts the transcript through the drain: lines_added 0 → 5', async () => {
+    const linesAdded = async () =>
+      (
+        await db.query<{ lines_added: number }>(
+          'SELECT ss.lines_added FROM session_stats ss JOIN sessions s ON s.id = ss.session_id WHERE s.session_id = $1',
+          [sidEdit],
+        )
+      ).rows[0]?.lines_added;
+    expect(await linesAdded(), 'a Write without a patch is uncovered').toBe(0);
+    await send(
+      key.key,
+      sidEdit,
+      'artisyn',
+      artisynEdit([
+        {
+          hook_event_name: 'PostToolUse',
+          timestamp: at('16:02:00'),
+          session_id: sidEdit,
+          tool_name: 'Write',
+          tool_use_id: writeId,
+          edit_result: { added: 5, removed: 0, changeKind: 'added', filePath: 'src/new.ts' },
+        },
+      ]),
+    );
+    await queueA();
+    await expect.poll(linesAdded, { timeout: 30_000 }).toBe(5);
+    await expect
+      .poll(async () => countRows(db, 'SELECT count(*) AS n FROM session_reextract_queue q JOIN sessions s ON s.id = q.session_pk WHERE s.session_id = $1', [sidEdit]))
+      .toBe(0);
+  });
+
+  await test.step('16. Legacy rows (no stored workflows, no body_rev, no gzip copy) converge: the backfill restores the workflows, the gzip drain a body_rev and a valid gzip copy', async () => {
+    const stored = await db.query<{ log_id: number; session_pk: number; workflows: unknown }>(
+      `SELECT l.id AS log_id, s.id AS session_pk, ss.workflows
+         FROM logs l JOIN sessions s ON s.id = l.session_id JOIN session_stats ss ON ss.session_id = s.id
+        WHERE s.session_id = $1 AND l.log_type = 'claude'`,
+      [sidEdit],
+    );
+    const { log_id: logId, session_pk: sessionPk, workflows } = stored.rows[0];
+    expect(workflows, 'the Workflow call is stored as one run').toHaveLength(1);
+    await db.query('UPDATE session_stats SET workflows = NULL, workflows_version = NULL WHERE session_id = $1', [sessionPk]);
+    await db.query('UPDATE logs SET body_gz = NULL, body_gz_rev = NULL, body_rev = NULL WHERE id = $1', [logId]);
+
+    await expect
+      .poll(
+        async () =>
+          (await db.query<{ v: number | null }>('SELECT workflows_version AS v FROM session_stats WHERE session_id = $1', [sessionPk])).rows[0]
+            .v,
+        { timeout: 30_000 },
+      )
+      .not.toBeNull();
+    const restored = await db.query<{ workflows: unknown }>('SELECT workflows FROM session_stats WHERE session_id = $1', [sessionPk]);
+    expect(restored.rows[0].workflows, 'the same workflows').toEqual(workflows);
+
+    const gzRow = async () =>
+      (
+        await db.query<{ body_rev: string | null; body_gz_rev: string | null; body_gz: Buffer | null; t: string }>(
+          'SELECT body_rev::text AS body_rev, body_gz_rev::text AS body_gz_rev, body_gz, body::text AS t FROM logs WHERE id = $1',
+          [logId],
+        )
+      ).rows[0];
+    await expect
+      .poll(async () => {
+        const r = await gzRow();
+        return r.body_rev !== null && r.body_gz_rev === r.body_rev && r.body_gz !== null;
+      }, { timeout: 30_000 })
+      .toBe(true);
+    const r = await gzRow();
+    expect(gunzipSync(r.body_gz!).toString('utf8'), 'the gzip copy is the body text').toBe(r.t);
   });
 });

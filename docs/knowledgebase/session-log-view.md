@@ -5,7 +5,7 @@ description: "Session log view (Logs tab): the /logs payload contract (agent- pr
 tags:
   - client
   - logs
-generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-23T00:00:00+04:00" }
 ---
 
 # Session Log View
@@ -13,8 +13,10 @@ generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
 ## Overview
 
 The session log view is the **Logs tab** inside `RepositoryView`. It replaces a raw JSON dump with a structured
-display of Claude Code telemetry data. All parsing is done **client-side** from raw log events returned by
-`GET /api/v1/repositories/:repoId/sessions/:sessionId/logs`.
+display of Claude Code telemetry data. All parsing is done **client-side** from raw log events. The viewer
+loads them in parts (`GET …/sessions/:sessionId/logs/parts` plus one request per stored log, see
+[Client: loading a session in parts](#client-loading-a-session-in-parts)); the single-document
+`GET /api/v1/repositories/:repoId/sessions/:sessionId/logs` stays for older clients.
 
 Key files live in `client/src/viewer/pages/repository/session-log/`:
 
@@ -84,13 +86,30 @@ response type to grep. The named types live only on the client: `SessionLogsData
 in `log-parser.ts`). `WorkflowRun` is the exception: declared in
 `server/src/logs/workflow-extractor.ts` and mirrored by hand in `client/src/models/workflows.ts`.
 
+- **Streaming (bounded memory).** The answer is **streamed one log row at a time**
+  (`SessionLogsStreamService.writeLegacyLogs`, `server/src/logs/session-logs-stream.service.ts`):
+  first every access check and every small figure is resolved from metadata only
+  (`readTreeLogsMeta` in `server/src/logs/session-tree-logs-meta.ts` — the tree's log rows
+  without bodies, root claude/artisyn first, then sub-agents by `sessions.session_id`; stats;
+  workflows; advisor; attribution; harness), 404 / 422 are answered before any byte, then one
+  `SELECT body::text FROM logs WHERE id = $1` per row is written through the backpressure writer
+  (`server/src/logs/streaming/response-stream.ts`). The bytes are identical to the former
+  single-string answer. At most `SESSION_LOGS_MAX_CONCURRENT_STREAMS` (default 2) bodies stream
+  per worker at once (`LogStreamLimiter`, FIFO, no timeout; a queued request leaves when its
+  client closes). A failure after the first byte destroys the socket — the client sees a broken
+  response, never a truncated 200 that parses.
+- **`workflows`** come from `session_stats.workflows`, stored at ingest
+  (`readStoredWorkflows`, `server/src/logs/stored-workflows.ts`, keys put back in extractor
+  order); a session the backfill has not reached yet falls back to parsing the root claude body.
 - **`main`** = the session's `artisyn` body spliced **before** its `claude` body (one array, artisyn
   lines first). No `claude` row → 404; a null body → 422.
 - **Descendants** (`subagents`): every session below the root at any depth
   (`getDescendantSessionIds`), each `LEFT JOIN`ed only to its `claude-subagent` log row. A
   descendant without that row is dropped from `subagents` but still feeds the workflow linkage;
   `subagentStats` (`selectSubagentStats`) has its own guard — a `session_stats` row plus some
-  transcript row, so an OTEL-only node is left out. A descendant's `claude` rows are never read. `parentSessionId` is the
+  transcript row, so an OTEL-only node is left out. Each entry ends with `cacheWrite5mTokens` /
+  `cacheWrite1hTokens` (the TTL split of `cacheWriteTokens`, appended last so earlier keys keep
+  their position), so a sub-agent's cost can be priced from its stats without its log body. A descendant's `claude` rows are never read. `parentSessionId` is the
   DB-authoritative immediate parent (`sessions.parent_session_id`) — the only reliable nesting
   source beyond depth 1 (see "Sub-agent nesting"). Each entry also carries `agentDescription` /
   `workflowPhase` (`string | null`; `sessions.agent_description` / `workflow_phase`, sent by hook
@@ -108,8 +127,98 @@ in `log-parser.ts`). `WorkflowRun` is the exception: declared in
   `sessions.workflow_run_id` + `parent_session_id`. See "Workflow tool lifecycle" below.
 - **`harnessSnapshot`** is loaded by the artisyn log **owner**, not the viewer (see "Special log
   event fields").
-- Adding a field: extend the string in `getSessionLogs` and `SessionLogsData`; keep it optional on
-  the client if older cached responses may lack it.
+- Adding a field: extend the extras in `gatherSessionLogsMeta` (shared with the parts manifest),
+  the tail string in `getSessionLogs` and `SessionLogsData`; keep it optional on the client if
+  older cached responses may lack it.
+
+### The parts API (manifest + one blob per request)
+
+The viewer's replacement for one big `/logs` document (task 2026-11-23-session-logs-streaming,
+DD-8, DD-11..DD-14). Server: `repositories.controller.ts` (`getSessionLogParts`,
+`getSessionLogPart`) and `server/src/logs/session-log-parts.service.ts`; types:
+`server/src/logs/dto/session-log-parts.dto.ts`. `/logs` stays for older clients and exports.
+
+- **Manifest** — `GET …/sessions/:sessionId/logs/parts?teamId=`. Same access chain and errors as
+  `/logs` (`resolveSessionLogsAccess`; 404 without a root claude row, 422 for its NULL body); no
+  body is read (only the root claude body while the workflows backfill has not reached the
+  session). `parts` lists every `readTreeLogsMeta` row whose body is not NULL, in the same order
+  (root `claude`, root `artisyn`, then `claude-subagent` rows by `sessions.session_id`), each with
+  `sessionId`, `logType`, `rev`, `parentSessionId`, `agentDescription`, `workflowPhase`,
+  `workflowRunId`. The other keys (`subagentStats`, `rootStats`, `workflows`, `turnEndAdvisor`,
+  `sessionAttribution`, `harnessSnapshot`) are the very objects `/logs` carries — both routes build
+  them in one private method, `gatherSessionLogsMeta`.
+- **`rev`** (DD-8) — `logs.body_rev` (a sequence value the `logs_body_guard` trigger assigns on
+  every body write) when set, else `'u' + updated_at` in microseconds for a legacy row the gzip
+  builder has not reached yet. Compare it only for equality: the sequence has gaps. A changed
+  `rev` is what tells the client a part must be refetched (FR-4).
+- **`derivedLagging`** (DD-14) — true when an `upload_queue` row of one of the tree's sessions is
+  still `pending` / `processing` more than `DERIVED_LAG_MS` (30 s) after `received_at`, or a
+  `session_reextract_queue` row for the root is older than that. The viewer shows a muted "figures
+  may lag" notice; nothing else depends on it.
+- **Part body** — `GET …/logs/parts/:partSessionId/:logType?teamId=&rev=` answers the row's body
+  as a JSON array of log lines. The client merges the root's artisyn lines before its claude
+  lines, exactly as `/logs` `main` does (DD-4). `?rev=` is only a cache-buster.
+  - Errors: the `/logs` access errors first; `logType` outside `claude` / `artisyn` /
+    `claude-subagent` → 400; a `(partSessionId, logType)` not among the tree's rows with a body →
+    404 `Session log part not found`.
+  - Headers (mirroring `common/precompressed-static.ts`): `Content-Type: application/json;
+    charset=utf-8`, `Vary: Accept-Encoding`, `ETag: "<rev>"`, `Cache-Control: private, no-cache`.
+  - **304** when `If-None-Match` names the current ETag — decided from metadata, so no body is
+    read and no `LogStreamLimiter` permit is taken.
+  - **gzip** when the stored copy is valid (`logs.body_gz`, built by `LogBodyGzService`, valid
+    while `body_gz_rev = body_rev`) and `Accept-Encoding` admits gzip: the stored bytes are sent
+    as-is with `Content-Encoding: gzip` and `Content-Length`.
+  - **Identity fallback**: a valid copy but no gzip accepted → the copy is decompressed on the fly
+    (`zlib.createGunzip`); no valid copy yet → `body::text` is streamed. One query reads either
+    the copy or the text, never both, and the ETag sent with a 200 is the revision of the bytes
+    actually read.
+  - The body is written under a `LogStreamLimiter` permit through the backpressure writer, like
+    `/logs`; a failure after the first byte destroys the socket.
+
+### Client: loading a session in parts
+
+Client side of the parts API (DD-13, DD-30..DD-33), in `client/src/viewer/pages/repository/`:
+
+- **`session-parts/useSessionLogParts.ts`** — called by `useRepositoryData`. The manifest query
+  keeps the historic key `['session-logs', repoId, sessionId, teamId]`, so the watermark, Refresh
+  and every invalidator refetch only the manifest. Part queries are keyed
+  `['session-log-part', repoId, sessionId, partSessionId, logType, rev]` with
+  `staleTime: Infinity`: a changed `rev` refetches only parts already loaded, and the previous
+  body stays on screen until the new one lands. The root claude + artisyn parts load with the
+  session; sub-agent parts load only on `requestAgent(id, withDescendants)` / `requestAll()`, at
+  most `PART_LOAD_CONCURRENCY` (3) at a time. `assemble-session-logs.ts` turns manifest + loaded
+  parts into the legacy `SessionLogsData` (artisyn lines, then claude lines; `subagents` = loaded
+  parts only), so views written against `/logs` keep their props. `subagentLogsMap` holds the
+  loaded bodies; `agentParentMap`, `subagentMeta` and `knownAgentIds` cover every manifest part.
+- **`session-parts/SessionPartsContext.tsx`** — `{requestAgent, requestAll, loaded, total,
+  allLoaded}`, built in `RepositoryView` and provided by `SessionDetailPane` around the tab
+  content; read with `useSessionParts()`. Outside a provider every request resolves at once and
+  `allLoaded` is true.
+- **`session-parts/AllSessionPartsGate.tsx`** — views that aggregate across the whole agent tree
+  render only once every part is in: the tabs `bash`, the charts (`dashboard`, `context-growth`,
+  `context-usage`, `agent-tree`, `timeline`, `tool-heatmap`, `call-tree`), `usage` and
+  `harness-usage` (wrapped in `SessionTabContent`). It calls `requestAll()` on mount and shows
+  "Loading session logs {n} of {m}" with a progress bar meanwhile. The header's Shell count badge
+  and the MCP failure dot (`SessionDetailPane`) also wait for `allLoaded`; the pane's `usage` walk
+  covers the root transcript only (tree figures come from `subagentStats`).
+- **On-demand agents** — `AgentActivationItem` requests its agent (with descendants) on first
+  open, shows "Loading agent log…" until the part arrives, and parses the log only while open.
+  `ToolViewContext.openSubAgent` awaits `requestAgent(id, true)` before opening
+  `WorkflowAgentModal` (the latest click wins). The `tu` deep link in `SessionLogView` calls
+  `requestAll()` first, since the call may sit in any sub-agent's log.
+- **Banners** — `SessionLoadBanners.tsx` (under the header) holds the "Loading updated session…"
+  line and the non-dismissible amber `derivedLagging` notice.
+- **Stable root totals (DD-31)** — `parseSessionLogs(…, {knownSubagentIds})` decides which agents
+  are priced from their own transcript from the manifest's ids, not from the loaded
+  `subagentLogs`, so the root's totals do not shift as parts arrive.
+- **Pricing from stats (DD-32)** — `statsToTokenBreakdown(entry)` (in `log-parser.ts`) turns a
+  `subagentStats` entry into a `TokenBreakdown` (`cacheWrite5m = cacheWrite5mTokens ??
+  cacheWriteTokens`, `cacheWrite1h = cacheWrite1hTokens ?? 0`, so an older server still prices
+  everything as 5m). `computeTurnDirectAgentCost` and `computeWorkflowCostPerToken` take
+  `subagentStats` and price an agent whose part is not loaded from its stats entry (its `model`
+  and the helper); a loaded agent is still priced from its transcript.
+- **Export** — `session-export-runner.ts` loads the manifest and every part with the same
+  fetchers and assembles them; it no longer calls `/logs`.
 
 ### Sub-agent meta labels (description / phase)
 

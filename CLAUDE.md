@@ -148,7 +148,7 @@ skills and workflows); this table is human documentation and must be kept in syn
   e2e run drops the backend mid-suite. This is encoded as the `app` group in
   `repo-health-checks.json`; the lint/typecheck and unit (algorithm) checks — including the server
   `npm run test`, which needs no DB — are the `static` group and safe to run alongside them.
-- `npm run test:scenarios` (checks `scenarios-a` 900 s, `scenarios-b`/`-c`/`-d` 600 s each, `finalOnly` — final verification only; mode A stays one integrated run on purpose) builds and
+- `npm run test:scenarios` (checks `scenarios-a` 1200 s, `scenarios-b`/`-c`/`-d` 600 s each, `finalOnly` — final verification only; mode A stays one integrated run on purpose) builds and
   starts its own isolated stand (own port, own `scn_*` schema) and never touches the dev server;
   it needs Postgres and, for modes B and D, Mailpit — `docker compose -f tests/scenarios/docker-compose.yml up -d`.
   Mode D (`strict-managed`) restarts its stand once on the same schema before the scenarios run.

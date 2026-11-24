@@ -13,6 +13,9 @@
 //     grandchild B appears inside A's expanded block, under A's own «Agents».
 //   - The turn header prints «main + sub-agents = total» as three cost figures; the sub-agent part is
 //     the sum of that turn's agents (A + B for P1, D for P2).
+//   - logs load in parts (2026-11-23 session-logs-streaming): an agent's part is requested when
+//     its block is first expanded (with its descendants), and a tab that aggregates the whole
+//     tree (Bash) shows «Loading session logs n of m» until every part is there (steps 4, 5a).
 //
 // Replaces:
 //   - client/src/viewer/__tests__/unit/log-parser.test.ts (sub-agent nesting, cross-transcript nesting,
@@ -93,15 +96,27 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
     expect(rows[0].costBreakdown.subagentCost).toBeCloseTo(['a', 'b', 'd'].reduce((n, k) => n + node(k).costUsd!, 0), 6);
   });
 
-  await test.step('4. Logs: P1 lists A under Agents; A expanded shows B under its own Agents (nesting 2)', async () => {
+  // Parts requested by the page (2026-11-23 session-logs-streaming DD-11 / DD-13): path only.
+  const partRequests: string[] = [];
+  page.on('request', (r) => {
+    const { pathname } = new URL(r.url());
+    if (pathname.includes('/logs/parts')) partRequests.push(decodeURIComponent(pathname));
+  });
+  const partPath = (k: string) => `/logs/parts/${id(k)}/claude-subagent`;
+  const requested = (k: string) => partRequests.some((p) => p.endsWith(partPath(k)));
+
+  await test.step('4. Logs: P1 lists A under Agents; A expanded shows B under its own Agents (nesting 2); no agent part loads before its expand, expanding A loads A and its nested B, not D', async () => {
     await openSession(page, owner, repo.repoId, sid, { tab: 'logs' });
     const turns = logTurns(page);
     await expect(turns).toHaveCount(E.prompts);
+    expect(partRequests.filter((p) => p.includes('/logs/parts/agent-')), 'no agent part before an expand').toEqual([]);
     const p1 = turns.first();
     await expect(p1.getByText('Extract invoice tax module')).toBeVisible();
     await expect(p1.getByText('Create tax module')).toHaveCount(0);
     await p1.getByText('Extract invoice tax module').click();
     await expect(p1.getByText(id('a'), { exact: true })).toBeVisible();
+    await expect.poll(() => requested('a'), 'A is requested on expand').toBe(true);
+    await expect.poll(() => requested('b'), 'its nested agent B with it').toBe(true);
     const b = p1.getByText('Create tax module');
     await expect(b).toBeVisible();
     await b.click();
@@ -110,6 +125,7 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
     // spawning Agent call's description still comes first in the Agents row (FR-4a order); the
     // description shows only in the turn's Sub-agents tree (step 4a).
     await expect(turns.nth(1).getByText('Add tax preview route')).toBeVisible();
+    expect(requested('d'), 'D is not expanded, so not loaded').toBe(false);
   });
 
   await test.step('4a. Logs: P2 Sub-agents tree labels D by its .meta.json description deep-research, full id in the tooltip, not monospace', async () => {
@@ -134,6 +150,30 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
       expect(p.costUsd + sub).toBeCloseTo(p.costWithSubagentsUsd, 6);
     }
     expect(perPrompt.reduce((n, p) => n + p.costWithSubagentsUsd, 0)).toBeCloseTo(E.costUsd!, 6);
+  });
+
+  await test.step('5a. Bash tab: it waits for every part — «Loading session logs» while D loads, then the tree’s Bash calls', async () => {
+    expect(requested('d'), 'D still not loaded').toBe(false);
+    let releaseD = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseD = resolve;
+    });
+    const isD = (url: URL) => url.pathname.endsWith(partPath('d'));
+    await page.route(isD, async (route) => {
+      await gate;
+      await route.continue();
+    });
+    try {
+      await selectSessionTab(page, 'bash');
+      await expect(page.getByTestId('session-parts-loading')).toContainText('Loading session logs');
+      await expect(page.getByTestId('bash-call-row')).toHaveCount(0);
+    } finally {
+      releaseD();
+    }
+    await expect(page.getByTestId('session-parts-loading')).toHaveCount(0);
+    await expect(page.getByTestId('bash-call-row')).toHaveCount(E.tools.Bash.calls);
+    expect(requested('d')).toBe(true);
+    await page.unroute(isD);
   });
 
   await test.step('6. Info: Sub-agents spawned 3, Lines changed 36 (not 0), Cost / line, Lines / autonomous hr, work time not stretched', async () => {

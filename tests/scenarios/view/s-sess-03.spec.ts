@@ -25,7 +25,10 @@
 // Recommendations modal (algorithm doc startup-recommendations.md; numbers from its expected.json
 // `recommendations` block) and checks that GS-07 has no Recommendations button. Step 8d uploads one whose
 // startup estimate exceeds its measured total (the over-total edge state) and has no
-// prompt_snapshot, so no View system prompt button.
+// prompt_snapshot, so no View system prompt button. Steps 12–15 (2026-11-23 session-logs-streaming)
+// check the parts read path on GS-05: on open only the manifest and the root parts load; a part
+// answers gzip; legacy `/logs` and the delta full snapshot equal the parts; a foreign user gets
+// 4xx; an upload of one loaded agent refetches only its part (FR-4); and the derived-lag notice.
 //
 // Code facts that differ from the design text:
 //   - the prompt text of a turn is shown in its header, not collapsed behind a click; the scenario
@@ -56,6 +59,7 @@ import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { loadExpected, materializeGolden } from '../helpers/golden';
 import { ownRepoId, promptSessionBodies, type PromptSession } from '../helpers/prompt-session';
+import { holdSessionTreeLock } from '../helpers/ingest';
 import { waitForQueueIdle } from '../helpers/queue';
 import { hms, infoValue, int, logTurns, num, openSession, turnMetric, uploadGoldenRepo, usd4 } from '../helpers/session-view';
 
@@ -122,6 +126,38 @@ interface ListRow {
   hasWorkflow: boolean;
 }
 
+/** `GET …/logs/parts` (2026-11-23 session-logs-streaming DD-11), the fields steps 12–15 read. */
+interface PartsManifest {
+  parts: Array<{ sessionId: string; logType: string; rev: string }>;
+  subagentStats: Record<string, unknown>;
+  rootStats: unknown;
+  workflows: unknown;
+  turnEndAdvisor: unknown;
+  sessionAttribution: unknown;
+  harnessSnapshot: unknown;
+  derivedLagging: boolean;
+}
+
+/** The legacy `GET …/logs` document. */
+interface LegacyLogs {
+  main: unknown[];
+  subagents: Array<{ sessionId: string; logs: unknown[] }>;
+  subagentStats: Record<string, unknown>;
+  rootStats: unknown;
+  workflows: unknown;
+  turnEndAdvisor: unknown;
+  sessionAttribution: unknown;
+  harnessSnapshot: unknown;
+}
+
+/** A full snapshot of `GET …/logs/delta` (no cursor). */
+interface DeltaSnapshot {
+  reload: boolean;
+  rootArtisynLines: unknown[];
+  rootClaudeLines: unknown[];
+  newSubagents: Array<{ sessionId: string; logs: unknown[] }>;
+}
+
 interface LogEntry {
   type?: string;
   isSidechain?: boolean;
@@ -135,7 +171,7 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
   users,
   page,
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const G7 = loadExpected('gs-07').roots[0];
   const G1 = loadExpected('gs-01').roots[0];
   const owner = await users.user('user', { label: 'ss03-owner' });
@@ -789,21 +825,40 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(dialog).toHaveCount(0);
 
     page.off('request', onRequest);
-    expect(apiRequests, 'the table and the agent modal reuse the loaded Logs payload').toEqual([]);
+    // Opening the run loads its two agents' log parts (2026-11-23 session-logs-streaming DD-13);
+    // the table and the agent modal then reuse them.
+    const agentParts = apiRequests.filter((u) => /\/logs\/parts\/agent-[^/]+\/claude-subagent$/.test(new URL(u).pathname));
+    expect(agentParts.map((u) => new URL(u).pathname.split('/').slice(-2)[0]).sort(), 'the run loads its agents').toEqual(
+      [repo.agentId('gs-05', 'w1'), repo.agentId('gs-05', 'w2')].sort(),
+    );
+    expect(apiRequests.filter((u) => !agentParts.includes(u)), 'the table and the agent modal reuse the loaded parts').toEqual([]);
   });
 
-  await test.step('8b2. GS-05 agent description in Charts and Session Map: the Agent Tree node and the Session Map card of W1 read load-config', async () => {
+  await test.step('8b2. GS-05 agent description in Charts and Session Map: the Agent Tree node and the Session Map card of W1 read load-config; the Map loads the parts, never /logs/delta', async () => {
     await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'agent-tree' });
     const treeNode = page.locator('g[data-testid="agent-tree-node"][data-agent-id$="gs05w1"]');
     await expect(treeNode, 'W1 node in the Agent Tree').toHaveCount(1);
     await expect(treeNode.getByText('load-config'), 'the Agent Tree labels W1 by its description').toBeVisible();
 
-    // The Map is built from /logs/delta, so this also covers the newSubagents path.
-    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'session-map' });
-    await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 20_000 });
-    const card = page.locator('[data-testid^="session-map-agent-"][data-testid$="gs05w1"]');
-    await expect(card, 'W1 card').toHaveCount(1);
-    await expect(card.locator('[title="load-config"]'), 'the W1 card title is its description').toHaveText('load-config');
+    // The Map is built from the log parts (manifest + every part), never from /logs/delta: the
+    // description reaches the card through the part's manifest entry.
+    const mapRequests: string[] = [];
+    const onMapRequest = (req: { url(): string }) => {
+      const url = req.url();
+      if (url.includes('/logs/')) mapRequests.push(url);
+    };
+    page.on('request', onMapRequest);
+    try {
+      await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'session-map' });
+      await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 20_000 });
+      const card = page.locator('[data-testid^="session-map-agent-"][data-testid$="gs05w1"]');
+      await expect(card, 'W1 card').toHaveCount(1);
+      await expect(card.locator('[title="load-config"]'), 'the W1 card title is its description').toHaveText('load-config');
+    } finally {
+      page.off('request', onMapRequest);
+    }
+    // The sub-agent parts may already be cached from the Agent Tree above; the W1 card proves the Map has them.
+    expect(mapRequests.filter((u) => u.includes('/logs/delta')), 'the Map never asks for /logs/delta').toEqual([]);
 
     // Back to Logs, the state 8c starts from.
     await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'logs' });
@@ -990,6 +1045,183 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await page.getByTestId('session-map-order').selectOption('cost');
     const order = await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''));
     expect(order.map((t) => t.slice(-6))).toEqual(['gs05w1', 'gs05w2']);
+    expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+  });
+
+  // Steps 12–15 (2026-11-23 session-logs-streaming, FR-1..FR-4): the viewer loads a session as
+  // a manifest plus one part per stored log row. GS-05 (root claude + artisyn, workflow agents
+  // W1 and W2) is the tree. Last in the scenario: step 14 re-uploads W1 with one extra line.
+  const sid5 = repo.rootId('gs-05');
+  const w1 = repo.agentId('gs-05', 'w1');
+  const w2 = repo.agentId('gs-05', 'w2');
+  const logsBase = `/api/v1/repositories/${repo.repoId}/sessions/${encodeURIComponent(sid5)}/logs`;
+  const partUrl = (sessionId: string, logType: string) => `${logsBase}/parts/${encodeURIComponent(sessionId)}/${logType}`;
+  const partRequests: string[] = [];
+  page.on('request', (r) => {
+    const { pathname } = new URL(r.url());
+    if (pathname.includes('/logs')) partRequests.push(decodeURIComponent(pathname.slice(pathname.indexOf('/sessions/'))));
+  });
+  const manifestPath = `/sessions/${sid5}/logs/parts`;
+  const partPath = (sessionId: string, logType: string) => `/sessions/${sid5}/logs/parts/${sessionId}/${logType}`;
+  const fetchManifest = async (): Promise<PartsManifest> => {
+    const res = await owner.api.get(`${logsBase}/parts`);
+    expect(res.status(), 'GET .../logs/parts').toBe(200);
+    return (await res.json()) as PartsManifest;
+  };
+  const fetchPart = async (sessionId: string, logType: string): Promise<unknown[]> => {
+    const res = await owner.api.get(partUrl(sessionId, logType));
+    expect(res.status(), `part ${sessionId}/${logType}`).toBe(200);
+    return (await res.json()) as unknown[];
+  };
+
+  await test.step('12. opening GS-05 requests the manifest and the root claude and artisyn parts only — no legacy /logs, no agent part', async () => {
+    // A fresh document, so nothing comes from the previous steps' query cache.
+    await page.goto('about:blank');
+    partRequests.length = 0;
+    await openSession(page, owner, repo.repoId, sid5, { tab: 'logs' });
+    await expect(logTurns(page).first()).toBeVisible({ timeout: 20_000 });
+    const mine = () => partRequests.filter((p) => p.includes(`/sessions/${sid5}/logs`));
+    await expect.poll(() => mine().includes(partPath(sid5, 'artisyn'))).toBe(true);
+    expect(new Set(mine())).toEqual(new Set([manifestPath, partPath(sid5, 'claude'), partPath(sid5, 'artisyn')]));
+    expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+  });
+
+  await test.step('13. API: a part answers gzip once the builder ran (identity without gzip); legacy /logs is unchanged and equals the parts; the delta full snapshot has the same lines; a foreign user gets 4xx', async () => {
+    const manifest = await fetchManifest();
+    expect(manifest.parts.map((p) => `${p.sessionId}/${p.logType}`), 'root claude, root artisyn, then agents by id').toEqual(
+      [`${sid5}/claude`, `${sid5}/artisyn`, ...[w1, w2].sort().map((w) => `${w}/claude-subagent`)],
+    );
+    expect(manifest.derivedLagging).toBe(false);
+    const rootClaudeRev = manifest.parts[0].rev;
+
+    // The gzip copy is built in the background (LOG_BODY_GZ_INTERVAL_MS, 1 s on the stand).
+    await expect
+      .poll(async () => (await owner.api.get(partUrl(sid5, 'claude'), { headers: { 'Accept-Encoding': 'gzip' } })).headers()['content-encoding'], {
+        timeout: 30_000,
+      })
+      .toBe('gzip');
+    const gz = await owner.api.get(partUrl(sid5, 'claude'), { headers: { 'Accept-Encoding': 'gzip' } });
+    expect(gz.headers()['etag']).toBe(`"${rootClaudeRev}"`);
+    const plain = await owner.api.get(partUrl(sid5, 'claude'), { headers: { 'Accept-Encoding': 'identity' } });
+    expect(plain.headers()['content-encoding'], 'decompressed for a client without gzip').toBeUndefined();
+    const claudeLines = (await gz.json()) as unknown[];
+    expect((await plain.json()) as unknown[]).toEqual(claudeLines);
+    const artisynLines = await fetchPart(sid5, 'artisyn');
+    const agentLines: Record<string, unknown[]> = {};
+    for (const w of [w1, w2]) agentLines[w] = await fetchPart(w, 'claude-subagent');
+
+    const legacyRes = await owner.api.get(logsBase);
+    expect(legacyRes.status()).toBe(200);
+    const legacy = JSON.parse(await legacyRes.text()) as LegacyLogs;
+    expect(Object.keys(legacy), '/logs keys in their historic order').toEqual([
+      'main', 'subagents', 'subagentStats', 'rootStats', 'workflows', 'turnEndAdvisor', 'sessionAttribution', 'harnessSnapshot',
+    ]);
+    expect(legacy.main, 'main = artisyn lines, then claude lines').toEqual([...artisynLines, ...claudeLines]);
+    expect(legacy.subagents.map((s) => s.sessionId).sort()).toEqual([w1, w2].sort());
+    for (const s of legacy.subagents) expect(s.logs, s.sessionId).toEqual(agentLines[s.sessionId]);
+    for (const [k, stats] of Object.entries(legacy.subagentStats)) {
+      expect(stats, k).toHaveProperty('cacheWrite5mTokens');
+      expect(stats, k).toHaveProperty('cacheWrite1hTokens');
+    }
+    expect(manifest.subagentStats).toEqual(legacy.subagentStats);
+    expect(manifest.rootStats).toEqual(legacy.rootStats);
+    expect(manifest.workflows).toEqual(legacy.workflows);
+    expect(manifest.turnEndAdvisor).toEqual(legacy.turnEndAdvisor);
+    expect(manifest.sessionAttribution).toEqual(legacy.sessionAttribution);
+    expect(manifest.harnessSnapshot).toEqual(legacy.harnessSnapshot);
+
+    const deltaRes = await owner.api.get(`${logsBase}/delta`);
+    expect(deltaRes.status()).toBe(200);
+    const delta = (await deltaRes.json()) as DeltaSnapshot;
+    expect(delta.reload).toBe(false);
+    expect([...delta.rootArtisynLines, ...delta.rootClaudeLines], 'delta root lines = /logs main').toEqual(legacy.main);
+    expect(delta.newSubagents.map((s) => s.sessionId).sort()).toEqual([w1, w2].sort());
+    for (const s of delta.newSubagents) expect(s.logs, s.sessionId).toEqual(agentLines[s.sessionId]);
+
+    const stranger = await users.user('user', { label: 'ss03-stranger' });
+    for (const url of [`${logsBase}/parts`, partUrl(sid5, 'claude'), partUrl(w1, 'claude-subagent')]) {
+      const status = (await stranger.api.get(url)).status();
+      expect(status, `foreign ${url}`).toBeGreaterThanOrEqual(400);
+      expect(status, `foreign ${url}`).toBeLessThan(500);
+    }
+  });
+
+  await test.step('14. FR-4: with every part loaded (Statistics), one upload of W1 then Refresh refetches the manifest and the W1 part only', async () => {
+    await openSession(page, owner, repo.repoId, sid5, { tab: 'usage' });
+    await expect(page.getByTestId('session-usage-tab')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('session-parts-loading')).toHaveCount(0);
+    const before = (await fetchManifest()).parts.map((p) => p.rev);
+
+    const upload = materializeGolden('gs-05', { runId: repo.runId }).uploads.find((u) => u.sessionId === w1);
+    if (!upload) throw new Error('GS-05 has no W1 upload');
+    const lines = upload.body.split('\n').filter((l) => l.trim() !== '');
+    const last = JSON.parse(lines[lines.length - 1]) as { timestamp?: string };
+    const marker = { type: 'system', subtype: 'informational', uuid: `${w1}-fr4`, timestamp: last.timestamp, content: 'FR-4 marker' };
+    const key = await createApiKey(owner.api);
+    partRequests.length = 0;
+    const res = await api.post('/api/v2/logs', {
+      params: {
+        sessionId: w1,
+        type: 'claude-subagent',
+        parentSessionId: upload.parentSessionId ?? sid5,
+        ...(upload.workflowRunId ? { workflowRunId: upload.workflowRunId } : {}),
+        ...(upload.agentDescription ? { agentDescription: upload.agentDescription } : {}),
+        ...(upload.workflowPhase ? { workflowPhase: upload.workflowPhase } : {}),
+      },
+      headers: { 'Content-Type': 'text/plain', 'X-API-Key': key.key },
+      data: [...lines, JSON.stringify(marker)].join('\n') + '\n',
+    });
+    expect(res.status()).toBe(201);
+    await waitForQueueIdle(db, owner.id, { timeoutMs: 30_000 });
+    const after = (await fetchManifest()).parts.map((p) => p.rev);
+    expect(after.filter((rev, i) => rev !== before[i]), 'only W1 has a new revision').toHaveLength(1);
+
+    await page.getByTestId('session-refresh').click();
+    await expect.poll(() => partRequests.includes(partPath(w1, 'claude-subagent'))).toBe(true);
+    // Let any other refetch the Refresh would cause start before the check.
+    await page.waitForTimeout(1_500);
+    const parts = partRequests.filter((p) => p.includes(`/sessions/${sid5}/logs/parts/`));
+    expect(parts, 'only the changed part is refetched').toEqual([partPath(w1, 'claude-subagent')]);
+    expect(partRequests.filter((p) => p.endsWith(`/sessions/${sid5}/logs`)), 'no legacy /logs').toEqual([]);
+    expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+  });
+
+  await test.step('15. derivedLagging: a re-extract queued for over 30 s shows the lag notice; once the drain ran, Refresh clears it', async () => {
+    const notice = page.getByTestId('session-derived-lagging');
+    await expect(notice).toHaveCount(0);
+    // Holding the tree's ingest lock keeps the re-extract drain from finishing the row.
+    const release = await holdSessionTreeLock(db, sid5);
+    try {
+      await db.query(
+        `INSERT INTO session_reextract_queue (session_pk, requested_at)
+         SELECT id, now() - interval '1 minute' FROM sessions WHERE session_id = $1
+         ON CONFLICT (session_pk) DO UPDATE SET requested_at = excluded.requested_at`,
+        [sid5],
+      );
+      expect((await fetchManifest()).derivedLagging).toBe(true);
+      await page.getByTestId('session-refresh').click();
+      await expect(notice).toBeVisible();
+      await expect(notice).toContainText('Some figures may lag behind the latest upload');
+    } finally {
+      await release();
+    }
+    await expect
+      .poll(
+        async () =>
+          Number(
+            (
+              await db.query<{ n: string }>(
+                'SELECT count(*) AS n FROM session_reextract_queue q JOIN sessions s ON s.id = q.session_pk WHERE s.session_id = $1',
+                [sid5],
+              )
+            ).rows[0].n,
+          ),
+        { timeout: 30_000 },
+      )
+      .toBe(0);
+    expect((await fetchManifest()).derivedLagging).toBe(false);
+    await page.getByTestId('session-refresh').click();
+    await expect(notice).toHaveCount(0);
     expect(pageErrors, pageErrors.join('\n')).toEqual([]);
   });
 });

@@ -831,7 +831,9 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     title: "A restricted-team manager on a member's session: no Raw Logs tab, tab=raw-logs falls back",
     negative: true,
     expectTestId: 'tab-session-summary',
-    expectedNetwork: [{ url: '/api/v1/repositories/\\d+/sessions/[^/]+/logs$', status: 403 }],
+    // The viewer reads the session log through the parts manifest (`/logs/parts`); `/logs` stays
+    // for callers that still use the whole-tree body. Both answer 403 to a foreign actor.
+    expectedNetwork: [{ url: '/api/v1/repositories/\\d+/sessions/[^/]+/logs(/parts)?$', status: 403 }],
   },
 ];
 

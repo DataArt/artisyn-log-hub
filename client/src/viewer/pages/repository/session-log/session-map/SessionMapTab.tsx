@@ -1,8 +1,8 @@
 /**
  * The Session Map tab (session-map): main session, workflow runs and agents as cards over time,
- * live or replayed. Wires `useSessionMapData` and `useSessionMapPlayback` to the header, cards,
- * side panel and timeline, and registers the Map's own poll as the session header's Refresh
- * action (DD-10 "Header refresh").
+ * live or replayed. Wires `useSessionMapData` (built from the session's log parts) and
+ * `useSessionMapPlayback` to the header, cards, side panel and timeline. The session header's
+ * Refresh re-reads the parts manifest, as on every other tab.
  *
  * - Layout: the header and the timeline stay in view; the cards between them are a canvas that
  *   scrolls both ways and pans with a mouse drag (`useDragScroll`). The main card stays in view
@@ -10,12 +10,13 @@
  * - The selected card lives in the `smSel` URL param (DD-20): `main`, `group:<key>` or an agent
  *   id. An unknown id is ignored; the param is dropped when the session changes and when the tab
  *   unmounts.
- * - Poll errors (DD-10): before any state, or on 403 / 404, the session-logs error panel; with a
- *   state, a small "update failed" note in the header while polling continues.
+ * - Errors: before any state, the session-logs error panel; with a state, a small
+ *   "update failed" note in the header while the live poll continues.
  * - Render budget (DD-19): a `session-map:render-start` mark per render and a
  *   `session-map:render` measure in the commit effect.
  */
 import { useEffect, useMemo, useState } from 'react';
+import type { SessionLogsData } from '../../../../api';
 import type { ModelPricingMap } from '../../../../../models/pricing';
 import type { RepoConfig } from '../../../../../models/repositories';
 import { LazyFallback } from '../../../../components/LazyFallback';
@@ -45,8 +46,10 @@ export interface SessionMapTabProps {
   firstPrompt: string | null;
   pricing: ModelPricingMap | undefined;
   repoConfig: RepoConfig | null;
-  /** Called with the Map's poll on mount and with `null` on unmount. */
-  registerRefresh: (fn: (() => void) | null) => void;
+  /** The assembled logs of every part (rendered behind `AllSessionPartsGate`). */
+  logs: SessionLogsData | undefined;
+  /** The error of the session's parts query, if any. */
+  logsError: Error | null;
 }
 
 const RENDER_START = 'session-map:render-start';
@@ -71,12 +74,6 @@ function measureRender(): void {
   }
 }
 
-function errorMessage(error: unknown): string {
-  return getSessionLogsErrorMessage(
-    error instanceof Error ? error : new Error(String(error)),
-  );
-}
-
 export function SessionMapTab({
   repoId,
   sessionId,
@@ -84,7 +81,8 @@ export function SessionMapTab({
   firstPrompt,
   pricing,
   repoConfig,
-  registerRefresh,
+  logs,
+  logsError,
 }: SessionMapTabProps) {
   markRenderStart();
   useEffect(measureRender);
@@ -95,13 +93,10 @@ export function SessionMapTab({
     teamId,
     pricing,
     repoConfig,
+    logs,
+    logsError,
   });
-  const { refresh, model, state } = data;
-
-  useEffect(() => {
-    registerRefresh(refresh);
-    return () => registerRefresh(null);
-  }, [registerRefresh, refresh]);
+  const { model, state } = data;
 
   const serverTimeMs = state ? Date.parse(state.serverTime) : NaN;
   const live = state?.liveness.live ?? false;
@@ -131,15 +126,15 @@ export function SessionMapTab({
 
   // --- render --------------------------------------------------------------------
   if (data.isLoading) return <LazyFallback />;
-  if (data.fatal || state === null || model === null) {
+  if (state === null || model === null) {
     return (
       <div
         data-testid="session-map"
         className="flex h-full items-center justify-center p-6"
       >
         <p className="text-sm text-muted-foreground">
-          {data.error !== null && data.error !== undefined
-            ? errorMessage(data.error)
+          {data.error !== null
+            ? getSessionLogsErrorMessage(data.error)
             : 'No session data yet.'}
         </p>
       </div>
@@ -152,11 +147,9 @@ export function SessionMapTab({
   const mainState = stateAt(model.main, t, { live, atNow });
   const badge: SessionMapBadgeKind = !live
     ? 'replay'
-    : data.indicator === 'hidden' || data.indicator === 'idle'
-      ? 'live-idle'
-      : playback.following
-        ? 'live'
-        : 'live-paused';
+    : playback.following
+      ? 'live'
+      : 'live-paused';
 
   return (
     <div
@@ -168,7 +161,7 @@ export function SessionMapTab({
         pausedAtLabel={playback.t !== null ? formatClock(playback.t) : null}
         firstPrompt={firstPrompt}
         counters={counters}
-        updateFailed={data.error !== null && data.error !== undefined}
+        updateFailed={data.error !== null}
         highlight={highlight}
         onHighlightChange={setHighlight}
         order={order}

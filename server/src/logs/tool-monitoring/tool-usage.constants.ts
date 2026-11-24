@@ -5,6 +5,8 @@
  * own constants live in `hook/.claude/telemetry_tool/tool-wrap-names.js`.
  */
 
+import { readPositiveIntEnv } from '../../common/env-int';
+
 /**
  * Version of the tool-usage extractor that built a node's `session_tool_usage` rows, stored in
  * `sessions.tool_usage_version` (DD-7). Bump it when the extraction changes: on the next start
@@ -18,12 +20,6 @@ export const DEFAULT_TOOL_USAGE_REBUILD_INTERVAL_MS = 15_000;
 
 /** Sessions claimed per drain pass when `TOOL_USAGE_REBUILD_BATCH` is unset or invalid. */
 export const DEFAULT_TOOL_USAGE_REBUILD_BATCH = 20;
-
-/** Reads `name` as a positive integer, else returns `fallback`. */
-function readPositiveIntEnv(name: string, fallback: number): number {
-  const raw = Number(process.env[name]);
-  return Number.isInteger(raw) && raw > 0 ? raw : fallback;
-}
 
 /** `TOOL_USAGE_REBUILD_INTERVAL_MS` when it is a positive integer, else the default. */
 export function resolveToolUsageRebuildIntervalMs(): number {

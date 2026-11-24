@@ -14,6 +14,19 @@ Do this on implementation plan stage
 Once a new migration is applied to the local dev DB, follow the `db-state-update` skill: comment
 new tables / non-obvious columns with `COMMENT ON` and regenerate `docs/knowledgebase/db_state.sql`.
 
+## No stored procedures, functions or triggers
+
+Keep all logic in the application code. A migration must not create a stored procedure, a
+plpgsql/SQL function, or a trigger — and a plan must not design one. Anything a trigger would
+enforce (revision counters, hash invalidation, audit columns, cascades beyond FK `ON DELETE`) is
+written explicitly in the SQL of every write path. One-off `DO $$ … $$` blocks for idempotent DDL
+inside a migration are fine — they create no persistent DB object.
+
+**Temporary exception:** `logs_body_guard()` and its trigger `logs_body_guard` on `logs` (with the
+sequence `logs_body_rev_seq`), added in migration `0096_logs_streaming_skip_tombstones.sql` by task
+`2026-11-23-session-logs-streaming`. They are scheduled for removal in a separate task — do not
+copy the pattern, and do not add new logic that depends on the trigger.
+
 ## Migrations are immutable
 
 Never edit, rename or delete a migration `.sql` file (or an existing `meta/_journal.json` entry)

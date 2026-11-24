@@ -24,6 +24,7 @@
  * Nothing here throws: a broken call file is skipped, any other failure returns null.
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { TextDecoder } = require('util');
@@ -449,6 +450,44 @@ function toolCallsSourceSize(workDir, sessionId) {
 }
 
 /**
+ * The `fp` of the `tool-calls/<sessionId>` entry in the v2 manifest (`.claude-logs.sent.v2`,
+ * DD-26 of the `2026-11-23-session-logs-streaming` plan): sha256 hex of the sorted
+ * `relativeName\tsize\tmtimeMs` lines of the same source files `toolCallsSourceSize` sums — the
+ * files in `calls/`, `breaker/` and `preflight.json`. Unlike the summed size, it changes when a
+ * file is rewritten at the same length (a call record finishing with a same-size result). `''` when
+ * the session has no source files. `toolCallsSourceSize` stays the number the old manifest records.
+ * @param {string} workDir
+ * @param {string} sessionId
+ * @returns {string}
+ */
+function toolCallsFingerprint(workDir, sessionId) {
+  const sessionDir = sessionDirOf(workDir, sessionId);
+  if (!sessionDir) return '';
+  const lines = [];
+  const add = (rel) => {
+    try {
+      const st = fs.statSync(path.join(sessionDir, rel));
+      if (st.isFile()) lines.push(`${rel}\t${st.size}\t${st.mtimeMs}`);
+    } catch {
+      // absent
+    }
+  };
+  for (const sub of [CALLS_DIR, BREAKER_DIR]) {
+    let names = [];
+    try {
+      names = fs.readdirSync(path.join(sessionDir, sub));
+    } catch {
+      names = [];
+    }
+    for (const name of names) add(`${sub}/${name}`);
+  }
+  add(PREFLIGHT_FILE);
+  if (lines.length === 0) return '';
+  lines.sort();
+  return crypto.createHash('sha256').update(lines.join('\n'), 'utf8').digest('hex');
+}
+
+/**
  * Assemble the `tool-calls` upload file of one session (DD-5 / DD-6).
  * Returns null when the session has nothing to report — no wrapped call and no failed pre-flight —
  * or on any failure. A failed pre-flight alone is still reported, so the server can show why the
@@ -499,6 +538,7 @@ module.exports = {
   UPLOAD_DIR,
   assembleToolCallsUpload,
   toolCallsSourceSize,
+  toolCallsFingerprint,
   listToolWrapSessionsChecked,
   pruneUploadFiles,
   uploadFilePath,

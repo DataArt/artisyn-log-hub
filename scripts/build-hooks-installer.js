@@ -99,6 +99,8 @@ const HOOK_JS_FILES = [
   'lifecycle-hook.js',
   'send-logs-hook.js',
   'upload-logs.js',
+  // Upload skip rule and the `.claude-logs.sent.v2` manifest (hook 3.2.0, DD-26).
+  'upload-skip.js',
   'prompt-upload-hook.js',
   'session-files.js',
   'spawn-hidden.js',

@@ -1,4 +1,11 @@
-import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
+import {
+  lazy,
+  Suspense,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+} from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { Loader2, Lock, RefreshCw } from 'lucide-react';
@@ -12,6 +19,7 @@ import { useModelPricing } from '../../hooks/useModelPricing';
 import { type ViewMode } from './session-list/SessionListPanel';
 import { type AnalyticsState } from './analytics/RepositoryAnalytics';
 import { useRepositoryData } from './useRepositoryData';
+import type { SessionPartsValue } from './session-parts/SessionPartsContext';
 import { visibleTabs, type RepoMainTab as MainTab } from '../../tab-ids';
 import { RepositoryHeader } from './RepositoryHeader';
 import { RepositorySessionsPanel } from './RepositorySessionsPanel';
@@ -160,8 +168,16 @@ export function RepositoryView() {
     parsedLogs,
     subagentLogsMap,
     agentParentMap,
+    subagentMeta,
+    knownAgentIds,
     handleRefresh,
     isReloadingUpdatedSession,
+    manifestQuery,
+    requestAgent,
+    requestAll,
+    loadedParts,
+    totalParts,
+    allPartsLoaded,
   } = useRepositoryData({
     repoId,
     teamId,
@@ -170,9 +186,20 @@ export function RepositoryView() {
     sessionId,
     branchSelectedSession,
     otelReason: otelReasonFilter,
-    // The Session Map polls its own delta (session-map DD-11).
-    suspendSilentLogsRefetch: sessionTab === 'session-map',
   });
+
+  // On-demand part loading for the session views (impl-plan DD-30a).
+  const sessionParts = useMemo<SessionPartsValue>(
+    () => ({
+      requestAgent,
+      requestAll,
+      loaded: loadedParts,
+      total: totalParts,
+      allLoaded: allPartsLoaded,
+    }),
+    [requestAgent, requestAll, loadedParts, totalParts, allPartsLoaded],
+  );
+  const derivedLagging = manifestQuery.data?.derivedLagging ?? false;
 
   // A session opened by a link (Home, Recent visits, a report) must be visible in the list:
   // open its branch once per selection. The user can still collapse it afterwards.
@@ -406,6 +433,8 @@ export function RepositoryView() {
             parsedLogs={parsedLogs}
             subagentLogsMap={subagentLogsMap}
             agentParentMap={agentParentMap}
+            subagentMeta={subagentMeta}
+            knownAgentIds={knownAgentIds}
             pricing={pricing}
             repoConfig={repoDetailQuery.data?.repoConfig ?? null}
             topN={topN}
@@ -415,6 +444,8 @@ export function RepositoryView() {
             isBranchOpen={isBranchOpen}
             onToggleBranch={toggleBranch}
             isReloadingUpdatedSession={isReloadingUpdatedSession}
+            sessionParts={sessionParts}
+            derivedLagging={derivedLagging}
             targetToolUseId={targetToolUseId}
             onTargetToolUseConsumed={clearTargetToolUse}
           />

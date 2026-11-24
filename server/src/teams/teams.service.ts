@@ -37,6 +37,7 @@ import {
   toLocalRepoIdentity,
 } from '../logs/local-repo-identity';
 import { normalizeRepoUrl } from '../logs/repo-url-normalizer';
+import { clearSessionTombstones } from '../sessions/session-tombstone.service';
 import {
   findPersonalRepoConfig,
   seedTeamRepoConfig,
@@ -603,7 +604,11 @@ export class TeamsService {
         return; // Another team still uses this URL — leave repositories and logs intact
       }
 
-      // 4. No other team references the URL — delete logs and repositories
+      // 4. No other team references the URL — delete logs and repositories.
+      // Fresh start (DD-29 of 2026-11-23-session-logs-streaming): the repository's deleted
+      // sessions and their tombstones go too.
+      await clearSessionTombstones(tx, { repositoryUrl: repoUrl });
+
       const repoRows = await tx
         .select({ id: schema.repositories.id })
         .from(schema.repositories)

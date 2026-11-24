@@ -28,6 +28,10 @@
 //     201 + JSON `{warnings: []}` for a single request, `{complete: false}` then
 //     `{complete: true, warnings: [...]}` for chunks.
 //
+// Steps 9–9b (2026-11-23-session-logs-streaming, DD-34): 2.6.1 sends none of the new upload
+// params, gets none of the new response fields, and a second Stop is accepted exactly as before
+// (its own old-format manifest keeps working next to the server-side hash skip).
+//
 // Steps 10–11 (OKF tab, 2026-11-21): 2.6.1 predates the OKF snapshot AND the `git.root` field, so
 // its session is never bound (`okf_snapshot_id` null); a hook between the two (root sent, no
 // snapshot; no frozen copy exists) is uploaded inline with helpers/okf.ts. Without a snapshot the
@@ -475,6 +479,34 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
         const body: unknown = JSON.parse(c.body);
         expect(isRecord(body) && Array.isArray(body.warnings), c.body).toBe(true);
       }
+      // 2026-11-23-session-logs-streaming (DD-24/DD-25/DD-34): 2.6.1 sends neither `uploadFeedback`
+      // nor `contentSha256`, so the new server answers it exactly as before — no `failedUploads`, no
+      // `sessionDeleted` field in any response.
+      for (const c of proxy!.calls) {
+        expect(c.query.has('uploadFeedback')).toBe(false);
+        expect(c.query.has('contentSha256')).toBe(false);
+        const body: unknown = JSON.parse(c.body);
+        expect(isRecord(body) && ('failedUploads' in body || 'sessionDeleted' in body), c.body).toBe(false);
+      }
+    });
+
+    await test.step('9b. a second 2.6.1 Stop: whatever it re-sends is accepted as before (201, no new fields), nothing fails, the session is unchanged', async () => {
+      const before = proxy!.calls.length;
+      await fire('Stop');
+      const done = lastDone(hookLog());
+      expect(done.failed, hookLog().join('\n')).toBe(0);
+      await waitForQueueIdle(db, owner.id);
+      for (const c of proxy!.calls.slice(before)) {
+        expect(c.status, c.body).toBe(201);
+        const body: unknown = JSON.parse(c.body);
+        expect(isRecord(body) && ('failedUploads' in body || 'sessionDeleted' in body), c.body).toBe(false);
+      }
+      expect(await sessionRowCount(db, v26.sid)).toBe(1);
+      const status = await db.query<{ n: string }>(
+        "SELECT count(*) AS n FROM upload_queue WHERE session_id = $1 AND status = 'failed'",
+        [v26.sid],
+      );
+      expect(Number(status.rows[0].n), 'no failed queue row').toBe(0);
     });
 
     await test.step('8. the hook-status of 2.6.1 is below the baseline: hook state «outdated», ingest unaffected', async () => {

@@ -970,6 +970,16 @@
         "38fc51869ac16386b6d35c7b127856487833513e5e7b50c58d42fb66d72ddfb6",
         "7f3dbe80a4dec24906f248414164775b949a97f2523cea421fb36c392e2dfeef"
       ]
+    },
+    {
+      "idx": 96,
+      "tag": "0096_logs_streaming_skip_tombstones",
+      "when": 1792627320000,
+      "sha256": "838caffd4a825275004e88b87f148ac9e5a4219e5e260edacc05da79280f28fa",
+      "acceptedHashes": [
+        "5893dd95b31053d2e18509b2175879040099b54b726b5a13e36735733175c980",
+        "838caffd4a825275004e88b87f148ac9e5a4219e5e260edacc05da79280f28fa"
+      ]
     }
   ]
 }

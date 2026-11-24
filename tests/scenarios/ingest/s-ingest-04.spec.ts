@@ -17,6 +17,9 @@
 //     and on the result: the stored lines equal the source lines and the processed size equals N;
 //   - «last writer wins» on a re-upload replaces the `logs` row of (session, type) in place.
 //
+// Step 10 (2026-11-23 session-logs-streaming, DD-24 / DD-25): the declared `contentSha256` of a
+// chunked upload and the `failedUploads` feedback the hook re-sends from.
+//
 // Replaces:
 //   - server/test/upload-queue.e2e-spec.ts blocks «chunked uploads» (5), «async staging» (3),
 //     v1-unmodified (1)
@@ -223,5 +226,49 @@ test('@S-INGEST-04 a big session over v2 in chunks: retry, foreign parameters, b
     await openSession(page, owner, repoId, S, { tab: 'logs' });
     await expect(page.getByText(firstPrompt).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(lastPrompt).first()).toBeVisible();
+  });
+
+  await test.step('10. A same-length changed body with a stale contentSha256 ends failed «content-hash-mismatch» and writes nothing; the next upload with uploadFeedback=1 returns it in failedUploads exactly once', async () => {
+    const v2 = [...lines.slice(0, 5999), { ...(lines[5999] as Record<string, unknown>), uuid: `${S}-5999-v2` }];
+    const v3 = [...lines.slice(0, 5999), { ...(lines[5999] as Record<string, unknown>), uuid: `${S}-5999-v3` }];
+    const file2 = Buffer.from(ndjson(v2), 'utf8');
+    const file3 = Buffer.from(ndjson(v3), 'utf8');
+    expect(file3.length, 'same length').toBe(file2.length);
+    expect(file3.equals(file2)).toBe(false);
+    // The hook declares the hash of the file it meant to send (v2), but v3 arrives.
+    const parts = splitOnLines(file3, 2);
+    const id3 = `${uploadId}-v3`;
+    for (const [i, part] of parts.entries()) {
+      const params = { uploadId: id3, chunkIndex: i, totalChunks: 2, ...(i === 0 ? { totalSize: file3.length, contentSha256: sha256(file2) } : {}) };
+      expect((await chunk(key, params, part)).status()).toBe(201);
+    }
+    await waitForQueueIdle(db, owner.id, { timeoutMs: 60_000, allowFailed: true });
+    const failed = await db.query<{ id: number; error_message: string; error_kind: string }>(
+      "SELECT id, error_message, error_kind FROM upload_queue WHERE session_id = $1 AND status = 'failed'",
+      [S],
+    );
+    expect(failed.rows).toHaveLength(1);
+    expect(failed.rows[0]).toMatchObject({ error_message: 'content-hash-mismatch', error_kind: 'server' });
+    const stored = (await storedBody(db, S, 'claude')) as Array<{ uuid: string }>;
+    expect(stored[5999].uuid, 'the torn upload wrote nothing').toBe(`${S}-5999-v2`);
+
+    const artisyn = ndjson([
+      { event: 'prompt_start', timestamp: ts(0), session_id: S, prompt: firstPrompt, git: { repo: repoUrl, branch: 'main' } },
+      { event: 'prompt_stop', timestamp: ts(5999), session_id: S },
+    ]);
+    const feedback = async () => {
+      const res = await postLogs(api, key, { sessionId: S, type: 'artisyn', uploadFeedback: 1 }, artisyn);
+      expect(res.status()).toBe(201);
+      return ((await res.json()) as { failedUploads?: Array<{ sessionId: string; type: string }> }).failedUploads;
+    };
+    expect(await feedback(), 'reported once').toEqual([{ sessionId: S, type: 'claude' }]);
+    expect(await feedback(), 'and never again').toEqual([]);
+    // Without the param the answer keeps its old shape: no failedUploads (the failed row still
+    // reaches an old hook through the existing `warnings`).
+    const plain = await postLogs(api, key, { sessionId: S, type: 'artisyn' }, artisyn);
+    expect(plain.status()).toBe(201);
+    expect(await plain.json()).not.toHaveProperty('failedUploads');
+    await db.query('DELETE FROM upload_queue WHERE id = $1', [failed.rows[0].id]);
+    await waitForQueueIdle(db, owner.id, { timeoutMs: 60_000 });
   });
 });

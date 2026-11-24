@@ -318,15 +318,27 @@ test('@S-HOOK-04 the hook never blocks Claude: server down, hanging, 500 or 401 
       expect(healthy.uploads()).toEqual(['artisyn/cur']);
     });
 
-    await test.step('9. the background upload sends only the current session’s two files and writes no manifest', async () => {
+    await test.step('9. the background upload sends only the current session’s two files and records only its own claude transcript in the manifests', async () => {
       const h = await hub();
       const p = project(dirs, h.url);
       const transcripts = claudeProjectDir(p.home, p.repo);
-      fs.writeFileSync(path.join(transcripts, 'cur.jsonl'), '{"type":"user","sessionId":"cur"}\n');
+      const curBody = '{"type":"user","sessionId":"cur"}\n';
+      fs.writeFileSync(path.join(transcripts, 'cur.jsonl'), curBody);
       fs.writeFileSync(path.join(transcripts, 'a.jsonl'), '{"type":"user","sessionId":"a"}\n');
       expect((await runPromptUpload(toolDir, { cwd: p.repo, sessionId: 'cur' }, { home: p.home })).code).toBe(0);
       expect(h.uploads().sort()).toEqual(['artisyn/cur', 'claude/cur']);
-      expect(fs.existsSync(path.join(p.telemetry, '.claude-logs.sent'))).toBe(false);
+      // DD-26 scoped-path recording: after a 201 for the session's own transcript, its entry goes
+      // into both manifests so the next Stop does not re-send it; the artisyn file and the other
+      // session's transcript are never recorded from this path.
+      const v1 = fs.readFileSync(path.join(p.telemetry, '.claude-logs.sent'), 'utf8').split(/\r?\n/).filter(Boolean);
+      expect(v1).toEqual([`claude/cur.jsonl ${Buffer.byteLength(curBody)}`]);
+      const v2 = JSON.parse(fs.readFileSync(path.join(p.telemetry, '.claude-logs.sent.v2'), 'utf8')) as {
+        version: number;
+        entries: Record<string, { size: number }>;
+      };
+      expect(v2.version).toBe(2);
+      expect(Object.keys(v2.entries)).toEqual(['claude/cur.jsonl']);
+      expect(v2.entries['claude/cur.jsonl'].size).toBe(Buffer.byteLength(curBody));
     });
 
     await test.step('10. a hook-service session skips the post-turn worker; a broken, hanging, noisy or missing claude never throws', async () => {

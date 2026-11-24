@@ -10,8 +10,7 @@
  * columns above it instead of the page's own (narrower) inset.
  */
 import { useMemo, type ReactNode } from 'react';
-import type { UseQueryResult } from '@tanstack/react-query';
-import type { SessionLogsData } from '../../../../api';
+import type { SessionLogsQueryView } from '../../session-parts/useSessionLogParts';
 import type {
   ChangeSurfaceAggregate,
   RepositorySession,
@@ -46,7 +45,7 @@ import type { LensId } from '../../session-lenses';
 export interface SessionSummaryTabProps {
   selectedSession: RepositorySession;
   parsedLogs: ParsedSession | null;
-  logsQuery: UseQueryResult<SessionLogsData>;
+  logsQuery: SessionLogsQueryView;
   mainLogs: Record<string, unknown>[] | null;
   pricing: ModelPricingMap | null | undefined;
   sessionCost: number | null;
@@ -162,6 +161,7 @@ export function SessionSummaryTab({
         mainLogs,
         subagentLogsMap,
         agentParentMap,
+        subagentStats: logsQuery.data?.subagentStats,
         sessionSubagentCost: selectedSession.costBreakdown.subagentCost,
         changeSurface,
       }),
@@ -173,6 +173,7 @@ export function SessionSummaryTab({
       mainLogs,
       subagentLogsMap,
       agentParentMap,
+      logsQuery.data?.subagentStats,
       selectedSession.totalCost,
       changeSurface,
     ],

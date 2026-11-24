@@ -11,6 +11,7 @@ import { invalidateApiKeyCache } from '../cluster/api-key-cache-ipc';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { deleteTeamRepo } from '../logs/budgets/budgets-cleanup';
+import { clearSessionTombstones } from '../sessions/session-tombstone.service';
 import {
   invitations,
   logs,
@@ -220,6 +221,11 @@ export class AccountDeletionService {
           await tx.delete(sessions).where(inArray(sessions.id, orphanIds));
         }
       }
+
+      // (5) Fresh start (DD-29 of 2026-11-23-session-logs-streaming): the user's deleted
+      //     sessions and their tombstones go too, so the same session ids could be uploaded
+      //     again by a new account.
+      await clearSessionTombstones(tx, { ownerUserId: userId });
 
       return { id: user.id, email: user.email };
     });

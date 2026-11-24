@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { sql, type SQL } from 'drizzle-orm';
+import { RebuildGovernor } from '../../common/load-governor/rebuild-governor';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
 import { descendantSessionsCte, topAncestorIdsSql } from '../session-tree.sql';
@@ -101,6 +102,7 @@ export class OtelProjectionService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly schedulerRegistry: SchedulerRegistry,
+    private readonly governor: RebuildGovernor,
   ) {}
 
   onModuleInit(): void {
@@ -143,10 +145,23 @@ export class OtelProjectionService implements OnModuleInit, OnModuleDestroy {
       cleaned: 0,
     };
 
-    await this.projectChunks(stats);
+    // Each claim below is a unit of work paced by RebuildGovernor (DD-15 of
+    // 2026-11-23-session-logs-streaming). Admission happens before a claim, never between a
+    // claim and its work, so a paused tick never holds stamped-but-unprojected chunks.
+    await this.governor.admit();
+    if (!this.stopped) await this.projectChunks(stats);
     if (!this.stopped) await this.drainReclassQueue(stats);
-    if (!this.stopped) stats.finalised = await this.enqueueIdleRoots();
+    if (!this.stopped) {
+      await this.governor.admit();
+      stats.finalised = await this.enqueueIdleRoots();
+    }
     if (!this.stopped) stats.cleaned = await this.cleanupDeletedRoots();
+    if (
+      stats.chunks + stats.reclassified + stats.finalised + stats.cleaned ===
+      0
+    ) {
+      this.governor.reportIdle();
+    }
 
     if (
       stats.chunks + stats.reclassified + stats.finalised + stats.cleaned >
@@ -367,6 +382,8 @@ export class OtelProjectionService implements OnModuleInit, OnModuleDestroy {
     stats: OtelProjectionTickStats,
   ): Promise<void> {
     for (let i = 0; i < OTEL_RECLASS_BATCH && !this.stopped; i++) {
+      await this.governor.admit();
+      if (this.stopped) break;
       let claimed: { sessionId: number; queuedAt: string } | null = null;
       try {
         const done = await this.db.transaction(async (tx) => {
@@ -489,6 +506,8 @@ export class OtelProjectionService implements OnModuleInit, OnModuleDestroy {
 
     let cleaned = 0;
     for (const rootId of rootIds) {
+      if (this.stopped) break;
+      await this.governor.admit();
       if (this.stopped) break;
       try {
         const done = await this.db.transaction(async (tx) => {

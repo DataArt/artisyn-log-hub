@@ -14,8 +14,12 @@ import type { Request } from 'express';
 import { ApiKeyAuthGuard } from '../api-keys/api-key-auth.guard';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
-import { UploadQueueService } from './upload-queue.service';
+import {
+  UploadQueueService,
+  type FailedUploadFeedback,
+} from './upload-queue.service';
 import { FOREIGN_SESSION_WARNING } from './upload-warnings';
+import { SessionTombstoneService } from '../sessions/session-tombstone.service';
 import { SNAPSHOT_ID_RE, isHarnessSnapshotKnown } from './harness-snapshot';
 import { OKF_SNAPSHOT_ID_RE, isOkfSnapshotKnown } from './okf/okf-snapshot';
 import { sanitizeAgentMeta } from './agent-meta-param';
@@ -38,6 +42,7 @@ export class LogsV2Controller {
   constructor(
     private readonly uploadQueueService: UploadQueueService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
+    private readonly tombstones: SessionTombstoneService,
   ) {}
 
   @Post('logs')
@@ -58,6 +63,8 @@ export class LogsV2Controller {
     @Query('okfSnapshotFull') okfSnapshotFullRaw: string | undefined,
     @Query('agentDescription') agentDescriptionRaw: unknown,
     @Query('workflowPhase') workflowPhaseRaw: unknown,
+    @Query('contentSha256') contentSha256Raw: unknown,
+    @Query('uploadFeedback') uploadFeedbackRaw: unknown,
     @Body() rawBody: unknown,
     @Req() req: Request & { userId: number },
   ): Promise<
@@ -65,12 +72,15 @@ export class LogsV2Controller {
         warnings: string[];
         unknownSnapshotId?: string;
         unknownOkfSnapshotId?: string;
+        failedUploads?: FailedUploadFeedback[];
       }
     | {
         complete: boolean;
         warnings?: string[];
         unknownSnapshotId?: string;
         unknownOkfSnapshotId?: string;
+        failedUploads?: FailedUploadFeedback[];
+        sessionDeleted?: true;
       }
   > {
     if (!sessionId) {
@@ -126,6 +136,15 @@ export class LogsV2Controller {
       ? sanitizeAgentMeta(workflowPhaseRaw)
       : null;
 
+    // DD-24 / DD-25 (2026-11-23-session-logs-streaming): both optional and additive. An
+    // invalid `contentSha256` is ignored (never a 400); old hooks send neither param.
+    const contentSha256 =
+      typeof contentSha256Raw === 'string' &&
+      /^[0-9a-f]{64}$/.test(contentSha256Raw)
+        ? contentSha256Raw
+        : null;
+    const uploadFeedback = uploadFeedbackRaw === '1';
+
     // Open-source readiness: a session owned by another user is
     // rejected before anything is staged. Lock-free — `LogsService.upsert()` repeats the
     // check under the per-session lock, so a race still ends in `rejected_foreign_session`.
@@ -143,20 +162,27 @@ export class LogsV2Controller {
       if (foreignSession) {
         return { warnings: await this.foreignSessionWarnings(sessionId, req) };
       }
+      if (await this.isDeletedSession(sessionId, parentSessionId, req)) {
+        return this.deletedSessionAnswer(req, uploadFeedback);
+      }
       // No NDJSON parsing here — a malformed line
       // becomes a `failed` queue row + hook warning later, off the request
       // path, instead of aborting this request synchronously.
-      await this.uploadQueueService.saveRawUpload(rawBody, {
-        sessionId,
-        logType,
-        userId: req.userId,
-        parentSessionId,
-        workflowRunId,
-        harnessSnapshotId,
-        okfSnapshotId: queuedOkfSnapshotId,
-        agentDescription,
-        workflowPhase,
-      });
+      await this.uploadQueueService.saveRawUpload(
+        rawBody,
+        {
+          sessionId,
+          logType,
+          userId: req.userId,
+          parentSessionId,
+          workflowRunId,
+          harnessSnapshotId,
+          okfSnapshotId: queuedOkfSnapshotId,
+          agentDescription,
+          workflowPhase,
+        },
+        contentSha256,
+      );
 
       const warnings = await this.uploadQueueService.getPendingWarnings(
         req.userId,
@@ -178,6 +204,7 @@ export class LogsV2Controller {
         warnings,
         ...(unknownSnapshotId ? { unknownSnapshotId } : {}),
         ...(unknownOkfSnapshotId ? { unknownOkfSnapshotId } : {}),
+        ...(await this.failedUploadsFeedback(req, uploadFeedback)),
       };
     }
 
@@ -244,6 +271,16 @@ export class LogsV2Controller {
       req.userId,
     );
 
+    // DD-27: checked on chunk 0, and on a later chunk whose upload was never staged — chunk 0
+    // of a deleted session stages nothing, so its later chunks must get the same answer
+    // rather than "Unknown uploadId".
+    if (
+      (chunkIndex === 0 || !existingRow) &&
+      (await this.isDeletedSession(sessionId, parentSessionId, req))
+    ) {
+      return this.deletedSessionAnswer(req, uploadFeedback);
+    }
+
     if (chunkIndex > 0 && !existingRow) {
       this.logger.warn(
         `userId=${req.userId} unknown uploadId=${uploadId} for chunkIndex=${chunkIndex}`,
@@ -262,21 +299,25 @@ export class LogsV2Controller {
       throw new BadRequestException('totalChunks mismatch for uploadId');
     }
 
-    const { complete } = await this.uploadQueueService.saveChunk(rawBody, {
-      sessionId,
-      logType,
-      userId: req.userId,
-      parentSessionId,
-      workflowRunId,
-      uploadId,
-      chunkIndex,
-      totalChunks,
-      totalSize,
-      harnessSnapshotId,
-      okfSnapshotId: queuedOkfSnapshotId,
-      agentDescription,
-      workflowPhase,
-    });
+    const { complete } = await this.uploadQueueService.saveChunk(
+      rawBody,
+      {
+        sessionId,
+        logType,
+        userId: req.userId,
+        parentSessionId,
+        workflowRunId,
+        uploadId,
+        chunkIndex,
+        totalChunks,
+        totalSize,
+        harnessSnapshotId,
+        okfSnapshotId: queuedOkfSnapshotId,
+        agentDescription,
+        workflowPhase,
+      },
+      chunkIndex === 0 ? contentSha256 : null,
+    );
 
     if (!complete) {
       return { complete };
@@ -303,7 +344,69 @@ export class LogsV2Controller {
       warnings,
       ...(unknownSnapshotId ? { unknownSnapshotId } : {}),
       ...(unknownOkfSnapshotId ? { unknownOkfSnapshotId } : {}),
+      ...(await this.failedUploadsFeedback(req, uploadFeedback)),
     };
+  }
+
+  /**
+   * DD-27 request-time tombstone check (lock-free): the session or an ancestor was deleted.
+   * The scheduler and `LogsService.upsert()` repeat it under the tree lock, so a race with a
+   * concurrent delete still writes nothing.
+   */
+  private async isDeletedSession(
+    sessionId: string,
+    parentSessionId: string | undefined,
+    req: Request & { userId: number },
+  ): Promise<boolean> {
+    const deleted = await this.tombstones.isTombstoned(
+      this.db,
+      sessionId,
+      parentSessionId ?? null,
+    );
+    if (deleted) {
+      this.logger.log(
+        `upload ignored: deleted session sessionId=${sessionId} userId=${req.userId}`,
+      );
+    }
+    return deleted;
+  }
+
+  /**
+   * DD-27: a deleted session's upload is answered like a foreign one — 201
+   * `complete: true` with nothing staged, so the hook stops re-sending it. With
+   * `uploadFeedback=1` (DD-25) the answer also says `sessionDeleted: true`.
+   */
+  private async deletedSessionAnswer(
+    req: Request & { userId: number },
+    uploadFeedback: boolean,
+  ): Promise<{
+    complete: boolean;
+    warnings: string[];
+    failedUploads?: FailedUploadFeedback[];
+    sessionDeleted?: true;
+  }> {
+    const warnings = await this.uploadQueueService.getPendingWarnings(
+      req.userId,
+    );
+    return {
+      complete: true,
+      warnings,
+      ...(uploadFeedback ? { sessionDeleted: true as const } : {}),
+      ...(await this.failedUploadsFeedback(req, uploadFeedback)),
+    };
+  }
+
+  /** DD-25: `failedUploads` only when the hook asked for it with `uploadFeedback=1`. */
+  private async failedUploadsFeedback(
+    req: Request & { userId: number },
+    uploadFeedback: boolean,
+  ): Promise<{ failedUploads?: FailedUploadFeedback[] }> {
+    if (!uploadFeedback) {
+      return {};
+    }
+    const failedUploads =
+      await this.uploadQueueService.takeFailedUploadsForFeedback(req.userId);
+    return { failedUploads };
   }
 
   /** The foreign-session warning first, followed by any other pending warnings. */

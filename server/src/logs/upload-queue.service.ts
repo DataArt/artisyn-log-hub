@@ -2,12 +2,57 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { and, eq, inArray, lt } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { NO_LOG_MARKER } from '../common/sql-logger';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
-import { uploadQueue } from '../database/schema/index';
+import { uploadQueue, uploadQueueMeasurements } from '../database/schema/index';
 import { findSessionOwnerId } from './logs.service';
 import { formatFailedUploadWarning } from './upload-error';
+
+/**
+ * Most `failedUploads` entries one upload response carries (DD-25 of
+ * 2026-11-23-session-logs-streaming); the rest are delivered by later responses.
+ */
+export const FAILED_UPLOADS_MAX = 20;
+
+/** `error_message` of a row whose staged body does not match its declared `contentSha256`. */
+export const CONTENT_HASH_MISMATCH = 'content-hash-mismatch';
+
+/**
+ * Log types whose queued uploads are coalesced (DD-16): each upload is the whole file, so only
+ * the newest queued one of a `(user_id, session_id, log_type)` key needs processing. `artisyn`
+ * and `claude-otel` are never coalesced.
+ */
+export const COALESCED_LOG_TYPES: readonly string[] = [
+  'claude',
+  'claude-subagent',
+  'tool-calls',
+];
+
+/** The declared body hash, when it is 64 lowercase hex characters; anything else is ignored. */
+function normalizeContentSha256(
+  value: string | null | undefined,
+): string | null {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
+    ? value
+    : null;
+}
+
+/** The queue row a superseded-row cleanup is keyed on ({@link UploadQueueService.deleteSupersededRows}). */
+export interface SupersedingRow {
+  id: number;
+  userId: number;
+  sessionId: string;
+  logType: string;
+  receivedAt: Date;
+}
+
+/** One `failedUploads` entry of the upload response (DD-25). */
+export interface FailedUploadFeedback {
+  sessionId: string;
+  type: string;
+}
 
 export interface SaveRawUploadMeta {
   sessionId: string;
@@ -96,8 +141,16 @@ export class UploadQueueService {
    * `Logger.error` (surfaces in the admin Error Logs tab)
    * before rethrowing so the caller (`LogsV2Controller`) can 500 without
    * ever inserting a queue row for a file that doesn't exist.
+   *
+   * `contentSha256` (DD-24) is the sha256 hex the hook declared for the body; a malformed value
+   * is ignored. The queue worker fails the row with `content-hash-mismatch` when the staged body
+   * does not match it.
    */
-  async saveRawUpload(rawBody: string, meta: SaveRawUploadMeta): Promise<void> {
+  async saveRawUpload(
+    rawBody: string,
+    meta: SaveRawUploadMeta,
+    contentSha256?: string | null,
+  ): Promise<void> {
     const bodyBytes = Buffer.byteLength(rawBody, 'utf8');
     // Leading epoch-millis timestamp keeps filenames
     // sorted in received order; trailing UUID keeps uniqueness under
@@ -133,6 +186,7 @@ export class UploadQueueService {
       okfSnapshotId: meta.okfSnapshotId,
       agentDescription: meta.agentDescription ?? null,
       workflowPhase: meta.workflowPhase ?? null,
+      contentSha256: normalizeContentSha256(contentSha256),
     });
   }
 
@@ -144,11 +198,17 @@ export class UploadQueueService {
    * into `${uploadId}.raw` once every chunk has arrived.
    * Resolves `{complete: true}` only on the chunk that completes the
    * set.
+   *
+   * `contentSha256` (DD-24) is the sha256 hex of the WHOLE reassembled body, taken from chunk 0
+   * only (ignored on later chunks and when malformed).
    */
   async saveChunk(
     rawBody: string,
     meta: SaveChunkMeta,
+    contentSha256?: string | null,
   ): Promise<{ complete: boolean }> {
+    const declaredSha256 =
+      meta.chunkIndex === 0 ? normalizeContentSha256(contentSha256) : null;
     const dir = this.resolveStagingDir();
     const chunkFileName = `${meta.uploadId}.chunk${meta.chunkIndex}`;
 
@@ -186,6 +246,9 @@ export class UploadQueueService {
           .set({
             chunksReceived,
             totalChunks: meta.totalChunks,
+            ...(declaredSha256 !== null
+              ? { contentSha256: declaredSha256 }
+              : {}),
             updatedAt: new Date(),
           })
           .where(eq(uploadQueue.id, existing.id));
@@ -206,6 +269,7 @@ export class UploadQueueService {
           okfSnapshotId: meta.okfSnapshotId,
           agentDescription: meta.agentDescription ?? null,
           workflowPhase: meta.workflowPhase ?? null,
+          contentSha256: declaredSha256,
         });
       }
     } else {
@@ -451,6 +515,102 @@ export class UploadQueueService {
         .map((row) => row.errorMessage)
         .filter((msg): msg is string => !!msg),
     ];
+  }
+
+  /**
+   * DD-25: up to {@link FAILED_UPLOADS_MAX} of the caller's `failed` rows with
+   * `error_kind = 'server'` not reported yet, flagged `failure_delivered` in the same
+   * `UPDATE … RETURNING` — so each failure reaches the hook once even under concurrent
+   * requests (`SKIP LOCKED`). The hook re-sends those files. Old hooks never ask for it.
+   */
+  async takeFailedUploadsForFeedback(
+    userId: number,
+  ): Promise<FailedUploadFeedback[]> {
+    const result = await this.db.execute<{
+      session_id: string;
+      log_type: string;
+    }>(sql`
+      UPDATE upload_queue SET failure_delivered = true
+      WHERE id IN (
+        SELECT id FROM upload_queue
+        WHERE user_id = ${userId}
+          AND status = 'failed'
+          AND error_kind = 'server'
+          AND failure_delivered = false
+        ORDER BY id
+        LIMIT ${FAILED_UPLOADS_MAX}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING session_id, log_type
+    `);
+    const seen = new Set<string>();
+    const feedback: FailedUploadFeedback[] = [];
+    for (const row of result.rows) {
+      const key = `${row.log_type}\u0000${row.session_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      feedback.push({ sessionId: row.session_id, type: row.log_type });
+    }
+    return feedback;
+  }
+
+  /**
+   * DD-16: after the newest queued whole-file upload of a coalesced key (`claude`,
+   * `claude-subagent`, `tool-calls`) completed, deletes the OLDER `pending` rows of the same
+   * `(user_id, session_id, log_type)` — the newest body already replaced them — unlinks their
+   * staged files and records one `superseded` measurement per row. Rows another worker holds
+   * are left alone (`SKIP LOCKED`); they are processed normally and lose to the ordering guard.
+   *
+   * Best-effort for the caller: it must never fail the completed upload.
+   *
+   * @returns the number of rows deleted
+   */
+  async deleteSupersededRows(row: SupersedingRow): Promise<number> {
+    if (!COALESCED_LOG_TYPES.includes(row.logType)) return 0;
+    const deleted = await this.db.execute<{
+      file_name: string;
+      size_bytes: string | number;
+      received_at: Date | string;
+    }>(sql`${sql.raw(NO_LOG_MARKER)}
+      DELETE FROM upload_queue
+      WHERE id IN (
+        SELECT id FROM upload_queue
+        WHERE user_id = ${row.userId}
+          AND session_id = ${row.sessionId}
+          AND log_type = ${row.logType}
+          AND status = 'pending'
+          AND id <> ${row.id}
+          AND received_at < ${row.receivedAt}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING file_name, size_bytes, received_at
+    `);
+    if (deleted.rows.length === 0) return 0;
+
+    const stagingDir = this.resolveStagingDir();
+    await Promise.all(
+      deleted.rows.map((r) =>
+        fs.promises.unlink(path.join(stagingDir, r.file_name)).catch(() => {}),
+      ),
+    );
+
+    const now = new Date();
+    await this.db.insert(uploadQueueMeasurements).values(
+      deleted.rows.map((r) => ({
+        sessionId: row.sessionId,
+        logType: row.logType,
+        startedAt: now,
+        finishedAt: now,
+        durationMs: 0,
+        queueLatencyMs: Math.max(
+          0,
+          now.getTime() - new Date(r.received_at).getTime(),
+        ),
+        sizeBytes: Number(r.size_bytes),
+        outcome: 'superseded' as const,
+      })),
+    );
+    return deleted.rows.length;
   }
 
   /**

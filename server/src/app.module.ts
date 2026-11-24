@@ -23,6 +23,7 @@ import {
   HOOK_API_ROUTES,
   LOG_INGEST_ROUTES,
 } from './common/body-limits';
+import { LoadGovernorModule } from './common/load-governor/load-governor.module';
 import { throwMiddlewareErrors } from './common/middleware-errors';
 import { precompressedCacheHeaders } from './common/precompressed-static';
 import { securityHeaders } from './common/security-headers';
@@ -100,6 +101,7 @@ function requireSessionSecret(): string {
       serveStaticOptions: { setHeaders: precompressedCacheHeaders },
     }),
     DatabaseModule,
+    LoadGovernorModule,
     HealthModule,
     UsersModule,
     AuthModule,

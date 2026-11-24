@@ -1,0 +1,62 @@
+[
+  {
+    "id": "RG-01",
+    "input": {"loadPct": 30, "nowMs": 1000000, "pausedSinceMs": null, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "run", "waitMs": 0, "pausedSinceMs": null},
+    "note": "Rule 1: L = 30 < S = 60, run now."
+  },
+  {
+    "id": "RG-02",
+    "input": {"loadPct": 79.5, "nowMs": 1000000, "pausedSinceMs": null, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "wait", "waitMs": 5000, "pausedSinceMs": null},
+    "note": "Rule 2, slope midpoint: 10000 x (79.5 - 60) / (99 - 60) = 10000 x 19.5 / 39 = 5000."
+  },
+  {
+    "id": "RG-03",
+    "input": {"loadPct": 98, "nowMs": 1000000, "pausedSinceMs": null, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "wait", "waitMs": 9743, "pausedSinceMs": null},
+    "note": "Rule 2, top edge of the slope: 10000 x 38 / 39 = 9743.58..., rounded down to 9743."
+  },
+  {
+    "id": "RG-04",
+    "input": {"loadPct": 60, "nowMs": 1000000, "pausedSinceMs": null, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "run", "waitMs": 0, "pausedSinceMs": null},
+    "note": "Rule 2, bottom edge: L = S is on the slope, 10000 x 0 / 39 = 0 ms, and a 0 ms wait is a plain run."
+  },
+  {
+    "id": "RG-05",
+    "input": {"loadPct": 70, "nowMs": 1000000, "pausedSinceMs": 900000, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "wait", "waitMs": 2564, "pausedSinceMs": null},
+    "note": "Rule 2 after a pause: 10000 x 10 / 39 = 2564.1, rounded down to 2564; load fell below P, so the pause start resets to null."
+  },
+  {
+    "id": "RG-06",
+    "input": {"loadPct": 99, "nowMs": 1000000, "pausedSinceMs": null, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "pause", "waitMs": 0, "pausedSinceMs": 1000000},
+    "note": "Rule 3, pause start: L = P = 99 with no pause yet, so pause and remember now = 1000000."
+  },
+  {
+    "id": "RG-07",
+    "input": {"loadPct": 100, "nowMs": 1299999, "pausedSinceMs": 1000000, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "pause", "waitMs": 0, "pausedSinceMs": 1000000},
+    "note": "Rule 4, pause within the cap: 1299999 - 1000000 = 299999 < 300000, keep pausing, pause start unchanged."
+  },
+  {
+    "id": "RG-08",
+    "input": {"loadPct": 100, "nowMs": 1300000, "pausedSinceMs": 1000000, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "run", "waitMs": 0, "pausedSinceMs": 1000000},
+    "note": "Rule 5, drain after the cap: 1300000 - 1000000 = 300000 >= 300000, run now and keep the pause start (drain mode)."
+  },
+  {
+    "id": "RG-09",
+    "input": {"loadPct": 59.9, "nowMs": 1400000, "pausedSinceMs": 1000000, "slowdownPct": 60, "pausePct": 99, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "run", "waitMs": 0, "pausedSinceMs": null},
+    "note": "Rule 1, return below slowdown: 59.9 < 60 ends the pause (and drain mode), run now, pause start null."
+  },
+  {
+    "id": "RG-10",
+    "input": {"loadPct": 90, "nowMs": 1000000, "pausedSinceMs": null, "slowdownPct": 90, "pausePct": 90, "hardCapMs": 300000, "maxDelayMs": 10000},
+    "expected": {"action": "pause", "waitMs": 0, "pausedSinceMs": 1000000},
+    "note": "S = P = 90: no slope; L = 90 is not < S and not < P, so rule 3 pauses (no division by P - S = 0)."
+  }
+]

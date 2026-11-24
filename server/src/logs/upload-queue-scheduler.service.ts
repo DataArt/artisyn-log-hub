@@ -6,21 +6,28 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
+import { createHash } from 'crypto';
 import { eq, sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
+import { RebuildGovernor } from '../common/load-governor/rebuild-governor';
 import { NO_LOG_MARKER } from '../common/sql-logger';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { uploadQueue, uploadQueueMeasurements } from '../database/schema/index';
 import { LogsService } from './logs.service';
+import { SessionTombstoneService } from '../sessions/session-tombstone.service';
 import { parseNdjsonLinesTolerant } from './ndjson-parser';
 import {
   getMeasurementPruneIntervalMs,
   getMeasurementRetentionMs,
   type UploadQueueMeasurementOutcome,
 } from './upload-queue-stats.constants';
-import { UploadQueueService } from './upload-queue.service';
+import {
+  COALESCED_LOG_TYPES,
+  CONTENT_HASH_MISMATCH,
+  UploadQueueService,
+} from './upload-queue.service';
 import { FOREIGN_SESSION_WARNING } from './upload-warnings';
 import { classifyUploadError } from './upload-error';
 
@@ -47,6 +54,9 @@ interface UploadQueueRawRow extends Record<string, unknown> {
   chunks_received: number | null;
   total_chunks: number | null;
   attempts: number;
+  /** DD-24: the sha256 hex the hook declared for the body; NULL from older hooks. */
+  content_sha256: string | null;
+  failure_delivered: boolean;
 }
 
 /**
@@ -97,6 +107,8 @@ export class UploadQueueSchedulerService
     private readonly logsService: LogsService,
     private readonly uploadQueueService: UploadQueueService,
     private readonly schedulerRegistry: SchedulerRegistry,
+    private readonly governor: RebuildGovernor,
+    private readonly tombstones: SessionTombstoneService,
   ) {}
 
   /**
@@ -298,8 +310,15 @@ export class UploadQueueSchedulerService
       const budgetMs = this.getTickBudgetMs();
       const start = Date.now();
       do {
+        // Paced by RebuildGovernor before each claim (DD-15 of
+        // 2026-11-23-session-logs-streaming): under CPU load ingest slows down or pauses
+        // instead of competing with request handling. The wait counts against the budget.
+        await this.governor.admit();
         const claimed = await this.claimNextPendingRow();
-        if (!claimed) return;
+        if (!claimed) {
+          this.governor.reportIdle();
+          return;
+        }
         await this.processRow(claimed);
       } while (Date.now() - start < budgetMs);
     } catch (err) {
@@ -325,26 +344,65 @@ export class UploadQueueSchedulerService
    * Atomically claims the oldest `pending` row via `FOR UPDATE SKIP LOCKED`
    * — self-corrects regardless of cluster worker count,
    * with no instance-index gating needed.
+   *
+   * Coalescing (DD-16 of 2026-11-23-session-logs-streaming): when that row is a whole-file
+   * upload of a coalesced type (`COALESCED_LOG_TYPES`), the newest eligible `pending` row of
+   * the same `(user_id, session_id, log_type)` is claimed instead — the older ones are deleted
+   * as `superseded` once it succeeds. The first pick is only row-locked for the length of this
+   * transaction and stays `pending`, untouched.
    */
   private async claimNextPendingRow(): Promise<UploadQueueRawRow | null> {
-    const result = await this.db.execute<UploadQueueRawRow>(
-      sql`${sql.raw(NO_LOG_MARKER)}
-          UPDATE upload_queue
-          SET status = 'processing', updated_at = now()
-          WHERE id = (
-            SELECT id FROM upload_queue
-            WHERE status = 'pending'
-              -- A row sent back after a transient error waits a little, so the transaction it
-              -- collided with can finish first.
-              AND (attempts = 0
-                   OR updated_at <= now() - make_interval(secs => attempts * ${sql.raw(String(RETRY_BACKOFF_SECONDS))}))
-            ORDER BY received_at ASC
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
+    // A row sent back after a transient error waits a little, so the transaction it collided
+    // with can finish first.
+    const eligible = sql`status = 'pending'
+      AND (attempts = 0
+           OR updated_at <= now() - make_interval(secs => attempts * ${sql.raw(String(RETRY_BACKOFF_SECONDS))}))`;
+    return this.db.transaction(async (tx) => {
+      const first = (
+        await tx.execute<{
+          id: number;
+          user_id: number;
+          session_id: string;
+          log_type: string;
+        }>(
+          sql`${sql.raw(NO_LOG_MARKER)}
+              SELECT id, user_id, session_id, log_type FROM upload_queue
+              WHERE ${eligible}
+              ORDER BY received_at ASC
+              LIMIT 1
+              FOR UPDATE SKIP LOCKED`,
+        )
+      ).rows[0];
+      if (!first) return null;
+
+      let claimId = first.id;
+      if (COALESCED_LOG_TYPES.includes(first.log_type)) {
+        const newest = (
+          await tx.execute<{ id: number }>(
+            sql`${sql.raw(NO_LOG_MARKER)}
+                SELECT id FROM upload_queue
+                WHERE ${eligible}
+                  AND user_id = ${first.user_id}
+                  AND session_id = ${first.session_id}
+                  AND log_type = ${first.log_type}
+                  AND id <> ${first.id}
+                ORDER BY received_at DESC, id DESC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED`,
           )
-          RETURNING *`,
-    );
-    return result.rows[0] ?? null;
+        ).rows[0];
+        if (newest) claimId = newest.id;
+      }
+
+      const result = await tx.execute<UploadQueueRawRow>(
+        sql`${sql.raw(NO_LOG_MARKER)}
+            UPDATE upload_queue
+            SET status = 'processing', updated_at = now()
+            WHERE id = ${claimId}
+            RETURNING *`,
+      );
+      return result.rows[0] ?? null;
+    });
   }
 
   private async processRow(row: UploadQueueRawRow): Promise<void> {
@@ -388,6 +446,61 @@ export class UploadQueueSchedulerService
           throw err;
         }
       }
+
+      // DD-20 server hash skip: an unchanged whole-file upload is dropped before parsing.
+      const bodySha256 = createHash('sha256')
+        .update(rawBody, 'utf8')
+        .digest('hex');
+      // DD-24 content integrity: a body that does not match the hash the hook declared was
+      // torn or changed in flight — fail it (no retry) so the hook re-sends it on feedback.
+      if (row.content_sha256 && row.content_sha256 !== bodySha256) {
+        await this.failContentHashMismatch(row, startedAt);
+        return;
+      }
+      // DD-27 tombstone: an upload of a deleted session (or one under a deleted ancestor) is
+      // dropped before parsing. Lock-free here; `checkUnchanged` / `upsert` repeat the check
+      // under the tree lock, which is the authoritative one. It completes as `upsert`'s
+      // silent rejection always did.
+      if (
+        await this.tombstones.isTombstoned(
+          this.db,
+          row.session_id,
+          row.parent_session_id,
+        )
+      ) {
+        await this.completeRow(row, filePath, startedAt, 'success');
+        return;
+      }
+      const uploadParams = {
+        sessionId: row.session_id,
+        logType: row.log_type,
+        userId: row.user_id,
+        parentSessionId: row.parent_session_id ?? undefined,
+        workflowRunId: row.workflow_run_id ?? undefined,
+        agentMeta: {
+          agentDescription: row.agent_description ?? null,
+          workflowPhase: row.workflow_phase ?? null,
+        },
+      };
+      const unchanged = await this.logsService.checkUnchanged(
+        uploadParams,
+        bodySha256,
+      );
+      if (unchanged === 'foreign') {
+        await this.rejectForeignSession(row, filePath, startedAt);
+        return;
+      }
+      if (unchanged === 'skip' || unchanged === 'deleted') {
+        // A deleted session completes exactly as `upsert`'s silent rejection always did.
+        await this.completeRow(
+          row,
+          filePath,
+          startedAt,
+          unchanged === 'skip' ? 'skipped' : 'success',
+        );
+        return;
+      }
+
       const { lines, dropped, totalLines } = parseNdjsonLinesTolerant(rawBody);
       if (dropped.length > 0) {
         // Torn records from an old hook (see MAX_DROPPED_LINE_RATIO): the rest
@@ -404,17 +517,15 @@ export class UploadQueueSchedulerService
       }
 
       const upsertResult = await this.logsService.upsert(
-        row.session_id,
-        row.log_type,
+        uploadParams.sessionId,
+        uploadParams.logType,
         lines,
-        row.user_id,
+        uploadParams.userId,
         Number(row.size_bytes),
-        row.parent_session_id ?? undefined,
-        row.workflow_run_id ?? undefined,
-        {
-          agentDescription: row.agent_description ?? null,
-          workflowPhase: row.workflow_phase ?? null,
-        },
+        uploadParams.parentSessionId,
+        uploadParams.workflowRunId,
+        uploadParams.agentMeta,
+        { bodySha256, receivedAt: new Date(row.received_at) },
       );
 
       if (upsertResult.status === 'foreign-session') {
@@ -426,25 +537,14 @@ export class UploadQueueSchedulerService
         return;
       }
 
-      await this.db.delete(uploadQueue).where(eq(uploadQueue.id, row.id));
-      try {
-        // Deliberately after the delete: recording a measurement must never delay (or
-        // fail) the completion of an upload, so this runs once the row is already gone.
-        await this.recordMeasurement(row, startedAt, new Date(), 'success');
-      } catch (err) {
-        this.logger.warn(
-          `Failed to record upload queue measurement (success) for id=${row.id} sessionId=${row.session_id}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-      try {
-        await fs.promises.unlink(filePath);
-      } catch {
-        // Best-effort: the DB row is already gone, which is the source of
-        // truth for "processed" — a leftover file is at worst a small amount
-        // of disk cruft, not a correctness issue.
-      }
+      // DD-19: an upload older than the stored body wrote nothing — it completes as
+      // `superseded`.
+      await this.completeRow(
+        row,
+        filePath,
+        startedAt,
+        upsertResult.status === 'superseded' ? 'superseded' : 'success',
+      );
     } catch (err) {
       // Parse errors, upsert()/DB errors, and
       // file-read I/O errors are all classified identically. Logged via
@@ -509,6 +609,87 @@ export class UploadQueueSchedulerService
           }`,
         );
       }
+    }
+  }
+
+  /**
+   * Terminal handling of a row whose upload is done (processed, skipped, superseded or for a
+   * deleted session): deletes the row, records the measurement and unlinks the staged file.
+   */
+  private async completeRow(
+    row: UploadQueueRawRow,
+    filePath: string,
+    startedAt: Date,
+    outcome: UploadQueueMeasurementOutcome,
+  ): Promise<void> {
+    await this.db.delete(uploadQueue).where(eq(uploadQueue.id, row.id));
+    try {
+      // Deliberately after the delete: recording a measurement must never delay (or
+      // fail) the completion of an upload, so this runs once the row is already gone.
+      await this.recordMeasurement(row, startedAt, new Date(), outcome);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to record upload queue measurement (${outcome}) for id=${row.id} sessionId=${row.session_id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    try {
+      await fs.promises.unlink(filePath);
+    } catch {
+      // Best-effort: the DB row is already gone, which is the source of
+      // truth for "processed" — a leftover file is at worst a small amount
+      // of disk cruft, not a correctness issue.
+    }
+    // DD-16: the older queued uploads of a coalesced key are replaced by this one.
+    try {
+      await this.uploadQueueService.deleteSupersededRows({
+        id: row.id,
+        userId: row.user_id,
+        sessionId: row.session_id,
+        logType: row.log_type,
+        receivedAt: new Date(row.received_at),
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to delete superseded upload queue rows after id=${row.id} sessionId=${row.session_id} logType=${row.log_type}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * DD-24: marks a row whose staged body does not match its declared `content_sha256` as
+   * `failed` (`error_kind = 'server'`, `content-hash-mismatch`) without a retry — the staged
+   * bytes will not change. The hook learns about it through `failedUploads` (DD-25) and
+   * re-sends the file. Records a `failure` measurement.
+   */
+  private async failContentHashMismatch(
+    row: UploadQueueRawRow,
+    startedAt: Date,
+  ): Promise<void> {
+    this.logger.warn(
+      `Upload queue body does not match its declared contentSha256: id=${row.id} sessionId=${row.session_id} logType=${row.log_type} fileName=${row.file_name}`,
+    );
+    await this.db
+      .update(uploadQueue)
+      .set({
+        status: 'failed',
+        attempts: Number(row.attempts ?? 0) + 1,
+        errorMessage: CONTENT_HASH_MISMATCH,
+        errorKind: 'server',
+        updatedAt: new Date(),
+      })
+      .where(eq(uploadQueue.id, row.id));
+    try {
+      await this.recordMeasurement(row, startedAt, new Date(), 'failure');
+    } catch (err) {
+      this.logger.warn(
+        `Failed to record upload queue measurement (failure) for id=${row.id} sessionId=${row.session_id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
   }
 

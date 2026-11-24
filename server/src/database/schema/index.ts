@@ -3,6 +3,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  customType,
   date,
   doublePrecision,
   index,
@@ -22,6 +23,11 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { UploadQueueMeasurementOutcome } from '../../logs/upload-queue-stats.constants';
 import type { PricingTier } from '../../model-pricing/model-pricing.types';
+
+// drizzle-orm 0.45 has no built-in bytea column; node-postgres returns bytea as a Buffer.
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+});
 
 export const userRoleEnum = pgEnum('user_role', ['admin', 'user']);
 
@@ -356,10 +362,36 @@ export const logs = pgTable(
     // Both nullable: only `artisyn` logs carry them, and only from an updated hook.
     gitRepoRoot: text('git_repo_root'),
     gitWorktreeRoot: text('git_worktree_root'),
+    // Migration 0096. `bodyRev` is set by the `logs_body_guard` BEFORE INSERT OR UPDATE OF
+    // body trigger from the sequence `logs_body_rev_seq` (it has gaps: compare only for
+    // equality or order); NULL on legacy rows until the gzip builder assigns one. The same
+    // trigger clears `bodySha256` on a body UPDATE that changes neither `bodySha256` nor
+    // `bodyReceivedAt`, so a writer that does not know the hash never leaves a stale one.
+    bodyRev: bigint('body_rev', { mode: 'bigint' }),
+    // sha256 hex of the raw uploaded body (UTF-8) + the INGEST_VERSION that processed it:
+    // together they let an identical re-upload be skipped. NULL = unknown.
+    bodySha256: varchar('body_sha256', { length: 64 }),
+    ingestVersion: smallint('ingest_version'),
+    // upload_queue.received_at of the upload that wrote the body (now() for zip import); an
+    // older upload never overwrites a newer one. NULL = legacy, always overwritable.
+    bodyReceivedAt: timestamp('body_received_at', { withTimezone: true }),
+    // gzip (level 6) of body::text; valid only when bodyGzRev = bodyRev. Storage EXTERNAL.
+    bodyGz: bytea('body_gz'),
+    bodyGzRev: bigint('body_gz_rev', { mode: 'bigint' }),
+    // artisyn rows: sha256 of the extracted edit-result records. claude / claude-subagent
+    // rows: the tree's edit_records_sha256 the stats were extracted with ('' = none).
+    editRecordsSha256: varchar('edit_records_sha256', { length: 64 }),
+    statsEditSha256: varchar('stats_edit_sha256', { length: 64 }),
   },
   (table) => [
     unique().on(table.sessionId, table.logType),
     index('idx_logs_log_type').on(table.logType),
+    // Migration 0096: rows whose gzip copy is missing or stale (the gzip builder's queue).
+    index('idx_logs_body_gz_pending')
+      .on(table.id)
+      .where(
+        sql`${table.logType} IN ('artisyn', 'claude', 'claude-subagent') AND ${table.body} IS NOT NULL AND (${table.bodyRev} IS NULL OR ${table.bodyGzRev} IS DISTINCT FROM ${table.bodyRev})`,
+      ),
   ],
 );
 
@@ -1122,6 +1154,10 @@ export const deletedSessionLog = pgTable(
     endTime: timestamp('end_time', { withTimezone: true }),
     workTimeMs: bigint('work_time_ms', { mode: 'number' }),
     totalCost: numeric('total_cost', { precision: 14, scale: 8 }),
+    // Migration 0096: repositories.repo_url of the deleted tree's root (lowest repo_id linked
+    // to its artisyn log), copied to descendant rows, so a repository deletion can clear its
+    // tombstones. NULL on rows written before 0096 or when the root had no repository.
+    repositoryUrl: varchar('repository_url', { length: 2048 }),
   },
   (table) => [
     // One audit row per session, ever — also the idempotency primitive
@@ -1129,6 +1165,10 @@ export const deletedSessionLog = pgTable(
     // `onConflictDoNothing` so overlapping purge runs (multiple prod
     // instances ticking concurrently) can't double-purge the same session.
     unique('deleted_session_log_session_pk_unique').on(table.sessionPk),
+    // Migration 0096: tombstone lookup by session id, fresh start by owner / repository.
+    index('idx_deleted_session_log_session_id').on(table.sessionId),
+    index('idx_deleted_session_log_owner').on(table.ownerUserId),
+    index('idx_deleted_session_log_repo_url').on(table.repositoryUrl),
   ],
 );
 
@@ -1261,6 +1301,29 @@ export const sessionStats = pgTable('session_stats', {
   // computed yet. 0081 resets list_flags_version of v1 rows so the backfill fills it.
   claudeLineCount: integer('claude_line_count'),
   updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  // Migration 0096: workflow runs (WorkflowRun[]) extracted from the session's own claude
+  // transcript at ingest, so readers never parse the body. NULL for sub-agent sessions or not
+  // computed yet; `workflowsVersion` NULL = not computed yet (WORKFLOWS_VERSION once written).
+  // Partial index (raw SQL in 0096, like list flags above):
+  //   idx_session_stats_workflows_pending ON session_stats (session_id)
+  //   WHERE workflows_version IS NULL — the workflows backfill's queue.
+  workflows: jsonb('workflows'),
+  workflowsVersion: smallint('workflows_version'),
+});
+
+/**
+ * Session tree roots whose claude / claude-subagent stats must be re-extracted because the
+ * tree's artisyn edit records changed (migration 0096). Written by `LogsService` on artisyn
+ * ingest, drained by `SessionReextractService`. An old `requestedAt` marks the session's
+ * derived figures as lagging.
+ */
+export const sessionReextractQueue = pgTable('session_reextract_queue', {
+  sessionPk: integer('session_pk')
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  requestedAt: timestamp('requested_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
@@ -2102,6 +2165,12 @@ export const uploadQueue = pgTable(
     // Migration 0083: `server` (Log Hub could not process a good file) or `file` (the body is
     // broken), set with `failed`; NULL on rows written before it (see upload-error.ts).
     errorKind: varchar('error_kind', { length: 16 }),
+    // Migration 0096: sha256 hex the hook declared for the whole body (`contentSha256` query
+    // param, single upload or chunk 0); a mismatch fails the row with content-hash-mismatch.
+    contentSha256: varchar('content_sha256', { length: 64 }),
+    // Migration 0096: set true once this failed (error_kind server) row was returned to the
+    // hook in `failedUploads`, so each failure is reported once.
+    failureDelivered: boolean('failure_delivered').notNull().default(false),
   },
   (table) => [
     index('idx_upload_queue_status_received_at').on(
