@@ -20,6 +20,8 @@ export type {
   ErrorLogEntry,
   PendingRegistration,
   SystemInfo,
+  SystemInfoPartCache,
+  SystemInfoPartCacheSweep,
   SystemInfoWorkerProcess,
   UploadQueueEntry,
   UploadQueueStats,

@@ -1,7 +1,7 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { Request, Response } from 'express';
-import { Readable } from 'stream';
+import { pipeline, Readable } from 'stream';
 import * as zlib from 'zlib';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
@@ -12,6 +12,7 @@ import type {
   SessionLogPart,
   SessionLogPartsManifest,
 } from './dto/session-log-parts.dto';
+import { PartCacheService } from './part-cache/part-cache.service';
 import type { TreeLogRowMeta } from './session-tree-logs-meta';
 import { writeChunk } from './streaming/response-stream';
 
@@ -71,6 +72,32 @@ interface PartBodyRow {
   rev: string;
 }
 
+/** The revision-only re-check of a cache hit (impl-plan DD-5 step 2). */
+interface PartRevRow {
+  rev: string | null;
+  gz_ok: boolean | null;
+}
+
+/** Only numeric `body_rev` revisions are cached (DD-2); legacy `u…` revisions never are. */
+const CACHEABLE_REV_RE = /^\d+$/;
+
+function toBuffer(chunk: string | Buffer): Buffer {
+  return Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+}
+
+/** Yields an already-read first chunk, then the rest of the iterator, dropping nothing. */
+async function* firstThenRest(
+  first: Buffer,
+  rest: AsyncIterator<string | Buffer>,
+): AsyncGenerator<Buffer> {
+  yield first;
+  for (;;) {
+    const next = await rest.next();
+    if (next.done === true) return;
+    yield toBuffer(next.value);
+  }
+}
+
 /**
  * The session-log parts API (impl-plan DD-11, DD-12, DD-14 of 2026-11-23-session-logs-streaming):
  * the manifest of a session tree's stored log blobs and one blob's body, served from the
@@ -78,7 +105,12 @@ interface PartBodyRow {
  */
 @Injectable()
 export class SessionLogPartsService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
+  private readonly logger = new Logger(SessionLogPartsService.name);
+
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDb,
+    private readonly cache: PartCacheService,
+  ) {}
 
   /**
    * DD-11: the manifest — every `meta` row with a body, in DD-5 order, with its DD-8 revision,
@@ -163,12 +195,28 @@ export class SessionLogPartsService {
    *
    * One query reads either the copy or the text, never both. A row whose body went NULL or
    * vanished since the metadata read answers 404 (nothing has been written yet then).
+   *
+   * Disk cache (impl-plan DD-5 of 2026-11-24-session-parts-disk-cache):
+   *
+   * - hit — when the metadata names a numeric revision with a valid copy and
+   *   `<cache>/<logId>/<rev>.json.gz` exists, a revision-only query (no body column read)
+   *   confirms the copy is still current, and the file is streamed with the same headers
+   *   (gzip as is, or gunzipped). A stale revision, or a file whose first read fails, falls
+   *   through to the database path; a vanished row answers 404 before anything is written;
+   * - miss — the single query above, unchanged; after the answer is sent, a valid numeric-
+   *   revision copy is written to the cache in the background (whatever the client accepted).
    */
   async streamPart(
     req: Request,
     res: Response,
     meta: TreeLogRowMeta,
   ): Promise<void> {
+    if (this.cache.enabled && meta.bodyRev !== null && meta.gzReady) {
+      if (await this.streamFromCache(req, res, meta.logId, meta.bodyRev)) {
+        return;
+      }
+    }
+
     // The ETag names the revision of the bytes actually sent: the row may have been rewritten
     // since the metadata read, and a stale ETag would let a later 304 pin the old body.
     const result = await this.db.execute(sql`
@@ -198,6 +246,7 @@ export class SessionLogPartsService {
         res.setHeader('Content-Length', String(row.gz.length));
         await writeChunk(res, row.gz);
         res.end();
+        this.fillCache(meta.logId, row.rev, row.gz);
         return;
       }
       const gunzip = Readable.from([row.gz]).pipe(zlib.createGunzip());
@@ -209,10 +258,103 @@ export class SessionLogPartsService {
         gunzip.destroy();
       }
       res.end();
+      this.fillCache(meta.logId, row.rev, row.gz);
       return;
     }
 
     if (row.t !== null) await writeChunk(res, row.t);
     res.end();
+  }
+
+  /** DD-5 step 4: a background cache fill of a served copy with a numeric revision. */
+  private fillCache(logId: number, rev: string, gz: Buffer): void {
+    if (!CACHEABLE_REV_RE.test(rev)) return;
+    this.cache.store(logId, rev, gz);
+  }
+
+  /**
+   * DD-5 steps 1–3: answers from the cache file when it exists and is still current. Returns
+   * false (with nothing written) when the caller must fall through to the database path;
+   * throws 404 (with nothing written) when the row is gone.
+   */
+  private async streamFromCache(
+    req: Request,
+    res: Response,
+    logId: number,
+    bodyRev: string,
+  ): Promise<boolean> {
+    const hit = await this.cache.openForRead(logId, bodyRev);
+    if (hit === null) return false;
+    try {
+      const result = await this.db.execute(sql`
+        SELECT body_rev::text AS rev,
+               (body_rev IS NOT NULL AND body_gz_rev = body_rev AND body_gz IS NOT NULL) AS gz_ok
+          FROM logs
+         WHERE id = ${logId}
+      `);
+      const revRow = (result.rows as unknown as PartRevRow[])[0];
+      if (revRow === undefined) {
+        throw new NotFoundException('Session log part not found');
+      }
+      if (revRow.gz_ok !== true || revRow.rev !== bodyRev) return false;
+
+      // Probe the file before any header goes out, so a read failure can still fall back (FR-10).
+      const rest = hit.stream[Symbol.asyncIterator]();
+      let first: Buffer;
+      try {
+        const next = await rest.next();
+        if (next.done === true) {
+          throw new Error('cache file is empty');
+        }
+        first = toBuffer(next.value);
+      } catch (err) {
+        this.logger.warn(
+          `Part cache read failed for log ${logId}, serving from the database: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        return false;
+      }
+
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.setHeader('ETag', `"${bodyRev}"`);
+      res.setHeader('Cache-Control', 'private, no-cache');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(200);
+
+      if (acceptsGzip(req)) {
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Content-Length', String(hit.size));
+        for await (const chunk of firstThenRest(first, rest)) {
+          await writeChunk(res, chunk);
+        }
+      } else {
+        await this.writeGunzipped(res, firstThenRest(first, rest));
+      }
+      res.end();
+    } finally {
+      hit.stream.destroy();
+    }
+    this.cache.touchOnHit(hit);
+    return true;
+  }
+
+  /** Gunzips a gzip byte sequence into the response; a source error rejects the write. */
+  private async writeGunzipped(
+    res: Response,
+    source: AsyncIterable<Buffer>,
+  ): Promise<void> {
+    const src = Readable.from(source);
+    const gunzip = zlib.createGunzip();
+    // pipeline destroys the gunzip with the source's error, so the loop below rejects.
+    pipeline(src, gunzip, () => undefined);
+    try {
+      for await (const chunk of gunzip) {
+        if (Buffer.isBuffer(chunk)) await writeChunk(res, chunk);
+      }
+    } finally {
+      gunzip.destroy();
+      src.destroy();
+    }
   }
 }

@@ -308,9 +308,12 @@ grep the controller.
   for a NULL root claude body. The part route answers 400 for a `logType` other than
   `claude` / `artisyn` / `claude-subagent`, 404 `Session log part not found` for a part outside the
   tree, 304 on a matching `If-None-Match` (no body read, no stream permit), and serves the stored
-  gzip copy with `Content-Encoding: gzip` when it is valid and accepted. Logic:
+  gzip copy with `Content-Encoding: gzip` when it is valid and accepted. A disposable disk cache
+  (`logs/part-cache/`) sits behind the part route: a hit checks only the row's revision in the DB
+  and streams the cached gzip file; a miss reads the DB as before and fills the cache afterwards.
+  Headers, ETag, 304 and the stream permit are the same either way. Logic:
   `logs/session-log-parts.service.ts`; types: `logs/dto/session-log-parts.dto.ts`; details in
-  `session-log-view.md` ("The parts API").
+  `session-log-view.md` ("The parts API") and [session-part-cache.md](session-part-cache.md).
 - `GET …/sessions/export-scope` (statistics export) is repo owner or team owner and bypasses the
   team access mode.
 - `PUT …/settings/team` is team owner only; both settings PUTs trigger a recompute, except when
@@ -400,6 +403,11 @@ grep the controller.
   (`GET admin/auth/pending-registrations`, `POST …/:id/resend`, `DELETE …/:id`) are gated the same
   way (404 in `strict-managed`).
 - `GET /api/v1/admin/retention` is `admin-or-team-owner`, not `admin`.
+- `GET /api/v1/admin/system` carries `partCache` (additive; `PartCacheView` in
+  `logs/part-cache/part-cache.types.ts`): config, the last sweep's figures read from the cache's
+  state file (the request never scans the folder) and `removedByDataDeletion`, which counts only
+  the answering worker since its start. The contract row `F01-admin-system` pins only the status;
+  the shape is asserted in `@S-ADM-01`. See [session-part-cache.md](session-part-cache.md).
 - Model pricing: model ids contain `/`, so `PUT …/model-pricing/price` and `…/override` carry the
   id in the body; `fetch-anthropic` never answers an HTTP error (`{ result }`), while
   `import-openrouter` answers 502 on a fetch failure; an override over a future row → 409.

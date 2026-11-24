@@ -12,6 +12,7 @@ import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { deleteTeamRepo } from '../logs/budgets/budgets-cleanup';
 import { clearSessionTombstones } from '../sessions/session-tombstone.service';
+import { PartCacheService } from '../logs/part-cache/part-cache.service';
 import {
   invitations,
   logs,
@@ -92,6 +93,7 @@ export class AccountDeletionService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly authSessionsService: AuthSessionsService,
+    private readonly partCache: PartCacheService,
   ) {}
 
   /**
@@ -204,8 +206,16 @@ export class AccountDeletionService {
         }
       }
 
+      // The user's logs go by the `user_id` cascade below; capture their ids first so the
+      // on-disk part-cache folders can be removed too (fire-and-forget, never throws).
+      const userLogRows = await tx
+        .select({ id: logs.id })
+        .from(logs)
+        .where(eq(logs.userId, userId));
+
       // The cascades do the bulk of the work here.
       await tx.delete(users).where(eq(users.id, userId));
+      this.partCache.removeLogFolders(userLogRows.map((row) => row.id));
 
       // (4) sessions left with no logs at all.
       for (const chunk of batched(sessionIds)) {

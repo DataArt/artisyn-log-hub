@@ -212,7 +212,11 @@ The full set of CWD-relative resolvers `WORKDIR /app/dist` governs: `resolveStag
 and `error-logs.service.ts` (all `logs` → `logs_data`), plus `logs/export-import-zip.ts`
 (`EXPORT_IMPORT_DIR` || `export-import`; the release compose mounts it from
 `$LOG_HUB_DATA_DIR/export-import`, so staged export/import zips survive a container recreate until their
-TTL and the dir is writable under a `read_only: true` override).
+TTL and the dir is writable under a `read_only: true` override), and `readPartCacheConfig()` in
+`logs/part-cache/part-cache.config.ts` (`SESSION_PART_CACHE_DIR` || `<UPLOAD_QUEUE_DIR || upload-queue>/part-cache`
+→ inside `upload_queue_data`; a disposable cache, see [session-part-cache.md](session-part-cache.md)).
+The System Info API also carries the cache's admin view as `partCache` (Part cache card on the
+System tab).
 
 **A second, code-level cause of the same `ENOENT` symptom (fixed, see below).** Even with the volume
 correctly mounted, `UploadQueueService.reassembleChunks()` used to delete a chunked upload's `.chunkN`

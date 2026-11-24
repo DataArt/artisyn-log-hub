@@ -7,6 +7,7 @@
  * importing this file.
  */
 import type { BuildInfo } from '../common/build-info';
+import type { PartCacheView } from '../logs/part-cache/part-cache.types';
 
 export interface SystemInfoResponse {
   /** expected = computeInstanceCount(cpus.visible); actual = supervisor.processes.length */
@@ -55,6 +56,14 @@ export interface SystemInfoResponse {
     filesystemFreeBytes: number;
   };
   supervisor: SupervisorInfo;
+  /**
+   * Session log part disk cache: config, the last sweep's state (read from the
+   * cache's state file, `null` when absent/unreadable or the cache is disabled —
+   * size, file count and oldest last read are "as of last sweep", an admin
+   * request never scans the folder) and files/bytes removed by data deletion.
+   * `removedByDataDeletion` is per answering worker process since its start.
+   */
+  partCache: PartCacheView;
 }
 
 export interface SupervisorInfo {

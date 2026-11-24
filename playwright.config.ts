@@ -33,6 +33,9 @@ export default defineConfig({
     {
       name: 'extended',
       dependencies: ['setup'],
+      // Everything except @core: the `core` project (npm run test:e2e, check e2e-fast) runs those,
+      // and the final verification runs both checks, so `extended` must not repeat them.
+      grepInvert: /@core/,
       testIgnore: /global\.setup\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },

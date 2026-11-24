@@ -605,6 +605,7 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   2. API (REGULAR): `GET /admin/repos`, `/admin/teams`, `/admin/users`, `/admin/system`, `/admin/error-logs`, `/admin/logs-archive`, `/admin/upload-queue`, `/admin/upload-queue/stats`, `/admin/auth`, `PATCH /admin/users/<id>/role`, `POST /admin/users/<id>/delete`; the same anonymously.
   3. API (TEAMOWNER, not an admin): `GET /admin/retention`; REGULAR: the same call.
   4. UI (ADMIN): `/#/main`, press "Admin Panel".
+  4c. API (ADMIN): `GET /admin/system`, read `partCache` (task 2026-11-24-session-parts-disk-cache); UI: the System Info tab's "Part cache" card.
   5. UI: go through all 9 tabs: System Info, Repos, Teams, Users, Error Logs, Upload Queue, Data Retention, Auth, Model Pricing.
   6. UI: click Teams, then go back to System Info.
   7. UI: open `/#/admin?tab=all-teams` and `/#/admin?tab=bogus`.
@@ -619,6 +620,7 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   - Step 2: **403** for REGULAR and **401** for the anonymous context on every listed route.
   - Step 3: TEAMOWNER 200 with the fields `retentionDays`, `dailySeries`, REGULAR (without a team) 403.
   - Step 4: the URL equals `#/admin`, the "System Info" tab is active (the default, a hash without `tab=`).
+  - Step 4c: `partCache.enabled` is true and `ttlDays` is 14; `lastSweep` is non-null within 10 s (the stand sweeps every second); the card `part-cache-card` shows `part-cache-status` "Enabled" and `part-cache-size` matching "<size> of <cap> · <n> files". The step raises the test timeout to 210 s.
   - Step 5: every tab activates (`data-state=active`), the page has no "NaN", "undefined" or the word `null`; no JS errors (a global `pageerror` fixture instead of local `jsErrors`).
   - Step 6: Teams puts `tab=all-teams` into the hash; going back to System Info **removes** the `tab` parameter from the hash.
   - Step 7: `?tab=all-teams` opens Teams, a garbage value opens System Info and the hash is not rewritten.

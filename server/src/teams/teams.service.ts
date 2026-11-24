@@ -44,6 +44,7 @@ import {
 } from '../logs/team-repo-config';
 import { UsersService } from '../users/users.service';
 import { TeamRepoRecomputeService } from './team-repo-recompute.service';
+import { PartCacheService } from '../logs/part-cache/part-cache.service';
 
 const TEAM_CREATION_DEFAULT_CONFIG: RepoConfigJson = {
   fileCategories: [{ name: 'docs', patterns: ['\\.md$'] }],
@@ -58,6 +59,7 @@ export class TeamsService {
     private readonly usersService: UsersService,
     private readonly teamRepoRecompute: TeamRepoRecomputeService,
     private readonly configService: ConfigService,
+    private readonly partCache: PartCacheService,
   ) {}
 
   async createTeam(ownerId: number, name: string) {
@@ -642,6 +644,7 @@ export class TeamsService {
 
           // 4c. Delete logs (cascades log_repositories and log_contexts)
           await tx.delete(schema.logs).where(inArray(schema.logs.id, logIds));
+          this.partCache.removeLogFolders(logIds);
 
           // 4d. Delete orphaned sessions (those with no remaining logs)
           if (sessionIds.length > 0) {

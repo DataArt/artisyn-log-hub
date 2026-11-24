@@ -33,6 +33,12 @@ parsed on the request path. Column-level detail lives in
 | Admin UI | `client/src/viewer/pages/admin/tabs/AdminUploadQueueTab.tsx`, `UploadQueueStatsPanel.tsx` |
 | Hook uploader | `hook/.claude/telemetry_tool/upload-logs.js`, `hook/.claude/telemetry_tool/send-logs-hook.js` |
 
+**`part-cache/` is not staging.** By default the session-log part cache lives in
+`<UPLOAD_QUEUE_DIR>/part-cache/` ([session-part-cache.md](session-part-cache.md)). No staging
+scanner touches it: every one matches `<uploadId>.chunk*` or a session / upload id prefix, or
+unlinks named files, and the admin disk-usage figure sizes only `logs/`. A new scanner over
+`UPLOAD_QUEUE_DIR` must skip that folder too.
+
 ## Queue lifecycle
 
 1. **Stage.** `saveRawUpload()` writes the body to `<UPLOAD_QUEUE_DIR>/<epochMs>-<uuid>.raw`

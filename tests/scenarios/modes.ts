@@ -156,6 +156,9 @@ export function standEnv(input: StandEnvInput): Record<string, string> {
     // The deleted-session cleanup drain (DD-28) runs every second (default 60 s), so S-SLIFE-07
     // sees a live child of a deleted root soft-deleted within a step.
     DELETED_SESSION_CLEANUP_INTERVAL_MS: '1000',
+    // The session part cache sweep (DD-14) runs every second (default 60 s), so S-SESS-03 sees
+    // TTL and cap evictions within a step.
+    SESSION_PART_CACHE_SWEEP_INTERVAL_MS: '1000',
     // The rebuild governor (DD-15) paces every drain and the upload queue by CPU load. A
     // parallel suite on a busy host would otherwise pause them for up to 5 min; on the stand the
     // pause is capped at 2 s and the slowdown at 200 ms, so scenarios never wait on it.
@@ -168,6 +171,9 @@ export function standEnv(input: StandEnvInput): Record<string, string> {
     UPLOAD_QUEUE_DIR: input.joinPath(input.runDir, 'upload-queue'),
     EXPORT_IMPORT_DIR: input.joinPath(input.runDir, 'export-import'),
   };
+  // Mode C caps the session part cache at 1 MB (DD-14), so S-SESS-03 can drive the size cap;
+  // mode A keeps the 1 GB default so its cache-hit steps are never disturbed by eviction.
+  if (input.mode === 'c') env.SESSION_PART_CACHE_MAX_MB = '1';
   // Mode D (strict-managed) shares mode B's production + SMTP env; its ADMIN_CONTACT_EMAIL is the
   // bootstrap admin the stand creates and emails on its first start.
   if (input.mode === 'b' || input.mode === 'd') {

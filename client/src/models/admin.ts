@@ -241,4 +241,44 @@ export interface SystemInfo {
     clustered: boolean;
     processes: SystemInfoWorkerProcess[];
   };
+  /** Session-part disk cache: config plus the last sweep's state file and this worker's counters. */
+  partCache: SystemInfoPartCache;
+}
+
+/** One file-count / byte-total pair removed from the part cache. */
+export interface SystemInfoPartCacheRemoved {
+  files: number;
+  bytes: number;
+}
+
+/** State file written by the last part-cache sweep (TTL timer or over-cap trigger). */
+export interface SystemInfoPartCacheSweep {
+  /** ISO end time of the pass. */
+  at: string;
+  durationMs: number;
+  trigger: 'timer' | 'cap';
+  /** Total `*.json.gz` bytes after the pass. */
+  sizeBytes: number;
+  fileCount: number;
+  /** ISO of the oldest last-read time left, `null` when the cache is empty. */
+  oldestReadAt: string | null;
+  removedTtl: SystemInfoPartCacheRemoved;
+  removedCap: SystemInfoPartCacheRemoved;
+  removedTempFiles: number;
+  /** Message of a pass-level failure, else `null`. */
+  error: string | null;
+}
+
+/** `partCache` field of `GET /api/v1/admin/system`. */
+export interface SystemInfoPartCache {
+  enabled: boolean;
+  /** Resolved absolute cache folder on the server. */
+  dir: string;
+  maxBytes: number;
+  ttlDays: number;
+  sweepIntervalMs: number;
+  /** `null` when no sweep has run yet, the state file is unreadable, or the cache is disabled. */
+  lastSweep: SystemInfoPartCacheSweep | null;
+  /** Removed together with deleted sessions / repos / accounts by the answering worker since its start. */
+  removedByDataDeletion: SystemInfoPartCacheRemoved;
 }

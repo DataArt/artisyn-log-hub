@@ -174,6 +174,17 @@ DD-8, DD-11..DD-14). Server: `repositories.controller.ts` (`getSessionLogParts`,
     actually read.
   - The body is written under a `LogStreamLimiter` permit through the backpressure writer, like
     `/logs`; a failure after the first byte destroys the socket.
+  - **Disk cache** (task 2026-11-24-session-parts-disk-cache, details in
+    [session-part-cache.md](session-part-cache.md)). When the cache is on and the row has a
+    numeric `body_rev` and a valid gzip copy, `streamPart` first opens
+    `<cache dir>/<logId>/<bodyRev>.json.gz`. **Hit**: one query reads only the revision columns
+    (`body_gz` is never detoasted); if the row is gone → 404; if the revision still matches, the
+    first chunk is read before any header is set (a read failure falls back to the DB path), then
+    the file is sent with the same headers / ETag as above (gzip as-is with `Content-Length`, or
+    gunzipped when gzip is not accepted), and the file's mtime is refreshed at most hourly. Any
+    other answer falls through to the **miss** path, which is today's single query unchanged;
+    after `res.end()` the gzip copy is written to the cache in the background (also when the
+    client did not accept gzip). Hits still take a `LogStreamLimiter` permit.
 
 ### Client: loading a session in parts
 

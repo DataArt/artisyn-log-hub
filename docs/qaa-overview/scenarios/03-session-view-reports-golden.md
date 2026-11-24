@@ -370,6 +370,15 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   8a. Expand Instruction files; then open GS-05 Logs and click "View anatomy →" in the one-line `startup-context-line`.
   8d. Upload a small session of its own with a 10 000-byte `instructions` file and a first assistant usage total of 100 tokens; open its anatomy tab.
   9. Open GS-01 (uploaded without a harness snapshot) on the anatomy tab.
+  16–21. Parts disk cache (task 2026-11-24-session-parts-disk-cache; the stand's cache is `<runDir>/upload-queue/part-cache`, swept every second; mode A has the 1 GB default cap, mode C a 1 MB cap shared with parallel scenarios, so mode C never relies on one file surviving):
+    - 16. Read the GS-05 root claude part; mode A: overwrite `body_gz` in Postgres with `gzip('[]')` under the same revision and read the part again (gzip and identity), then restore it.
+    - 17. Re-upload W1 with a marker line; read its part.
+    - 18. Backdate the GS-05 claude cache file by 2 h and read the part; mode A: read W2 and the GS-05 artisyn part, backdate W2's file by 15 days and the artisyn file by 13 days.
+    - 19a (mode C). Write two 614,400-byte dummy files `9000000001/1.json.gz` (3 days old) and `9000000002/1.json.gz` (2 days old).
+    - 19b (mode C). Re-upload W1 with one extra line of 1,572,864 random base64 characters (gzip over the 1 MB cap) and read its part.
+    - 20. Read the GS-01 claude part; replace its `<logId>` cache folder by a plain file; read the part again; remove the file.
+    - 21a. Read the GS-07 claude and artisyn parts; the owner deletes GS-07 (`DELETE /api/v1/sessions/:sid`).
+    - 21b (last step). Read the GS-05 claude part; an admin deletes the repository (`DELETE /api/v1/admin/repos/:id`).
 - **Checks:**
   - GS-07 Logs has exactly **3** turns; not visible: the sidechain pair, `isMeta`, `<task-notification>`.
   - The sum of the turn tokens equals 3000 / 1200 / 12000 / 4000 (the duplicate `message.id` is counted once, the sidechain with in 50 000 is not included).
@@ -386,6 +395,14 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   - The W1 modal shows the label; its `Logs` tab renders W1's turn with that prompt; its `Raw logs` tab shows a `Turn #1` header, W1's 4 records and `Billing section added.`; Escape closes it.
   - No `/api/` request is sent while the table and the dialog are used (both reuse the loaded Logs payload).
   - Nested workflow agents (`↳`, indent, `N.M`) are not in any golden fixture: numbering is covered by the `workflow-agent-rows` algorithm rows AO-04/05/07, the rendering by the work-cycle visual check.
+  - 16: `<logId>/<rev>.json.gz` appears with bytes equal to `body_gz` and no `.tmp-` file is left; mode A: with `body_gz` overwritten, both reads still answer the original lines with the same ETag and the cached `Content-Length` (served from the file, not from Postgres).
+  - 17: no file exists for the new W1 revision before its first read (no pre-warm); after the read it does; mode A: the old revision's file is removed.
+  - 18: the read sets the backdated file's mtime to within 60 s of now; mode A: the sweep removes the 15-day file within 10 s and keeps the 13-day one.
+  - 19a: the oldest dummy is evicted first and the total of all cache files drops to ≤ 1,048,576 bytes.
+  - 19b: the part answers 200 with a JSON array, and no file exists for its revision 3 s later.
+  - 20 (fail-open): the second read answers 200 with the same lines and the blocking path is still a plain file.
+  - 21a: 204, and both GS-07 `<logId>` folders are gone within 10 s.
+  - 21b: 204, and every GS-05 `<logId>` folder (root claude and artisyn, W1, W2) is gone within 10 s.
 - **Replaces:** the `CU/log-parser.test.ts` blocks `qualifying user event rules`, `slash command full-command reconstruction`, `turn index is global`, `token double-count prevention`, `parentUuid BFS assignment`, `per-turn token scoping`, `uuid absent`, `toolCalls`, `toolCalls result capture`, `file bytes and estTokens` (≈ 70 of 161), `CC/prompt-turn-item.test.tsx` (18), `CC/cost-breakdown-tooltip.test.tsx` (8), `CU/turn-anchor.test.ts` (5), `SRV/logs/claude-extractor.spec.ts` dedup and sidechain (≈ 20), the basic Logs checks of `E2E/session-log-view.spec.ts` (≈ 6). ≈ 100.
 - **What we lose:** rare prompt forms (a content array of several text blocks, an empty array, a string prompt without tags) and three `getPromptText` unit tests; a prompt without a `uuid`. Not critical: such forms hardly occur in real logs, and they break without a crash.
 

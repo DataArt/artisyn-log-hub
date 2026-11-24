@@ -34,6 +34,7 @@ import { HealthModule } from './health/health.module';
 import { InstallerModule } from './installer/installer.module';
 import { inflateSniffedGzip } from './logs/gzip-sniff.middleware';
 import { LogsModule } from './logs/logs.module';
+import { PartCacheModule } from './logs/part-cache/part-cache.module';
 import { PostTurnAnalysisModule } from './logs/post-turn-analysis/post-turn-analysis.module';
 import { RequestMetricsMiddleware } from './system-info/request-metrics.middleware';
 import { SessionsModule } from './sessions/sessions.module';
@@ -102,6 +103,7 @@ function requireSessionSecret(): string {
     }),
     DatabaseModule,
     LoadGovernorModule,
+    PartCacheModule,
     HealthModule,
     UsersModule,
     AuthModule,

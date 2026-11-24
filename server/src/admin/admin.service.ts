@@ -35,6 +35,7 @@ import { PLACEHOLDER_IMPORT_USER_PASSWORD_HASH } from '../logs/logs.service';
 import { UsersService } from '../users/users.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamsService } from '../teams/teams.service';
+import { PartCacheService } from '../logs/part-cache/part-cache.service';
 import { getDescendantSessionIds } from '../logs/session-tree.sql';
 import { clearSessionTombstones } from '../sessions/session-tombstone.service';
 import {
@@ -169,6 +170,7 @@ export class AdminService {
     private readonly authService: AuthService,
     private readonly emailSendRateLimitService: EmailSendRateLimitService,
     private readonly passwordResetTokensService: PasswordResetTokensService,
+    private readonly partCache: PartCacheService,
   ) {}
 
   /**
@@ -650,6 +652,7 @@ export class AdminService {
           ];
 
           await tx.delete(logs).where(inArray(logs.id, logIds));
+          this.partCache.removeLogFolders(logIds);
 
           // Only artisyn logs are linked through log_repositories, and a session
           // has at most one (logs is unique on session_id + log_type). With it
