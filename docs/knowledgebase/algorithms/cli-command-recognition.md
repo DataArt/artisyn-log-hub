@@ -53,6 +53,13 @@ spelled in `toolNames`.
    commands on `;`, `|`, `||`, `&&` and newlines outside quotes; each is split into words on
    whitespace, honouring `'…'` and `"…"` quotes (removed). A leading call operator `&` and leading
    `NAME=value` words are dropped; the next word is the command word.
+   The PowerShell side keeps this tokenizer on purpose, although a tree-sitter-powershell parser
+   now exists (`server-powershell-parser.ts`, used by the PowerShell command view and the OKF
+   access extraction — [powershell-command-view](powershell-command-view.md)): the tokenizer
+   already recognises the monitored tools in real PowerShell commands with the same figures as
+   for Bash, and switching it to the grammar would change this documented algorithm (and the
+   wrapper matching built on it) without a functional gain. So `tool-usage-writer.ts` keeps
+   passing only the Bash parser.
 4. **Match.** A simple command is a call of tool *T* when its command word, compared
    case-insensitively and without one trailing `.exe` / `.cmd` / `.bat` / `.ps1`, equals *T*
    (same normalisation). A command word containing `/` or `\` (`./zz`, `/usr/bin/find`,

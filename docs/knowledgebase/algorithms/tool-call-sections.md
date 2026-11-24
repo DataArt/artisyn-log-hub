@@ -236,4 +236,4 @@ Rows (40): [`docs/algorithm-examples/tool-call-sections.json`](../../algorithm-e
 
 Session pane → Logs tab → a prompt turn (and a sub-agent's detail): which section (Files, Skills,
 Agents, Tools) each call is listed in, and the "⚠ requested" / "⚠ denied" badges on the call rows,
-in the tool-call modal header, the Context Growth step modal and the Bash tab.
+in the tool-call modal header, the Context Growth step modal and the Shell tab.

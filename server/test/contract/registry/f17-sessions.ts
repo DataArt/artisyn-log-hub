@@ -9,6 +9,7 @@
 import { createHash } from 'node:crypto';
 import {
   WORLD_V1,
+  WORLD_V1_LOG_IDS,
   WORLD_V1_S03_SUBAGENT_BODY,
   WORLD_V1_S03_SUBAGENT_LINE_JSONB_TEXT,
 } from '../fixtures/world-v1.sql';
@@ -225,6 +226,102 @@ const OTEL_REASON_ROOTS_SQL = `SELECT r.session_id
      AND coalesce(ss.otel_reason, 'no-status') = $2
    ORDER BY r.end_time DESC`;
 
+/**
+ * `subagentStats['w1-s03-child']` of s02's tree — the same object on `/logs`, `/logs/delta` and
+ * the parts manifest, including the TTL split of `cacheWriteTokens` (2026-11-23
+ * session-logs-streaming, DD-32) the client prices a sub-agent from without loading its part.
+ */
+const S03_SUBAGENT_STATS_READ: ReadSpec = {
+  sql: `SELECT k.model, k.input_tokens, k.output_tokens, k.cache_read_tokens,
+               k.cache_write_tokens, k.cache_write_5m_tokens, k.cache_write_1h_tokens
+          FROM sessions c JOIN session_stats k ON k.session_id = c.id
+         WHERE c.parent_session_id = $1`,
+  args: ['@s02.sessionId'],
+  shape: 'object',
+  path: 'subagentStats.w1-s03-child',
+  fields: {
+    model: 'model',
+    inputTokens: { col: 'input_tokens', as: 'number' },
+    outputTokens: { col: 'output_tokens', as: 'number' },
+    cacheReadTokens: { col: 'cache_read_tokens', as: 'number' },
+    cacheWriteTokens: { col: 'cache_write_tokens', as: 'number' },
+    cacheWrite5mTokens: { col: 'cache_write_5m_tokens', as: 'number' },
+    cacheWrite1hTokens: { col: 'cache_write_1h_tokens', as: 'number' },
+  },
+};
+
+/** The three routes that carry `subagentStats`. */
+const SUBAGENT_STATS_ROUTES = [
+  ['logs', 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs'],
+  [
+    'logs-delta',
+    'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta',
+  ],
+  [
+    'log-parts',
+    'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts',
+  ],
+] as const;
+
+/**
+ * The parts manifest of root `$1` (a `sessions.id`; 2026-11-23 session-logs-streaming DD-5,
+ * DD-11), written apart from the service's metadata query: the root's own `claude` then
+ * `artisyn` row, then the `claude-subagent` row of every live descendant, by session id. A
+ * descendant's own `claude` row (s03 has one) is not a part. `logs.body` is NOT NULL, so no row
+ * is left out for a missing body. `rev` is `body_rev`, or `u` + `updated_at` in microseconds
+ * while the row has none (DD-8).
+ */
+const PARTS_MANIFEST_SQL = `
+  WITH RECURSIVE tree AS (
+    SELECT s.id, s.session_id, 0 AS depth FROM sessions s WHERE s.id = $1
+    UNION ALL
+    SELECT c.id, c.session_id, t.depth + 1
+      FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id
+     WHERE NOT c.deleted
+  )
+  SELECT s.session_id, l.log_type,
+         coalesce(l.body_rev::text,
+                  'u' || (extract(epoch FROM l.updated_at) * 1000000)::bigint::text) AS rev,
+         s.parent_session_id, s.agent_description, s.workflow_phase, s.workflow_run_id
+    FROM tree t
+    JOIN sessions s ON s.id = t.id
+    JOIN logs l ON l.session_id = s.id
+   WHERE (t.depth = 0 AND l.log_type IN ('claude', 'artisyn'))
+      OR (t.depth > 0 AND l.log_type = 'claude-subagent')
+   ORDER BY t.depth > 0, l.log_type = 'artisyn', s.session_id`;
+
+/** s02's parts manifest (`parts`) by PARTS_MANIFEST_SQL, field by field. */
+const PARTS_MANIFEST_READ: ReadSpec = {
+  sql: PARTS_MANIFEST_SQL,
+  args: ['@s02.id'],
+  shape: 'array',
+  path: 'parts',
+  fields: {
+    sessionId: 'session_id',
+    logType: 'log_type',
+    rev: 'rev',
+    parentSessionId: 'parent_session_id',
+    agentDescription: 'agent_description',
+    workflowPhase: 'workflow_phase',
+    workflowRunId: 'workflow_run_id',
+  },
+  strict: true,
+};
+
+/**
+ * 2026-11-24 traffic-optimization (DD-10, DD-23): a gzip-accepting client (superagent sends
+ * `Accept-Encoding: gzip, deflate`) gets a gzipped JSON answer — the contract suite sets
+ * API_GZIP_MIN_BYTES=1 — and every `/api` JSON answer varies on Accept-Encoding.
+ */
+const GZIPPED = { 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' };
+
+/** `Accept-Encoding: identity`: the same answer, uncompressed. */
+const IDENTITY = { 'Content-Encoding': null, Vary: 'Accept-Encoding' };
+
+/** The parts API of s04 (owner, R1): `/logs/parts/<partSessionId>/<logType>`. */
+const PART_ROUTE =
+  'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts/:partSessionId/:logType';
+
 export const f17Sessions: ContractFamily = {
   id: 'F17',
   name: 'sessions',
@@ -234,7 +331,9 @@ export const f17Sessions: ContractFamily = {
       route: 'GET /api/v1/repositories/:repoId/sessions',
       actor: 'owner',
       params: { repoId: '@R1.id' },
-      expect: { status: 200, minRows: 3 },
+      // 2026-11-24 traffic-optimization (DD-10, DD-23): gzipped for a gzip-accepting client,
+      // the suite runs with API_GZIP_MIN_BYTES=1.
+      expect: { status: 200, minRows: 3, headers: GZIPPED },
       read: {
         sql: `SELECT r.session_id, r.first_prompt, r.start_time, r.end_time, r.git_branch,
                      u.email AS user_email, r.user_id,
@@ -622,30 +721,18 @@ export const f17Sessions: ContractFamily = {
         fields: { main: { col: 'main', as: 'json' } },
       },
     },
-    {
-      // The child w1-s03 is reported as a sub-agent with its own token totals.
-      id: 'F17-session-logs-subagent-stats',
-      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs',
-      actor: 'owner',
-      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
-      expect: { status: 200 },
-      read: {
-        sql: `SELECT k.model, k.input_tokens, k.output_tokens, k.cache_read_tokens,
-                     k.cache_write_tokens
-                FROM sessions c JOIN session_stats k ON k.session_id = c.id
-               WHERE c.parent_session_id = $1`,
-        args: ['@s02.sessionId'],
-        shape: 'object',
-        path: 'subagentStats.w1-s03-child',
-        fields: {
-          model: 'model',
-          inputTokens: { col: 'input_tokens', as: 'number' },
-          outputTokens: { col: 'output_tokens', as: 'number' },
-          cacheReadTokens: { col: 'cache_read_tokens', as: 'number' },
-          cacheWriteTokens: { col: 'cache_write_tokens', as: 'number' },
-        },
-      },
-    },
+    // The child w1-s03 is reported as a sub-agent with its own token totals, on `/logs`,
+    // `/logs/delta` (no cursor) and the parts manifest alike.
+    ...SUBAGENT_STATS_ROUTES.map(
+      ([name, route]): ContractCase => ({
+        id: `F17-session-${name}-subagent-stats`,
+        route,
+        actor: 'owner',
+        params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+        expect: { status: 200 },
+        read: S03_SUBAGENT_STATS_READ,
+      }),
+    ),
     {
       // Sub-agent `.meta.json` labels (2026-10-21 workflow-agent-meta-labels, FR-3): every
       // `subagents[]` entry carries its session's `agentDescription` / `workflowPhase` (s03 is
@@ -830,6 +917,225 @@ export const f17Sessions: ContractFamily = {
         shape: 'object',
         fields: { rootClaudeLines: { col: 'claude', as: 'json' } },
       },
+    },
+    // ---------------------------------------------------------------------------------------
+    // Session-log parts (2026-11-23 session-logs-streaming, DD-11/DD-12/DD-14): the manifest
+    // of a tree's stored log blobs, then one blob's body.
+    {
+      // s02's tree: the root claude and artisyn parts, then s03's claude-subagent part with its
+      // `.meta.json` labels. No upload of the tree waits in the queue: not lagging.
+      id: 'F17-session-log-parts',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: {
+        status: 200,
+        minRows: 3,
+        headers: GZIPPED,
+        bodyMatches: { derivedLagging: false },
+      },
+      read: PARTS_MANIFEST_READ,
+    },
+    {
+      // DD-10: `Accept-Encoding: identity` gets the same decoded manifest uncompressed.
+      id: 'F17-session-log-parts-identity',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      headers: { 'Accept-Encoding': 'identity' },
+      expect: {
+        status: 200,
+        minRows: 3,
+        headers: IDENTITY,
+        bodyMatches: { derivedLagging: false },
+      },
+      read: PARTS_MANIFEST_READ,
+    },
+    {
+      // The manifest's top-level shape: exactly the small figures `/logs` carries plus `parts`,
+      // `derivedLagging`, `liveness` and `serverTime` (their values depend on OTEL rows other
+      // cases write to the shared schema; @S-OTEL-01 checks them). s04 has no sub-agent and no
+      // workflow run; its `harnessSnapshot` is the bound row's body, as on `/logs`.
+      id: 'F17-session-log-parts-shape',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s04.sessionId' },
+      expect: {
+        status: 200,
+        bodyMatches: {
+          subagentStats: {},
+          workflows: [],
+          derivedLagging: false,
+        },
+      },
+      read: {
+        sql: `SELECT body AS harness_snapshot FROM harness_snapshots
+               WHERE user_id = $1 AND snapshot_id = $2`,
+        args: ['@owner.id', '@harnessSnapshotId'],
+        shape: 'object',
+        fields: { harnessSnapshot: { col: 'harness_snapshot', as: 'json' } },
+        ignore: [
+          'parts',
+          'subagentStats',
+          'rootStats',
+          'workflows',
+          'turnEndAdvisor',
+          'sessionAttribution',
+          'derivedLagging',
+          'liveness',
+          'serverTime',
+        ],
+        strict: true,
+      },
+    },
+    {
+      id: 'F17-session-log-parts-outsider',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts',
+      actor: 'outsider',
+      params: { repoId: '@R1.id', sessionId: '@s04.sessionId' },
+      expect: { status: 403 },
+    },
+    {
+      // The manifest shares `/logs`' 422 for a root claude log whose body is NULL — a branch no
+      // fixture can reach: `logs.body` is `jsonb NOT NULL`, and `/logs` has no 422 row either.
+      id: 'F17-session-log-parts-null-body',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts',
+      kind: 'excluded',
+      reason:
+        'logs.body is NOT NULL: a root claude log with a NULL body cannot exist, so the 422 branch is unreachable',
+    },
+    {
+      // A part's body is the stored log, element for element (served from the gzip copy or
+      // from body::text — the client sees the same JSON array either way).
+      id: 'F17-session-log-part-body',
+      route: PART_ROUTE,
+      actor: 'owner',
+      params: {
+        repoId: '@R1.id',
+        sessionId: '@s04.sessionId',
+        partSessionId: '@s04.sessionId',
+        logType: 'claude',
+      },
+      expect: { status: 200, minRows: 1 },
+      read: {
+        sql: `SELECT e.line
+                FROM logs l CROSS JOIN jsonb_array_elements(l.body) WITH ORDINALITY AS e(line, n)
+               WHERE l.session_id = $1 AND l.log_type = 'claude'
+               ORDER BY e.n`,
+        args: ['@s04.id'],
+        shape: 'array',
+        scalar: { col: 'line', as: 'json' },
+      },
+    },
+    {
+      id: 'F17-session-log-part-body-artisyn',
+      route: PART_ROUTE,
+      actor: 'owner',
+      params: {
+        repoId: '@R1.id',
+        sessionId: '@s04.sessionId',
+        partSessionId: '@s04.sessionId',
+        logType: 'artisyn',
+      },
+      expect: { status: 200, minRows: 1 },
+      read: {
+        sql: `SELECT e.line
+                FROM logs l CROSS JOIN jsonb_array_elements(l.body) WITH ORDINALITY AS e(line, n)
+               WHERE l.session_id = $1 AND l.log_type = 'artisyn'
+               ORDER BY e.n`,
+        args: ['@s04.id'],
+        shape: 'array',
+        scalar: { col: 'line', as: 'json' },
+      },
+    },
+    {
+      // A sub-agent's part is addressed under its root: s03's claude-subagent log in s02's tree.
+      id: 'F17-session-log-part-body-subagent',
+      route: PART_ROUTE,
+      actor: 'owner',
+      params: {
+        repoId: '@R1.id',
+        sessionId: '@s02.sessionId',
+        partSessionId: '@s03.sessionId',
+        logType: 'claude-subagent',
+      },
+      expect: { status: 200, minRows: 1 },
+      read: {
+        sql: `SELECT e.line
+                FROM logs l CROSS JOIN jsonb_array_elements(l.body) WITH ORDINALITY AS e(line, n)
+               WHERE l.session_id = $1 AND l.log_type = 'claude-subagent'
+               ORDER BY e.n`,
+        args: ['@s03.id'],
+        shape: 'array',
+        scalar: { col: 'line', as: 'json' },
+      },
+    },
+    {
+      // DD-12: the ETag is the part's revision; the world pins `body_rev` to the log id
+      // (fixtures/world-v1.sql.ts), so a matching `If-None-Match` answers 304 with no body.
+      id: 'F17-session-log-part-body-not-modified',
+      route: PART_ROUTE,
+      actor: 'owner',
+      params: {
+        repoId: '@R1.id',
+        sessionId: '@s04.sessionId',
+        partSessionId: '@s04.sessionId',
+        logType: 'claude',
+      },
+      headers: { 'If-None-Match': `"${WORLD_V1_LOG_IDS.s04.claude}"` },
+      expect: { status: 304 },
+      noDb: true,
+    },
+    {
+      // s01 is a root of its own, outside s04's tree.
+      id: 'F17-session-log-part-body-outside-tree',
+      route: PART_ROUTE,
+      actor: 'owner',
+      params: {
+        repoId: '@R1.id',
+        sessionId: '@s04.sessionId',
+        partSessionId: '@s01.sessionId',
+        logType: 'claude',
+      },
+      expect: { status: 404 },
+    },
+    {
+      // s03's own `claude` row is not a part of s02's tree (a descendant contributes only its
+      // claude-subagent row): a logType that does not match the node is 404 too.
+      id: 'F17-session-log-part-body-wrong-type',
+      route: PART_ROUTE,
+      actor: 'owner',
+      params: {
+        repoId: '@R1.id',
+        sessionId: '@s02.sessionId',
+        partSessionId: '@s03.sessionId',
+        logType: 'claude',
+      },
+      expect: { status: 404 },
+    },
+    {
+      id: 'F17-session-log-part-body-bad-type',
+      route: PART_ROUTE,
+      actor: 'owner',
+      params: {
+        repoId: '@R1.id',
+        sessionId: '@s04.sessionId',
+        partSessionId: '@s04.sessionId',
+        logType: 'claude-otel',
+      },
+      expect: { status: 400 },
+    },
+    {
+      id: 'F17-session-log-part-body-outsider',
+      route: PART_ROUTE,
+      actor: 'outsider',
+      params: {
+        repoId: '@R1.id',
+        sessionId: '@s04.sessionId',
+        partSessionId: '@s04.sessionId',
+        logType: 'claude',
+      },
+      expect: { status: 403 },
     },
     {
       id: 'F17-export-scope',

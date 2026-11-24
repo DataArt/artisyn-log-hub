@@ -27,6 +27,10 @@
 // a chip filtering the Sessions list, the 0-of-M variant and no banner at full coverage (AC-C4).
 // Test 3 adds the team coverage banner.
 //
+// Task 2026-11-24 traffic-optimization (FR-11 / FR-12) ends tests 1 and 3 with a step that adds
+// 200 spans and 60 zero-cost calls to a session and reads the session / repository (test 1) and team (test 3) OTEL
+// answers on the wire: gzip + Vary to a gzip client, identity without Accept-Encoding.
+//
 // Code facts that differ from the design text:
 //   - the team detail tabs are component state (no URL), so «a direct link shows No access» is
 //     the team-repository link `#/teams/:t/repos/:r?mtab=otel`: for a plain member or an ADLC
@@ -57,6 +61,7 @@ import {
 } from '../fixtures/otel/otel-lines';
 import { createApiKey } from '../helpers/api-key';
 import {
+  lastDays,
   otelUsd,
   repoFacts,
   repoFactsStatus,
@@ -70,9 +75,11 @@ import {
   uploadTranscript,
   waitForOtelProjected,
   type OtelSpanRow,
+  type RepoFacts,
 } from '../helpers/otel';
 import { ownRepoId } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
+import { expectJsonGzipPair } from '../helpers/raw-http';
 import { openSession, selectSessionTab } from '../helpers/session-view';
 import { addTeamRepo, createTeam, inviteAndAccept, setMemberRoles, skipNewUserNudge } from '../helpers/teams';
 import { shiftSessionTree } from '../helpers/time-shift';
@@ -213,7 +220,7 @@ async function openRepoOtel(page: Page, user: ScenarioUser, repoId: number, extr
 // 1. Chunks: repository and session tabs
 // =============================================================================================
 
-test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a', async ({ api, db, users, page }) => {
+test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a', async ({ api, db, users, page, stand }) => {
   test.setTimeout(300_000);
   const run = randomBytes(4).toString('hex');
   const owner = await users.user('user', { label: 'otel01-owner' });
@@ -746,7 +753,58 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
       await expect(page.getByTestId(id).getByTestId('otel-sparkline'), id).toHaveCount(0);
     }
   });
+
+  await test.step('FR-11, FR-12 (2026-11-24 traffic-optimization). with 200 more spans and 60 zero-cost calls in S1, the session and repository (5-minute buckets) OTEL answers are gzip + Vary to a gzip client and identity (with Vary) without Accept-Encoding; the decoded JSON is identical', async () => {
+    await uploadOtelChunk(api, key.key, s1, bulkOtelLines(s1, `g${run}`, floor5m(new Date(Date.now() - 6 * HOUR_MS))), queue);
+    await waitForOtelProjected(db, s1);
+    const session = await expectJsonGzipPair(stand.url, owner, `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(s1)}/otel?tz=UTC`, true);
+    expect((session.json as SessionOtelSpans).spans.length, 'the 200 extra spans are in the snapshot').toBeGreaterThanOrEqual(200);
+    const facts = await expectJsonGzipPair(stand.url, owner, `/api/v1/repositories/${repoId}/otel/facts?${bulkFactsQuery()}`, true);
+    expect(Number((facts.json as RepoFacts).kpis.totalCostUsdMicros), 'zero-cost calls: the total is unchanged').toBe(totalMain);
+  });
 });
+
+/** The fields of the session OTEL answer the gzip step reads. */
+interface SessionOtelSpans {
+  spans: unknown[];
+}
+
+/** Zero-cost hidden calls of {@link bulkOtelLines}, one per 5-minute bucket. */
+const BULK_CALLS = 60;
+
+/**
+ * The extra chunk of the gzip steps (2026-11-24 traffic-optimization FR-11 / FR-12): 200
+ * finished spans of one trace (a root and 199 `claude_code.tool` children), each with a
+ * 100-character attribute, which push the session OTEL answer well over the 8192-byte threshold.
+ * Spans do not reach the repository / team facts, so the chunk also carries {@link BULK_CALLS}
+ * `prompt_suggestion` calls of cost 0, one per 5-minute bucket from `from` on: read at
+ * `interval=5m` they give the facts one bucket each without changing any cost.
+ */
+function bulkOtelLines(sessionId: string, tag: string, from: Date): OtelLine[] {
+  const trace = `${tag}bulk`;
+  const root = `${tag}b0`;
+  const note = 'x'.repeat(100);
+  const spans = Array.from({ length: 200 }, (_, n) =>
+    spanLine(sessionId, {
+      traceId: trace,
+      spanId: n === 0 ? root : `${tag}b${n}`,
+      parentSpanId: n === 0 ? null : root,
+      name: n === 0 ? 'claude_code.interaction' : 'claude_code.tool',
+      start: plus(from, n === 0 ? 0 : n),
+      end: plus(from, n === 0 ? 300 : n + 1),
+      attrs: n === 0 ? { scn_note: note } : { tool_name: 'Bash', scn_note: note },
+    }),
+  );
+  const calls = Array.from({ length: BULK_CALLS }, (_, n) =>
+    apiRequestLine(sessionId, { requestId: `${tag}-bulk-${n}`, querySource: 'prompt_suggestion', model: MODEL_A, at: plus(from, n * 300 + 10), costUsd: 0, input: 10, output: 1 }),
+  );
+  return [...spans, ...calls];
+}
+
+/** The facts query of the gzip steps: the last day at 5-minute buckets. */
+function bulkFactsQuery(): string {
+  return new URLSearchParams({ ...lastDays(1), tz: 'UTC', interval: '5m' }).toString();
+}
 
 // =============================================================================================
 // 2. Live: realtime batches into an open session tab
@@ -959,7 +1017,7 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
     await fresh.close();
   });
 
-  // --- Session Map (2026-11-01 session-map-tab): the logs delta route and the LIVE / Replay tab ---
+  // --- Session Map (2026-11-01 session-map-tab): the legacy logs delta route, and the LIVE / Replay tab (built from the log parts) ---
   const mapSid = `otel01-${run}-map`;
   const mapSpec = (requestIds: string[]): TranscriptSpec => ({ sessionId: mapSid, prompt: `map session ${run}`, repoUrls: [repoUrl], branch: 'main', at: base, requestIds });
   const uploadClaude = async (sessionId: string, body: string): Promise<void> => {
@@ -1035,7 +1093,7 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
       },
     ];
     await uploadClaude(live, transcriptBodies(liveSpec).claude + extra.map((l) => JSON.stringify(l)).join('\n') + '\n');
-    // SESSION_MAP_POLL_MS is 10 s: the next poll brings the call in, no reload.
+    // SESSION_MAP_POLL_MS is 10 s: the next manifest poll sees the new claude part rev and refetches it, no reload.
     await expect(page.getByTestId('session-map-counter-calls').locator('span').nth(1)).toHaveText('1', { timeout: 25_000 });
     await expect(page.getByTestId('session-map-badge')).toContainText('LIVE');
   });
@@ -1048,6 +1106,12 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
       [live],
     );
     expect(await delta(live)).toMatchObject({ reload: false, liveness: { hasOtel: true, live: false } });
+    // The Map reads liveness from the parts manifest (2026-11-23 session-logs-streaming).
+    const manifestRes = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(live)}/logs/parts`);
+    expect(manifestRes.status()).toBe(200);
+    const manifest = (await manifestRes.json()) as { liveness: { hasOtel: boolean; live: boolean }; serverTime: string };
+    expect(manifest.liveness).toMatchObject({ hasOtel: true, live: false });
+    expect(Number.isNaN(Date.parse(manifest.serverTime)), 'manifest serverTime is an ISO time').toBe(false);
     await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 25_000 });
     await expect(page.getByTestId('session-map-live')).toHaveCount(0);
   });
@@ -1062,7 +1126,7 @@ interface Person {
   apiKey: string;
 }
 
-test('@S-OTEL-01 team OTEL tab: two repositories, shared session counted once, restricted-team access, seven people @mode-a', async ({ api, db, users, page }) => {
+test('@S-OTEL-01 team OTEL tab: two repositories, shared session counted once, restricted-team access, seven people @mode-a', async ({ api, db, users, page, stand }) => {
   test.setTimeout(360_000);
   const run = randomBytes(4).toString('hex');
   const urlA = `https://git.arrakis.test/scn/${run}/team-a`;
@@ -1245,5 +1309,11 @@ test('@S-OTEL-01 team OTEL tab: two repositories, shared session counted once, r
     await expect(chip).toHaveCount(1);
     expect(await chip.evaluate((el) => el.tagName), 'the team tab has no sessions list to filter').toBe('SPAN');
     await expect(tab.getByTestId('otel-kpi-coverage')).toContainText(`${n} / ${m}`);
+  });
+
+  await test.step('FR-12 (2026-11-24 traffic-optimization). with 200 more spans and 60 zero-cost calls in the shared session, the team OTEL answer (5-minute buckets) is gzip + Vary to a gzip client and identity (with Vary) without Accept-Encoding; the decoded JSON is identical', async () => {
+    await uploadOtelChunk(api, owner.apiKey, shared, bulkOtelLines(shared, `t${run}`, floor5m(new Date(Date.now() - 6 * HOUR_MS))), { db, userId: owner.user.id });
+    await waitForOtelProjected(db, shared);
+    await expectJsonGzipPair(stand.url, owner.user, `/api/v1/teams/${teamId}/otel/facts?${bulkFactsQuery()}`, true);
   });
 });

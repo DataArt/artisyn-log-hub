@@ -6,7 +6,7 @@ tags:
   - twins
   - invariants
   - backward-compatibility
-generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
 ---
 
 # Twins Registry and Cross-Cutting Rules
@@ -56,6 +56,7 @@ known differences between copies.
 |---|---|---|
 | Tool outcome (`classifyToolOutcome`, markers, `MAX_RESULT_TEXT_SCAN`) | `client/.../session-log/tool-outcome.ts`; `server/src/logs/tool-stats.ts` | Doc [tool-call-outcome](algorithms/tool-call-outcome.md); both sides |
 | Prompt qualification (`isQualifyingUserEvent` ↔ `isNonQualifyingPromptContent`) | `client/.../session-log/log-parser.ts`; `server/src/logs/claude-extractor.ts` | golden sessions only |
+| Commit / PR counters (`countCommits(command, shell = 'bash')`, `countPullRequests(command, shell = 'bash')`, `INVOCATION_START`, `PS_INVOCATION_START`, `PS_TOOL_SUFFIX`, `GIT_GLOBAL_FLAGS`) and the gate "count when `shellOfTool(name) !== null`, passing that shell" | `server/src/logs/tool-stats.ts` (counters) + `claude-extractor.ts` (`shellInvocationsOf`, `countShellInvocations` — ingest and the shell-figures backfill); client `client/.../session-log/usage/session-usage-derive.ts`. Both count Bash **and PowerShell** calls; `'bash'` keeps the original anchor, `'powershell'` uses `(?:^\|[\n;&\|{(])\s*(?:&\s*)?['"]?` and allows `(?:\.exe)?['"]?` after `git` / `gh` (`{ git commit }`, `(git commit)`, `& "git.exe" commit`) | scenario `@S-SESS-14` (session Usage counters vs `/analytics/productivity`); no algorithm doc |
 | Default file categories, path normalisation | `client/.../session-log/log-parser.ts` (`DEFAULT_REPO_CONFIG`); `server/src/logs/claude-extractor.ts` (`DEFAULT_FILE_CATEGORIES`, `normaliseFilePath`) | **none** |
 | Deferred-tools detection | `client/.../session-log/log-parser.ts`; `server/src/logs/turn-walk.ts` (port) | **none** |
 | Cache-read ratio and its aggregate | `server/src/logs/cache-ratio.sql.ts`; `client/src/viewer/lib/format.ts`, `client/.../analytics/cache-ratio-aggregate.ts` | Doc [cache-ratio-and-causes](algorithms/cache-ratio-and-causes.md) |

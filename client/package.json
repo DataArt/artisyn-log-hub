@@ -39,6 +39,7 @@
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
     "tree-sitter-bash": "0.25.1",
+    "tree-sitter-powershell": "0.26.6",
     "web-tree-sitter": "0.27.1"
   },
   "devDependencies": {
@@ -69,6 +70,7 @@
     "lightningcss-win32-x64-msvc": "^1.32.0"
   },
   "overrides": {
-    "postcss-selector-parser": "^6.1.5"
+    "postcss-selector-parser": "^6.1.5",
+    "parse5": "^8.1.1"
   }
 }

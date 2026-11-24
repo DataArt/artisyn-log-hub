@@ -3,7 +3,7 @@
  * grammar's own `queries/highlights.scm` (plus `(file_redirect) @redirect`) through the `Query`
  * API, never regexes. Algorithm doc: `docs/knowledgebase/algorithms/bash-command-view.md`.
  */
-import type { BashParser } from './syntax.ts';
+import type { BashCapture, BashParser } from './syntax.ts';
 
 export type HighlightKind =
   | 'keyword'
@@ -64,11 +64,37 @@ export function highlightBash(
   text: string,
   querySource: string,
 ): HighlightSegment[] {
+  return highlightWith(parser, text, querySource, CAPTURE_KIND);
+}
+
+/**
+ * Sorted, non-overlapping segments of `text` for any grammar: the captures of `querySource`
+ * mapped through `kindMap` (captures not in it stay plain), painted from the largest node to the
+ * smallest, so inner captures win; plain text is omitted.
+ */
+export function highlightWith(
+  parser: BashParser,
+  text: string,
+  querySource: string,
+  kindMap: Readonly<Record<string, HighlightKind>>,
+): HighlightSegment[] {
   if (!text) return [];
-  const captures = parser
-    .highlight(text, querySource)
+  return paintCaptures(text, parser.highlight(text, querySource), kindMap);
+}
+
+/**
+ * Segments of `text` from captures already computed (the painting rule of `highlightWith`).
+ * `highlightPowerShell` uses it for captures taken from a same-length masked copy of `text`.
+ */
+export function paintCaptures(
+  text: string,
+  raw: readonly BashCapture[],
+  kindMap: Readonly<Record<string, HighlightKind>>,
+): HighlightSegment[] {
+  if (!text) return [];
+  const captures = raw
     .flatMap((c) => {
-      const kind = CAPTURE_KIND[c.name];
+      const kind = kindMap[c.name];
       return kind && c.end > c.start
         ? [{ start: c.start, end: Math.min(c.end, text.length), kind }]
         : [];

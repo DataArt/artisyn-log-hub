@@ -1,0 +1,139 @@
+.page {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.main {
+  min-height: 0;
+  flex: 1 1 0%;
+  overflow: auto;
+}
+
+.content {
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  max-width: 1200px;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.title {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 3rem 0;
+}
+
+.spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  animation: spin 1s linear infinite;
+  color: var(--color-muted-foreground);
+}
+
+.notice {
+  padding: 3rem 0;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}
+
+.error {
+  color: var(--color-destructive);
+}
+
+.summary {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border-width: 1px;
+  border-color: var(--color-border);
+  border-radius: 0.5rem;
+}
+
+.table {
+  width: 100%;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.thead {
+  background-color: var(--color-card);
+  text-align: left;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-muted-foreground);
+}
+
+.th {
+  padding: 0.5rem 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.userRow {
+  border-top-width: 1px;
+  border-color: var(--color-border);
+  background-color: var(--color-muted);
+}
+
+.row {
+  border-top-width: 1px;
+  border-color: var(--color-border);
+}
+
+.td {
+  padding: 0.5rem 0.75rem;
+}
+
+.tdName {
+  max-width: 20rem;
+  overflow: hidden;
+  padding-left: 1.5rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--color-muted-foreground);
+}
+
+.strong {
+  font-weight: 600;
+}

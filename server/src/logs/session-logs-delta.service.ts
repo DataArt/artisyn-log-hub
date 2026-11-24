@@ -1,12 +1,12 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, inArray, eq, sql } from 'drizzle-orm';
+import type { Response } from 'express';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import * as schema from '../database/schema';
 import type {
-  SessionLogLine,
-  SessionLogsDeltaResponse,
-  SessionLogsDeltaUpdate,
+  SessionLogsDeltaLiveness,
+  SessionLogsDeltaReload,
   SubagentStatsRow,
 } from './dto/session-logs-delta.dto';
 import { subagentOtelCostSql } from './otel-cost.sql';
@@ -24,6 +24,8 @@ import {
   type DeltaLogTypeCode,
 } from './session-logs-delta';
 import { getDescendantSessionIds } from './session-tree.sql';
+import { readStoredWorkflows } from './stored-workflows';
+import { writeChunk } from './streaming/response-stream';
 import { extractWorkflows, type WorkflowRun } from './workflow-extractor';
 import {
   resolveWorkflowAgentLinkage,
@@ -80,6 +82,11 @@ export function selectSubagentStats(
         ), 0.0) THEN o.v END
         FROM (SELECT ${otelCost} AS v) o
       )`.mapWith((v: unknown) => (v == null ? null : Number(v))),
+      // The TTL split of cacheWriteTokens (2026-11-23 session-logs-streaming), so the client
+      // prices a sub-agent's cache writes from these stats alone, without its log part.
+      // Additive and last, so every earlier key keeps its position.
+      cacheWrite5mTokens: schema.sessionStats.cacheWrite5mTokens,
+      cacheWrite1hTokens: schema.sessionStats.cacheWrite1hTokens,
     })
     .from(schema.sessions)
     .innerJoin(
@@ -114,10 +121,14 @@ interface TreeMetaRow extends DeltaCurrentRow {
   workflowPhase: string | null;
 }
 
-/** Step (c): what was read of one changed or new row. */
-interface SliceRow {
+/** Step (c), first half (DD-7): what is known of one changed or new row — never its lines. */
+interface SliceMeta {
   sid: number;
   t: DeltaLogTypeCode;
+  /** False when the row was deleted between (b) and (c) — a rewrite. */
+  exists: boolean;
+  /** `logs.id` (0 when the row is gone). */
+  logId: number;
   /** `updated_at` at read time (base 36 µs) — the next cursor's `ut`. */
   ut: string;
   len: number;
@@ -125,8 +136,6 @@ interface SliceRow {
   fpPrev: string;
   /** Fingerprint at `len` — the next cursor's `fp`. */
   fpLen: string;
-  /** `body[prevN:]`, or null when the growth check failed in SQL. */
-  lines: SessionLogLine[] | null;
 }
 
 /** A row to slice: its key plus what the client already holds (`0` / `''` for a new row). */
@@ -136,6 +145,47 @@ interface SliceRequest {
   prevN: number;
   prevFp: string;
 }
+
+/** Step (c), second half: the lines `(prevN, len]` of one row, read while streaming. */
+export interface SliceTextRequest {
+  logId: number;
+  prevN: number;
+  len: number;
+  fpLen: string;
+}
+
+/**
+ * A non-reload delta answer with every field resolved except the log lines, which are read one
+ * row at a time while the answer is written (DD-7). `null` slices are empty (`[]`).
+ */
+export interface DeltaStreamPlan {
+  rootArtisyn: SliceTextRequest | null;
+  rootClaude: SliceTextRequest | null;
+  subagentAppends: {
+    sessionId: string;
+    slice: SliceTextRequest | null;
+    agentDescription: string | null;
+    workflowPhase: string | null;
+  }[];
+  newSubagents: {
+    sessionId: string;
+    parentSessionId: string | null;
+    workflowRunId: string | null;
+    agentDescription: string | null;
+    workflowPhase: string | null;
+    slice: SliceTextRequest | null;
+  }[];
+  subagentStats: Record<string, SubagentStatsRow>;
+  workflows: WorkflowRun[] | null;
+  liveness: SessionLogsDeltaLiveness;
+  serverTime: string;
+  cursor: string;
+}
+
+/** `reload` answers stay plain JSON; anything else is streamed from the plan. */
+export type DeltaPrepared =
+  | { reload: true; response: SessionLogsDeltaReload }
+  | { reload: false; plan: DeltaStreamPlan };
 
 const CODE_BY_LOG_TYPE: Readonly<Record<string, DeltaLogTypeCode>> = {
   artisyn: 'a',
@@ -147,6 +197,10 @@ function sliceKey(sid: number, t: DeltaLogTypeCode): string {
   return `${sid}:${t}`;
 }
 
+function byString(x: { sessionId: string }, y: { sessionId: string }): number {
+  return x.sessionId < y.sessionId ? -1 : x.sessionId > y.sessionId ? 1 : 0;
+}
+
 type DbScalar = string | number | null;
 
 /**
@@ -154,17 +208,25 @@ type DbScalar = string | number | null;
  * the client's cursor, a `reload` when the stored logs no longer extend what the client holds.
  * Access is checked by the caller (`resolveSessionLogsAccess`) — this service sees only the
  * root's `sessions.id`.
+ *
+ * Two phases (2026-11-23 session-logs-streaming DD-7): `prepareDelta` decides everything from
+ * metadata before the first byte (404, stale/growth checks, stats, workflows, cursor);
+ * `writeDelta` then streams the answer, reading one row's new lines at a time as raw JSON text.
  */
 @Injectable()
 export class SessionLogsDeltaService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
 
-  async getDelta(
+  async prepareDelta(
     sessionRowId: number,
     cursor: string | undefined,
     now: Date,
-  ): Promise<SessionLogsDeltaResponse> {
+  ): Promise<DeltaPrepared> {
     const serverTime = now.toISOString();
+    const reload: DeltaPrepared = {
+      reload: true,
+      response: { reload: true, serverTime },
+    };
 
     // (a) the session tree, metadata only.
     const descendantsMap = await getDescendantSessionIds(this.db, [
@@ -185,9 +247,9 @@ export class SessionLogsDeltaService {
       meta,
       treeIds,
     );
-    if (classified.stale.length > 0) return { reload: true, serverTime };
+    if (classified.stale.length > 0) return reload;
 
-    // (c) bodies of the changed and new rows only — nothing is read when nothing moved.
+    // (c) length and fingerprints of the changed and new rows only — no lines yet.
     const requests: SliceRequest[] = [
       ...classified.changed.map(({ current, prev }) => ({
         sid: current.sid,
@@ -202,25 +264,30 @@ export class SessionLogsDeltaService {
         prevFp: '',
       })),
     ];
-    const slices = await this.readSlices(requests);
-    const sliceByKey = new Map<string, SliceRow>();
-    for (const s of slices) sliceByKey.set(sliceKey(s.sid, s.t), s);
+    const sliceMetas = await this.readSliceMeta(requests);
+    const sliceMetaByKey = new Map<string, SliceMeta>();
+    for (const s of sliceMetas) sliceMetaByKey.set(sliceKey(s.sid, s.t), s);
 
     const nextCursor: DeltaCursorRow[] = classified.unchanged.map(
       ({ prev }) => prev,
     );
-    const linesByKey = new Map<string, SessionLogLine[]>();
+    const textByKey = new Map<string, SliceTextRequest>();
     for (const req of requests) {
-      const slice = sliceByKey.get(sliceKey(req.sid, req.t));
+      const slice = sliceMetaByKey.get(sliceKey(req.sid, req.t));
       // A row deleted between (b) and (c) is a rewrite too.
       if (
         slice === undefined ||
-        slice.lines === null ||
+        !slice.exists ||
         checkGrowth(req.prevN, req.prevFp, slice.len, slice.fpPrev) === 'stale'
       ) {
-        return { reload: true, serverTime };
+        return reload;
       }
-      linesByKey.set(sliceKey(req.sid, req.t), slice.lines);
+      textByKey.set(sliceKey(req.sid, req.t), {
+        logId: slice.logId,
+        prevN: req.prevN,
+        len: slice.len,
+        fpLen: slice.fpLen,
+      });
       nextCursor.push({
         sid: req.sid,
         t: req.t,
@@ -233,26 +300,27 @@ export class SessionLogsDeltaService {
     const metaBySid = new Map<number, TreeMetaRow>();
     for (const r of meta) if (r.t === 's') metaBySid.set(r.sid, r);
 
-    const subagentAppends: SessionLogsDeltaUpdate['subagentAppends'] = [];
+    const subagentAppends: DeltaStreamPlan['subagentAppends'] = [];
     for (const { current } of classified.changed) {
       if (current.t !== 's') continue;
-      const lines = linesByKey.get(sliceKey(current.sid, 's')) ?? [];
+      const slice = textByKey.get(sliceKey(current.sid, 's')) ?? null;
       const row = metaBySid.get(current.sid);
       if (row === undefined) continue;
       // A meta-only re-upload (no new lines) still reaches the client when it carries
       // labels (DD-15); an old client skips empty-line appends.
       const hasMeta =
         row.agentDescription !== null || row.workflowPhase !== null;
-      if (lines.length === 0 && !hasMeta) continue;
+      const lineCount = slice === null ? 0 : slice.len - slice.prevN;
+      if (lineCount === 0 && !hasMeta) continue;
       subagentAppends.push({
         sessionId: row.sessionId,
-        lines,
+        slice,
         agentDescription: row.agentDescription,
         workflowPhase: row.workflowPhase,
       });
     }
 
-    const newSubagents: SessionLogsDeltaUpdate['newSubagents'] = [];
+    const newSubagents: DeltaStreamPlan['newSubagents'] = [];
     for (const current of classified.new) {
       if (current.t !== 's') continue;
       const row = metaBySid.get(current.sid);
@@ -263,15 +331,11 @@ export class SessionLogsDeltaService {
         workflowRunId: row.workflowRunId,
         agentDescription: row.agentDescription,
         workflowPhase: row.workflowPhase,
-        logs: linesByKey.get(sliceKey(current.sid, 's')) ?? [],
+        slice: textByKey.get(sliceKey(current.sid, 's')) ?? null,
       });
     }
-    newSubagents.sort((x, y) =>
-      x.sessionId < y.sessionId ? -1 : x.sessionId > y.sessionId ? 1 : 0,
-    );
-    subagentAppends.sort((x, y) =>
-      x.sessionId < y.sessionId ? -1 : x.sessionId > y.sessionId ? 1 : 0,
-    );
+    newSubagents.sort(byString);
+    subagentAppends.sort(byString);
 
     // (d) stats of the new and changed sub-agents, (e) the root's OTEL state.
     const movedSubagentIds = requests
@@ -299,16 +363,77 @@ export class SessionLogsDeltaService {
 
     return {
       reload: false,
-      rootArtisynLines: linesByKey.get(sliceKey(sessionRowId, 'a')) ?? [],
-      rootClaudeLines: linesByKey.get(sliceKey(sessionRowId, 'c')) ?? [],
-      subagentAppends,
-      newSubagents,
-      subagentStats,
-      workflows,
-      liveness: computeOtelLiveness(otelState, now),
-      serverTime,
-      cursor: encodeDeltaCursor(nextCursor),
+      plan: {
+        rootArtisyn: textByKey.get(sliceKey(sessionRowId, 'a')) ?? null,
+        rootClaude: textByKey.get(sliceKey(sessionRowId, 'c')) ?? null,
+        subagentAppends,
+        newSubagents,
+        subagentStats,
+        workflows,
+        liveness: computeOtelLiveness(otelState, now),
+        serverTime,
+        cursor: encodeDeltaCursor(nextCursor),
+      },
     };
+  }
+
+  /**
+   * Writes a non-reload answer in the former key order (`reload,rootArtisynLines,
+   * rootClaudeLines,subagentAppends,newSubagents,subagentStats,workflows,liveness,serverTime,
+   * cursor`). Every `lines` / `logs` value is the raw slice text from Postgres, never parsed;
+   * entry metadata is `JSON.stringify`-ed in the former key order. A row that no longer extends
+   * the length the plan was made from throws — after the first byte, so the caller aborts.
+   */
+  async writeDelta(res: Response, plan: DeltaStreamPlan): Promise<void> {
+    await writeChunk(res, '{"reload":false,"rootArtisynLines":');
+    await this.writeSlice(res, plan.rootArtisyn);
+    await writeChunk(res, ',"rootClaudeLines":');
+    await this.writeSlice(res, plan.rootClaude);
+    await writeChunk(res, ',"subagentAppends":[');
+    let first = true;
+    for (const a of plan.subagentAppends) {
+      await writeChunk(
+        res,
+        `${first ? '' : ','}{"sessionId":${JSON.stringify(a.sessionId)},"lines":`,
+      );
+      await this.writeSlice(res, a.slice);
+      await writeChunk(
+        res,
+        `,"agentDescription":${JSON.stringify(a.agentDescription)},"workflowPhase":${JSON.stringify(a.workflowPhase)}}`,
+      );
+      first = false;
+    }
+    await writeChunk(res, '],"newSubagents":[');
+    first = true;
+    for (const s of plan.newSubagents) {
+      await writeChunk(
+        res,
+        `${first ? '' : ','}{"sessionId":${JSON.stringify(s.sessionId)},"parentSessionId":${JSON.stringify(s.parentSessionId)},"workflowRunId":${JSON.stringify(s.workflowRunId)},"agentDescription":${JSON.stringify(s.agentDescription)},"workflowPhase":${JSON.stringify(s.workflowPhase)},"logs":`,
+      );
+      await this.writeSlice(res, s.slice);
+      await writeChunk(res, '}');
+      first = false;
+    }
+    await writeChunk(
+      res,
+      `],"subagentStats":${JSON.stringify(plan.subagentStats)},"workflows":${JSON.stringify(plan.workflows)},"liveness":${JSON.stringify(plan.liveness)},"serverTime":${JSON.stringify(plan.serverTime)},"cursor":${JSON.stringify(plan.cursor)}}`,
+    );
+    res.end();
+  }
+
+  private async writeSlice(
+    res: Response,
+    slice: SliceTextRequest | null,
+  ): Promise<void> {
+    if (slice === null || slice.len <= slice.prevN) {
+      await writeChunk(res, '[]');
+      return;
+    }
+    const text = await this.readSliceText(slice);
+    if (text === null) {
+      throw new Error('Session log row changed while the delta was streamed');
+    }
+    await writeChunk(res, text);
   }
 
   /** Step (b). */
@@ -356,12 +481,12 @@ export class SessionLogsDeltaService {
   }
 
   /**
-   * Step (c): per row, in one statement so length, fingerprints and slice come from the same
-   * body version — the length, the fingerprint at the client's `prevN` and at the new length
-   * (`left(md5((body -> (n-1))::text), 12)`, the expression the cursor is issued with), and
-   * `body[prevN:]` only when the body still extends the client's copy.
+   * Step (c), metadata half: per row, in one statement so length and fingerprints come from the
+   * same body version — the length, the fingerprint at the client's `prevN` and at the new length
+   * (`left(md5((body -> (n-1))::text), 12)`, the expression the cursor is issued with). No lines
+   * leave the database. A non-array body counts as `[]`.
    */
-  private async readSlices(requests: SliceRequest[]): Promise<SliceRow[]> {
+  private async readSliceMeta(requests: SliceRequest[]): Promise<SliceMeta[]> {
     if (requests.length === 0) return [];
     const values = sql.join(
       requests.map(
@@ -371,82 +496,106 @@ export class SessionLogsDeltaService {
       sql`, `,
     );
     const result = await this.db.execute(sql`
-      SELECT v.sid, l.log_type,
+      SELECT v.sid, v.log_type, l.id AS log_id,
              floor(extract(epoch from l.updated_at) * 1000000)::bigint AS ut,
-             x.len, f.fp_prev, f.fp_len,
-             CASE WHEN x.len >= v.prev_n AND f.fp_prev = v.prev_fp THEN (
-               SELECT COALESCE(jsonb_agg(e.line ORDER BY e.i), '[]'::jsonb)
-                 FROM jsonb_array_elements(x.body) WITH ORDINALITY e(line, i)
-                WHERE e.i > v.prev_n
-             )::text END AS lines
+             x.len, f.fp_prev, f.fp_len
         FROM (VALUES ${values}) v(sid, log_type, prev_n, prev_fp)
-        JOIN logs l ON l.session_id = v.sid AND l.log_type = v.log_type
-        CROSS JOIN LATERAL (
-          SELECT b AS body, jsonb_array_length(b) AS len
-            FROM (SELECT CASE WHEN jsonb_typeof(l.body) = 'array'
-                              THEN l.body ELSE '[]'::jsonb END AS b) bb
-        ) x
-        CROSS JOIN LATERAL (
+        LEFT JOIN logs l ON l.session_id = v.sid AND l.log_type = v.log_type
+        LEFT JOIN LATERAL (
+          SELECT CASE WHEN jsonb_typeof(l.body) = 'array'
+                      THEN jsonb_array_length(l.body) ELSE 0 END AS len
+        ) x ON true
+        LEFT JOIN LATERAL (
           SELECT
             CASE WHEN v.prev_n > 0 AND x.len >= v.prev_n
-                 THEN left(md5((x.body -> (v.prev_n - 1))::text), 12)
+                 THEN left(md5((l.body -> (v.prev_n - 1))::text), 12)
                  ELSE '' END AS fp_prev,
             CASE WHEN x.len > 0
-                 THEN left(md5((x.body -> (x.len - 1))::text), 12)
+                 THEN left(md5((l.body -> (x.len - 1))::text), 12)
                  ELSE '' END AS fp_len
-        ) f
+        ) f ON true
     `);
     const rows = result.rows as unknown as {
       sid: DbScalar;
       log_type: string;
+      log_id: DbScalar;
       ut: DbScalar;
       len: DbScalar;
-      fp_prev: string;
-      fp_len: string;
-      lines: string | null;
+      fp_prev: string | null;
+      fp_len: string | null;
     }[];
-    const out: SliceRow[] = [];
+    const out: SliceMeta[] = [];
     for (const r of rows) {
       const t = CODE_BY_LOG_TYPE[r.log_type];
-      if (t === undefined || r.ut === null) continue;
+      if (t === undefined) continue;
+      const exists = r.log_id !== null && r.ut !== null;
       out.push({
         sid: Number(r.sid),
         t,
-        ut: microsToUt(r.ut),
-        len: Number(r.len),
-        fpPrev: r.fp_prev,
-        fpLen: r.fp_len,
-        lines:
-          r.lines === null ? null : (JSON.parse(r.lines) as SessionLogLine[]),
+        exists,
+        logId: exists ? Number(r.log_id) : 0,
+        ut: exists ? microsToUt(r.ut as string | number) : '',
+        len: Number(r.len ?? 0),
+        fpPrev: r.fp_prev ?? '',
+        fpLen: r.fp_len ?? '',
       });
     }
     return out;
   }
 
   /**
-   * Step (f): the full workflow list from the root claude body, linked to the tree's agents
-   * exactly as `/logs` does. A malformed body yields an empty list, as in `/logs`.
+   * Step (c), text half: lines `(prevN, len]` of one row as raw JSON array text
+   * (`jsonb_agg(elem ORDER BY i)::text`). Bounded by `len`, so lines appended after the
+   * metadata read wait for the next poll and the issued cursor stays exact. `null` when the
+   * row is gone or no longer extends the version the metadata saw (a rewrite).
+   */
+  private async readSliceText(req: SliceTextRequest): Promise<string | null> {
+    const result = await this.db.execute(sql`
+      SELECT CASE
+               WHEN jsonb_typeof(l.body) = 'array'
+                AND jsonb_array_length(l.body) >= ${req.len}::int
+                AND left(md5((l.body -> (${req.len}::int - 1))::text), 12) = ${req.fpLen}::text
+               THEN (
+                 SELECT COALESCE(jsonb_agg(e.line ORDER BY e.i), '[]'::jsonb)
+                   FROM jsonb_array_elements(l.body) WITH ORDINALITY e(line, i)
+                  WHERE e.i > ${req.prevN}::int AND e.i <= ${req.len}::int
+               )::text
+             END AS lines
+        FROM logs l
+       WHERE l.id = ${req.logId}
+    `);
+    const row = (result.rows as unknown as { lines: string | null }[])[0];
+    return row?.lines ?? null;
+  }
+
+  /**
+   * Step (f): the full workflow list — stored at ingest (`session_stats.workflows`, DD-6), or
+   * parsed from the root claude body while the backfill has not reached the session — linked to
+   * the tree's agents exactly as `/logs` does. A malformed body yields an empty list, as in
+   * `/logs`.
    */
   private async readWorkflows(
     rootId: number,
     meta: readonly TreeMetaRow[],
   ): Promise<WorkflowRun[]> {
-    const [row] = await this.db
-      .select({ bodyText: sql<string>`${schema.logs.body}::text` })
-      .from(schema.logs)
-      .where(
-        and(
-          eq(schema.logs.sessionId, rootId),
-          eq(schema.logs.logType, 'claude'),
-        ),
-      )
-      .limit(1);
-    if (row === undefined) return [];
-    let workflows: WorkflowRun[] = [];
-    try {
-      workflows = extractWorkflows(JSON.parse(row.bodyText) as unknown[]);
-    } catch {
-      return [];
+    let workflows = await readStoredWorkflows(this.db, rootId);
+    if (workflows === null) {
+      const [row] = await this.db
+        .select({ bodyText: sql<string | null>`${schema.logs.body}::text` })
+        .from(schema.logs)
+        .where(
+          and(
+            eq(schema.logs.sessionId, rootId),
+            eq(schema.logs.logType, 'claude'),
+          ),
+        )
+        .limit(1);
+      if (row === undefined || row.bodyText === null) return [];
+      try {
+        workflows = extractWorkflows(JSON.parse(row.bodyText) as unknown[]);
+      } catch {
+        return [];
+      }
     }
     const linkageRows: WorkflowLinkageRow[] = meta
       .filter((r) => r.t === 's')

@@ -24,7 +24,33 @@ export interface WorkstreamSummary {
 export interface CloseCheck {
   uncommitted: string[];
   agentBusy: boolean;
+  /** The remote a close can push to (origin, else the oldest); `null` when there is none. */
+  pushRemote: PushRemote | null;
+  /** The workstream's own branch, which "Close for now" pushes. Absent from an older server. */
+  branch?: string;
 }
+
+/** `PushRemote` of {@link CloseCheck}. */
+export interface PushRemote {
+  name: string;
+  connectionName: string;
+  providerName: string | null;
+  defaultBranch: string | null;
+}
+
+/** The outcome of the push a close was asked to make; a failed push never fails the close. */
+export interface PushResult {
+  remote: string;
+  branch: string;
+  ok: boolean;
+  rejectedBy: "policy" | "credential" | "host" | null;
+  message: string | null;
+  prUrl: string | null;
+  prLabel: string | null;
+}
+
+/** `POST …/close`: the closed workstream plus its push result. */
+export type CloseResult = WorkstreamSummary & { push?: PushResult | null };
 
 export type CloseMode = "bring_into_main" | "merged_elsewhere" | "for_now";
 
@@ -49,16 +75,23 @@ export async function closeCheck(id: string): Promise<CloseCheck> {
 
 /** 409 `uncommitted {paths}` / `merge_conflict`. */
 /** `commit`: commit every uncommitted file in the workstream first ("Commit all and …"). */
+/** `push`: push the branch to {@link CloseCheck.pushRemote} as part of the close. */
 export async function closeWorkstream(
   id: string,
   mode: CloseMode,
   force: boolean,
   commit = false,
-): Promise<WorkstreamSummary> {
-  return apiJson<WorkstreamSummary>(`${one(id)}/close`, {
-    method: "POST",
-    json: commit ? { mode, force, commit } : { mode, force },
-  });
+  push = false,
+): Promise<CloseResult> {
+  const json: {
+    mode: CloseMode;
+    force: boolean;
+    commit?: boolean;
+    push?: boolean;
+  } = { mode, force };
+  if (commit) json.commit = true;
+  if (push) json.push = true;
+  return apiJson<CloseResult>(`${one(id)}/close`, { method: "POST", json });
 }
 
 /** 409 `cannot_discard`. */

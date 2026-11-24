@@ -94,7 +94,7 @@ function isAlive(pid) {
   }
 }
 
-/** Removes every container, volume and image labelled with `instance`. */
+/** Removes every container, volume, image and network labelled with `instance`. */
 function removeInstanceObjects(instance) {
   if (!INSTANCE_RE.test(instance)) throw new Error(`refusing to clean up unexpected instance "${instance}"`);
   const filters = ['--filter', 'label=artisyn.workhub=1', '--filter', `label=artisyn.workhub.instance=${instance}`];
@@ -104,6 +104,9 @@ function removeInstanceObjects(instance) {
   if (volumes.length > 0) docker(['volume', 'rm', '-f', ...volumes], { allowFail: true });
   const images = [...new Set(lines(docker(['image', 'ls', '-q', ...filters]).stdout))];
   if (images.length > 0) docker(['rmi', '-f', ...images], { allowFail: true });
+  // The git-proxy network wh-net-<instance> (its containers are gone by now).
+  const networks = lines(docker(['network', 'ls', '-q', ...filters]).stdout);
+  if (networks.length > 0) docker(['network', 'rm', ...networks], { allowFail: true });
 }
 
 /** Cleans up the Docker objects of dead runs; returns their schemas for the next run to drop. */

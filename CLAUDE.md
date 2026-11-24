@@ -110,7 +110,7 @@ skills and workflows); this table is human documentation and must be kept in syn
 | Tests typecheck (tsc over `tests/`) | `npm run typecheck:tests` | repo root |
 | Hook algorithm tests (`node --test`, `__tests__/*.algo.test.js`) | `npm test` | `hook/` |
 | E2E — fast `@core` loop (< 3 min; legacy `tests/e2e/` specs not yet replaced by scenarios) | `npm run test:e2e` | repo root |
-| E2E — full suite (legacy `tests/e2e/`) | `npm run test:e2e:full` | repo root |
+| E2E — rest of the suite (legacy `tests/e2e/`, every spec not tagged `@core`; `test:e2e` + `test:e2e:full` = whole suite) | `npm run test:e2e:full` | repo root |
 | Scenarios — isolated stand, auth modes A/B/C/D (`--mode a --only scenarios,corpus`, `--mode b\|c\|d --only scenarios` per check) | `npm run test:scenarios` | repo root |
 | API vs DB contracts (jest, own `contract_*` schema, real DB) | `npm run test:contract` | `server/` |
 
@@ -148,7 +148,7 @@ skills and workflows); this table is human documentation and must be kept in syn
   e2e run drops the backend mid-suite. This is encoded as the `app` group in
   `repo-health-checks.json`; the lint/typecheck and unit (algorithm) checks — including the server
   `npm run test`, which needs no DB — are the `static` group and safe to run alongside them.
-- `npm run test:scenarios` (checks `scenarios-a` 900 s, `scenarios-b`/`-c`/`-d` 600 s each, `finalOnly` — final verification only; mode A stays one integrated run on purpose) builds and
+- `npm run test:scenarios` (checks `scenarios-a` 1200 s, `scenarios-b`/`-c`/`-d` 600 s each, `finalOnly` — final verification only; mode A stays one integrated run on purpose) builds and
   starts its own isolated stand (own port, own `scn_*` schema) and never touches the dev server;
   it needs Postgres and, for modes B and D, Mailpit — `docker compose -f tests/scenarios/docker-compose.yml up -d`.
   Mode D (`strict-managed`) restarts its stand once on the same schema before the scenarios run.
@@ -175,6 +175,13 @@ all run **from `work-hub/`**:
 | Build (web, then `cargo build --release`) | `npm run build` |
 | API contract tests (needs Postgres and Docker) | `npm run test:contract` |
 | Scenarios on an isolated stand (needs Postgres, Docker; Mailpit for mode b) | `npm run test:scenarios -- --mode a\|b\|c` |
+
+Work Hub's health checks are **not run by default**: they live in
+`.claude/repo_config/work-hub-health-checks.json`, not in `repo-health-checks.json`, so
+`adlc-lh:check-health` (and every workflow built on it) never runs them. Run them only when asked,
+or when a task changes `work-hub/` — pass that file's `checks` and `environmentNotes` to the
+`adlc-lh:check-health-wf` Workflow (`finalRun: true` adds the `work-hub-scenarios-*` ones), or run
+the commands above by hand.
 
 Test policy for Work Hub — the same three kinds, in its own places:
 

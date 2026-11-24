@@ -3,7 +3,7 @@ type: "Algorithm"
 title: "Bash command view: layout, file summary, repo-relative paths, highlighting"
 description: "Claude Code's Bash tool commands are long one-liners (`cd <abs>; a && b; for …; done | tail`), often with heredocs and inline `node -e` scripts."
 tags: [algorithm]
-generated: { by: "human:denistsyplakov", at: "2026-11-05T22:03:37+04:00" }
+generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
 reviewed: no
 reviewer: none
 ---
@@ -18,6 +18,12 @@ indented script with a working-dir header, a "which files did this touch" summar
 colours, so a reader understands what the command did without decoding it — while the
 original text stays one click away ("Raw", "Copy original").
 
+PowerShell tool commands get the same view shape (same `BashView`, same FILES block, same UI)
+from their own grammar and rules: [powershell-command-view](powershell-command-view.md). The
+dispatch is `buildShellView(shell, parser, command, root)` / `analyzeShellCommand(parsers,
+toolName, command)` in `packages/bash-view/src/shell.ts` (`shellOfTool`: `Bash` → `bash`,
+`PowerShell` → `powershell`).
+
 ## Code
 
 - Implementation: the repo-local package `@loghub/bash-view`, all under `packages/bash-view/src/`
@@ -26,16 +32,19 @@ original text stays one click away ("Raw", "Copy original").
   - `bash-view.ts` (`buildBashView`) — the composition the rows run;
   - `bash-format.ts` (`formatBash`, `liftCd`, `foldHeredocs`, `WIDTH`, `IND`,
     `HEREDOC_INLINE_MAX`);
-  - `bash-analyze.ts` (`analyzeBash`, `readKindOf`, `literal`, `groupByDir`, `displayGroups`,
-    `GROUP_BY_DIR_ABOVE`, the command tables `W_CMDS`, `R_CMDS`, `SCRIPT_CMDS`, `NOT_RUNS`,
-    `SUBCOMMAND_TOOLS`, `RUN_SCRIPT_TOOLS`, `GREP_CMDS`, `LIST_CMDS`, `FOR_VALUES_MAX`);
+  - `bash-analyze.ts` (`analyzeBash`, `analyzeWords` + `WordSink`, `readKindOf`, `literal`,
+    `groupByDir`, `displayGroups`, `GROUP_BY_DIR_ABOVE`, the command tables `W_CMDS`, `R_CMDS`,
+    `SCRIPT_CMDS`, `NOT_RUNS`, `SUBCOMMAND_TOOLS`, `RUN_SCRIPT_TOOLS`, `GREP_CMDS`, `LIST_CMDS`,
+    `FOR_VALUES_MAX`);
   - `display-paths.ts` (`toRepoRelative`);
-  - `bash-highlight.ts` (`highlightBash`, `bashHighlightQuery`, `HIGHLIGHT_CLASS`);
+  - `bash-highlight.ts` (`highlightBash` = `highlightWith(…, CAPTURE_KIND)`, `highlightWith`,
+    `bashHighlightQuery`, `HIGHLIGHT_CLASS`);
   - `syntax.ts` — structural types of the syntax tree (`BashSyntaxNode`, `BashSyntaxTree`,
     `BashCapture`), the `BashParser` interface each side implements, and `withTree`. The package
     never imports `web-tree-sitter`.
 - Parser loaders (loading only, no rules): client
-  `client/src/viewer/lib/bash-view/bash-parser.ts` (`loadBashParser`) and `browser-parser.ts`
+  `client/src/viewer/lib/bash-view/bash-parser.ts` (`loadTreeSitterParser('bash', assets)`, one
+  cached parser per shell) and `browser-parser.ts`
   (`HIGHLIGHT_QUERY` = `bashHighlightQuery(<grammar highlights.scm>)`, browser WASM assets);
   server `server/src/logs/okf/server-bash-parser.ts` (`getServerBashParser`, WASM from
   `dist/wasm/` or `node_modules`), used by the OKF access extraction.
@@ -59,7 +68,8 @@ original text stays one click away ("Raw", "Copy original").
 ## Input and output
 
 `buildBashView(parser, command, root)` returns `{ok, workDir, script, rawDisplay, folded,
-lineCount, rawLineCount, files: {changes, reads, runs, inline, unresolved}, firstStatement}`.
+lineCount, rawLineCount, files: {changes, reads, runs, inline, unresolved, deleted},
+firstStatement}`.
 `root` is the session's repo root (`ParsedSession.repoRoot`), `''` when unknown. `lineCount` and
 `rawLineCount` are defined by rule 1.3 (the COMMAND header's "N lines (was M)").
 
@@ -227,7 +237,8 @@ gives the target as the number `N`); it can only come from a command argument su
    backslashes are escapes). Positional = an argument whose
    literal value does not start with `-`, plus every non-literal argument.
    - `cd` → rule 5.5;
-   - `rm mkdir touch tee chmod rmdir truncate` → every positional is a change;
+   - `rm mkdir touch tee chmod rmdir truncate` → every positional is a change; a positional of
+     `rm` / `rmdir` is also a **deleted** path (rule 5.10);
    - `cat head tail less wc cut ls stat diff sort uniq file nl tac md5sum sha256sum` → every
      positional is a read;
    - `grep`, `rg` → every positional after the first (the pattern) is a read;
@@ -353,6 +364,21 @@ gives the target as the number `N`); it can only come from a command argument su
    - **`git grep <pattern> <paths…>`** reads its paths like `grep`, with the same pattern rule
      applied after the `grep` sub-command. Without paths it searches the whole tree and stays a
      `git grep` run, not a read.
+10. **`deleted`** (`files.deleted`): the paths of `changes` that the command removed — the
+    positionals of `rm` / `rmdir` (rule 5.2), resolved and relativised exactly like `changes`, in
+    `changes` order. They stay in `changes`, so the "changes N" count does not move; a path that
+    is removed and written again in the same command is still listed. The FILES block renders a
+    deleted path in Changes as `<path> (deleted)` (muted suffix). The PowerShell analysis fills
+    it from `Remove-Item` and its aliases ([powershell-command-view](powershell-command-view.md)).
+11. **Word-level rules are tree-free** (`analyzeWords(base, args, sink)`): everything rule 5.2
+    and 5.3 decide from a command's base name and its literal arguments — the write / read
+    tables, `grep` / `git grep`, `sed`, `mv`, `cp`, run labels and `-e` / `-c` / `--eval` inline
+    notes — lives in one node-free function that reports to a `WordSink` (`read(p, kind?,
+    meta?)`, `write(p)`, `del(p)`, `run(label)`, `script(command, lines)`; `null` = not a literal
+    word). `analyzeBash` walks the tree (redirects, `cd`, variables, loops, heredoc scripts) and
+    calls it per command with the same results as before the extraction. The PowerShell analysis
+    calls it for native commands (`git status`, `npm run build`, `grep -n x f`), never for the
+    Unix-like PowerShell aliases (`rm cat ls cp mv`), which are cmdlets there.
 
 ### 6. Repo-relative display (`toRepoRelative`)
 
@@ -368,7 +394,7 @@ gives the target as the number `N`); it can only come from a command argument su
    `changes`, `reads` and `firstStatement` — never to `runs` or `inline`. Copy actions always use
    the original command.
 6. `firstStatement` is the first non-empty line of the script after the `cd` lift (before
-   folding), trimmed: the Bash tab's list preview.
+   folding), trimmed: the Shell tab's list preview.
 
 ### 7. Highlighting (`highlightBash`)
 
@@ -489,6 +515,7 @@ gives the target as the number `N`); it can only come from a command argument su
   folders searched by `grep -rn` BV-93; a `<` redirect is `read`, the first command decides the
   kind BV-94; paths relative to the analysis root, `ls .`, a read that is also a change left out
   BV-95; `find` / `tree` / `egrep` are runs, no reads BV-96. `range`: `sed -n Np` / `head -n` / `tail -n` BV-97, `head -N` / `tail -n +N` / `--lines=` BV-98, no range for other sed scripts and non-numeric counts BV-99. `pattern`: `-e` and `rg` BV-100, value flags skipped BV-101, `git grep … -- paths` BV-102, `git grep` without paths and `grep -f` BV-103.
+- `deleted` (rule 5.10): `rm` of two paths next to a non-deleting `touch` BV-104; `rmdir` of a path created again BV-105; `rm` inside a `for` loop BV-106; a deleted path made repo-relative BV-107.
 
 ## Examples
 
@@ -498,7 +525,7 @@ Two kinds of rows.
   `buildBashView(parser, command, root)` and compares the listed keys of `expected`:
   `ok`, `workDir`, `script`, `rawDisplay`, `folded`, `lineCount`, `rawLineCount` and
   `firstStatement` from the view;
-  `changes`, `reads`, `runs`, `inline` and `unresolved` from `view.files`; `changeGroups` /
+  `changes`, `reads`, `runs`, `inline`, `unresolved` and `deleted` (rule 5.10) from `view.files`; `changeGroups` /
   `readGroups` / `runGroups` / `inlineGroups` are `displayGroups('changes' | 'reads' | 'runs' |
   'inline', list)` (rule 5.7: the groups, or `null` when flat); `readAccess` is
   `analyzeBash(parser, command).readAccess` (rule 5.9). Keys that are not listed are not checked. On every row with `ok: true` the test also
@@ -509,7 +536,7 @@ Two kinds of rows.
 
 Commands are anonymised (`/work/acme-app`, `C:\work\acme-app`).
 
-Rows (110): [`docs/algorithm-examples/bash-command-view.json`](../../algorithm-examples/bash-command-view.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (114): [`docs/algorithm-examples/bash-command-view.json`](../../algorithm-examples/bash-command-view.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -594,6 +621,7 @@ Rows (110): [`docs/algorithm-examples/bash-command-view.json`](../../algorithm-e
   redirect given the command's kind -> BV-94 (`list.txt` grep); `readAccess` not filtered by
   changes -> BV-95; not relativised like `reads` -> BV-95; `grep` / `ls` not mapped -> BV-92,
   BV-93.
+- `rm` / `rmdir` positionals not marked deleted -> BV-104, BV-105, BV-106; a non-deleting change marked deleted -> BV-104 (`c.txt`); deleted paths dropped from `changes` -> BV-104 ("changes 2"); deleted paths not relativised -> BV-107.
 - Inline notes deduplicated by text -> BV-48; a note per loop walk -> BV-87; the heredoc passed
   into a compound statement's commands (`{ … }`, `while`, `if`, or a `for` body, or a subshell)
   -> BV-87.
@@ -601,6 +629,6 @@ Rows (110): [`docs/algorithm-examples/bash-command-view.json`](../../algorithm-e
 ## Where the result is visible
 
 Session pane → Logs tab → a Bash call's details (tool-call modal), the Context Growth step modal
-and the Bash tab's details pane: WORKING DIR, FILES (Changes / Reads / Runs / Inline, "+ N not
-resolved"), the formatted COMMAND with line numbers, fold toggles and colours, and the Bash tab
-list's "changes N" chip and preview line (`firstStatement`).
+and the Shell tab's details pane: WORKING DIR, FILES (Changes with `(deleted)` suffixes / Reads /
+Runs / Inline, "+ N not resolved"), the formatted COMMAND with line numbers, fold toggles and
+colours, and the Shell tab list's "changes N" chip and preview line (`firstStatement`).

@@ -3,12 +3,19 @@ import type { RepositorySession } from '../../../models/repositories';
 import type { ModelPricingMap } from '../../../models/pricing';
 import type { WorkflowRun } from '../../../models/workflows';
 import {
-  fetchSessionLogs,
+  fetchSessionLogPart,
+  fetchSessionLogParts,
   fetchSessionsExportScope,
   type ExportScopeFilters,
   type ExportScopeSession,
+  type SessionLogLine,
 } from '../../api';
 import { parseSessionLogs } from './session-log/log-parser';
+import {
+  assembleSessionLogs,
+  sessionLogPartKey,
+} from './session-parts/assemble-session-logs';
+import { PART_LOAD_CONCURRENCY } from './session-parts/useSessionLogParts';
 import { computeSessionInfoDerived } from './session-log/session-info-derive';
 import { computeTreeCodeImpact } from './session-log/tree-code-impact';
 import { deriveSessionUsage } from './session-log/usage/session-usage-derive';
@@ -69,6 +76,36 @@ export interface SessionExportMeta {
 }
 
 /**
+ * Loads one session's manifest and every part (at most `PART_LOAD_CONCURRENCY` at a time), and
+ * assembles them into the legacy `SessionLogsData` shape the parse below expects.
+ */
+async function loadAllSessionLogs(
+  repoId: number,
+  sessionId: string,
+  teamId: number | undefined,
+) {
+  const manifest = await fetchSessionLogParts(repoId, sessionId, teamId);
+  const bodies = new Map<string, SessionLogLine[]>();
+  let next = 0;
+  const worker = async () => {
+    while (next < manifest.parts.length) {
+      const part = manifest.parts[next++];
+      bodies.set(
+        sessionLogPartKey(part),
+        await fetchSessionLogPart(repoId, sessionId, part, teamId),
+      );
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(PART_LOAD_CONCURRENCY, manifest.parts.length) },
+      worker,
+    ),
+  );
+  return assembleSessionLogs(manifest, bodies);
+}
+
+/**
  * Fetches and parses one session's full logs, then derives its Session Info tab fields.
  * Mirrors `useRepositoryData.ts`'s own subagent-log-map construction so nested
  * workflow/sub-agent parsing matches the tab's own computation exactly.
@@ -79,7 +116,7 @@ async function buildSessionRecord(
   teamId: number | undefined,
   pricing: ModelPricingMap | undefined,
 ): Promise<SessionExportRecord> {
-  const logsData = await fetchSessionLogs(
+  const logsData = await loadAllSessionLogs(
     repoId,
     scopeSession.sessionId,
     teamId,

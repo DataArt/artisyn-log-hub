@@ -5,6 +5,7 @@ import {
   Loader2,
   LogOut,
   Mail,
+  Shield,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -13,7 +14,7 @@ import { logout } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { useAuthConfig } from "../auth/useAuthConfig";
 import { ChangePasswordDialog } from "../pages/password/ChangePasswordDialog";
-import { ROUTE } from "../routes";
+import { ROUTE, routes } from "../routes";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,6 +80,21 @@ function UserMenu() {
             <DropdownMenuItem onSelect={() => setChangePasswordOpen(true)}>
               <KeyRound className={styles.primaryIcon} />
               Change password
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            data-testid="menu-connections"
+            onSelect={() => void navigate(routes.connections)}
+          >
+            🔑 Connections
+          </DropdownMenuItem>
+          {user?.role === "admin" && (
+            <DropdownMenuItem
+              data-testid="menu-admin"
+              onSelect={() => void navigate(routes.admin)}
+            >
+              <Shield className={styles.primaryIcon} />
+              Admin
             </DropdownMenuItem>
           )}
           <DropdownMenuItem

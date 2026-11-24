@@ -14,12 +14,25 @@ const GROUPS: {
   { key: 'inline', label: 'Inline' },
 ];
 
+/** The muted `(deleted)` suffix of a removed path (DD-3). */
+function DeletedMark() {
+  return (
+    <span className="text-muted-foreground" data-testid="bash-files-deleted">
+      {' '}
+      (deleted)
+    </span>
+  );
+}
+
 function PathList({
   paths,
   groups,
+  deleted,
 }: {
   paths: string[];
   groups: DirGroup[] | null;
+  /** Paths to mark `(deleted)` — only passed for Changes. */
+  deleted?: ReadonlySet<string>;
 }) {
   if (!groups)
     return (
@@ -27,16 +40,26 @@ function PathList({
         {paths.map((p, i) => (
           <li key={i} className="break-all">
             {p}
+            {deleted?.has(p) && <DeletedMark />}
           </li>
         ))}
       </ul>
     );
+  // `groupByDir`: `dir` ends with `/`, and `./` stands for a bare name.
+  const joinDir = (dir: string, name: string): string =>
+    dir === './' ? name : `${dir}${name}`;
   return (
     <ul className="flex flex-col">
       {groups.map(({ dir, names }) => (
         <li key={dir} className="break-all">
           <span className="text-muted-foreground">{dir}</span>{' '}
-          {names.join(', ')}
+          {names.map((name, i) => (
+            <span key={i}>
+              {i > 0 && ', '}
+              {name}
+              {deleted?.has(joinDir(dir, name)) && <DeletedMark />}
+            </span>
+          ))}
         </li>
       ))}
     </ul>
@@ -46,9 +69,11 @@ function PathList({
 /**
  * The FILES block of the Bash view (DD-13): Changes / Reads / Runs / Inline, empty groups hidden;
  * a path list (Changes / Reads) with more than `GROUP_BY_DIR_ABOVE` entries is grouped by
- * directory (`displayGroups`). Runs and Inline are never grouped.
+ * directory (`displayGroups`). Runs and Inline are never grouped. A Changes path the command
+ * removed gets a muted `(deleted)` suffix (DD-3).
  */
 export function BashFileSummary({ files }: { files: BashFiles }) {
+  const deleted = new Set(files.deleted);
   const groups = GROUPS.filter(({ key }) => files[key].length > 0);
   if (groups.length === 0) return null;
   return (
@@ -63,6 +88,7 @@ export function BashFileSummary({ files }: { files: BashFiles }) {
             <PathList
               paths={files[key]}
               groups={displayGroups(key, files[key])}
+              deleted={key === 'changes' ? deleted : undefined}
             />
           </div>
         ))}

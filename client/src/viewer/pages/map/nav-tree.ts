@@ -107,7 +107,7 @@ export interface NavContext {
   /** Owner of the context session; Raw Logs is listed only for the viewer's own session. */
   sessionUserId?: number;
   sessionCtx: TabVisibilityContext;
-  /** Known Bash command count of the context session. */
+  /** Known shell command count (Bash and PowerShell) of the context session. */
   bashCount?: number;
   /** Known Tools/MCP failure state of the context session. */
   toolsFailure?: boolean;

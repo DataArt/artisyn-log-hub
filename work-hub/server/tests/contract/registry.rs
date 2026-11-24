@@ -184,6 +184,26 @@ pub static REGISTRY: &[Contract] = &[
     row("POST", "/api/v1/workstreams/{id}/retry", S, true),
     row("GET", "/api/v1/workstreams/{id}/recording", S, true),
     row("GET", "/api/v1/workstreams/{id}/recording/meta", S, true),
+    // Connections and remotes
+    row("GET", "/api/v1/connection-providers", S, false),
+    row("GET", "/api/v1/connections", S, false),
+    row("POST", "/api/v1/connections", S, false),
+    row("GET", "/api/v1/connections/{id}", S, true),
+    row("PATCH", "/api/v1/connections/{id}", S, true),
+    row("DELETE", "/api/v1/connections/{id}", S, true),
+    row("POST", "/api/v1/connections/{id}/test", S, true),
+    row("POST", "/api/v1/connections/{id}/regenerate-key", S, true),
+    row("PUT", "/api/v1/connections/{id}/grants", S, true),
+    row("POST", "/api/v1/connections/{id}/branches", S, true),
+    row("GET", "/api/v1/workspaces/{id}/remotes", S, true),
+    row("POST", "/api/v1/workspaces/{id}/remotes", S, true),
+    row("PATCH", "/api/v1/remotes/{id}", S, true),
+    row("DELETE", "/api/v1/remotes/{id}", S, true),
+    row("POST", "/api/v1/remotes/{id}/test", S, true),
+    row("GET", "/api/v1/clone-ops/{id}", S, true),
+    row("POST", "/api/v1/clone-ops/{id}/cancel", S, true),
+    // Admin (FR-12, D15): non-admins get 403 (admin::overview).
+    row("GET", "/api/v1/admin/overview", S, false),
     // Terminal WebSockets (D11): a plain GET gets the same 401 / 404 as an upgrade.
     row("GET", "/api/v1/workstreams/{id}/chat/ws", S, true),
     row("GET", "/api/v1/workspaces/{id}/login/ws", S, true),
@@ -253,6 +273,17 @@ pub fn probe_body(r: &Contract) -> Body {
         Body::Files(vec![("probe.txt".into(), b"probe".to_vec())])
     } else if r.path.ends_with("/fs/file") && r.method == "PUT" {
         Body::Raw(b"probe".to_vec(), "text/plain")
+    } else if r.path == "/api/v1/workspaces/{id}/remotes" && r.method == "POST" {
+        // The attach body must parse before the workspace's owner is checked.
+        Body::Json(json!({
+            "name": "probe",
+            "connectionId": Uuid::new_v4(),
+            "url": "http://git.test/git/probe.git",
+        }))
+    } else if r.path == "/api/v1/connections/{id}/grants" {
+        Body::Json(json!({ "workspaceIds": [] }))
+    } else if r.path == "/api/v1/connections/{id}/branches" {
+        Body::Json(json!({ "url": "http://git.test/git/probe.git" }))
     } else if r.method == "GET" || r.method == "DELETE" {
         Body::None
     } else {
@@ -291,15 +322,23 @@ fn session_rows_401(ctx: &Ctx) -> BoxFuture<'_, ()> {
     })
 }
 
-/// AC-5: user B gets 404 on every owner-scoped route with user A's workspace and workstream ids
-/// (both views for the file routes), and A's data is unchanged afterwards.
+/// AC-5: user B gets 404 on every owner-scoped route with user A's workspace, workstream,
+/// connection and remote ids (both views for the file routes), and A's data is unchanged
+/// afterwards.
 fn owner_scoped_404(ctx: &Ctx) -> BoxFuture<'_, ()> {
     Box::pin(async move {
         let w = ctx.world().await;
         let stream_view = w.workstream.to_string();
         for r in REGISTRY.iter().filter(|r| r.owner_scoped) {
-            let id = if r.path.starts_with("/api/v1/workstreams/") {
+            let id = if r.path.starts_with("/api/v1/connections/") {
+                w.connection
+            } else if r.path.starts_with("/api/v1/remotes/") {
+                w.remote
+            } else if r.path.starts_with("/api/v1/workstreams/") {
                 w.workstream
+            } else if r.path.starts_with("/api/v1/clone-ops/") {
+                // Clone ops are in-memory and short-lived: only "unknown → 404" is checked.
+                Uuid::new_v4()
             } else {
                 w.workspace
             };
@@ -331,6 +370,23 @@ fn owner_scoped_404(ctx: &Ctx) -> BoxFuture<'_, ()> {
         assert!(
             open.iter().any(|s| s["id"] == w.workstream.to_string()),
             "A's workstream is still open: {detail}"
+        );
+        // A still has the connection and the remote.
+        w.a.get(&format!("/api/v1/connections/{}", w.connection))
+            .await
+            .expect_status(200, "A's connection after B's calls");
+        let remotes =
+            w.a.get(&format!("/api/v1/workspaces/{}/remotes", w.workspace))
+                .await
+                .expect_status(200, "A's remotes after B's calls")
+                .json();
+        assert!(
+            remotes
+                .as_array()
+                .expect("remotes")
+                .iter()
+                .any(|r| r["id"] == w.remote.to_string()),
+            "A's remote is still attached: {remotes}"
         );
     })
 }

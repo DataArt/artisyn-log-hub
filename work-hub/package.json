@@ -9,7 +9,7 @@
   "scripts": {
     "build": "npm run build:web && cargo build --release",
     "build:web": "cd web && bun install --frozen-lockfile && bun run build",
-    "lint": "cargo fmt --check && cargo clippy --all-targets -- -D warnings && cd web && bun run lint && cd .. && node scripts/agent-names-check.mjs && node scripts/license-check.mjs",
+    "lint": "cargo fmt --check && cargo clippy --all-targets -- -D warnings && cd web && bun run lint && cd .. && node scripts/agent-names-check.mjs && node scripts/license-check.mjs && node scripts/provider-names-check.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test:algo": "cargo test --lib --bins --test algo && cd web && bun run test",
     "test:contract": "node scripts/contract.mjs",

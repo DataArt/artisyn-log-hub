@@ -1,5 +1,5 @@
-//! `users` table access. Work Hub has no roles in the alpha: the public profile always says
-//! `role: "user"` (D3).
+//! `users` table access. The public profile says `role: "admin"` for an e-mail listed in
+//! `WORK_HUB_ADMIN_EMAILS` (FR-12) and `role: "user"` for everyone else (D3).
 
 use serde::Serialize;
 use sqlx::PgPool;
@@ -29,11 +29,21 @@ pub struct PublicProfile {
 }
 
 impl UserRow {
-    pub fn public_profile(&self) -> PublicProfile {
+    /// True when the user's e-mail key is in `admin_emails` (FR-12).
+    pub fn is_admin(&self, admin_emails: &[String]) -> bool {
+        admin_emails.contains(&self.email_key)
+    }
+
+    /// The profile; `admin_emails` is `Config::admin_emails` (lowercased).
+    pub fn public_profile(&self, admin_emails: &[String]) -> PublicProfile {
         PublicProfile {
             id: self.id,
             email: self.email.clone(),
-            role: "user",
+            role: if self.is_admin(admin_emails) {
+                "admin"
+            } else {
+                "user"
+            },
             created_at: self.created_at,
         }
     }

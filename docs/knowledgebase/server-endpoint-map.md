@@ -6,7 +6,7 @@ tags:
   - server
   - api
   - auth
-generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
+generated: { by: "ai:claude", at: "2026-11-24T20:00:00+04:00" }
 ---
 
 # Server HTTP API map
@@ -62,8 +62,9 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   route, `sessions/export-scope` and `recompute-all-sessions`: personal owner, or the **owner**
   of `teamId` (a plain member → 403). `teamId` is a query param on GETs and a body field on
   POSTs; forgetting it on a team call wrongly 403s a team owner.
-- **Owner-only data** — `GET .../sessions/:sessionId/logs` and its incremental twin
-  `.../logs/delta` (raw conversation; one shared check, `resolveSessionLogsAccess`) are owner-only
+- **Owner-only data** — `GET .../sessions/:sessionId/logs`, its incremental twin
+  `.../logs/delta` and the parts routes `.../logs/parts` and `.../logs/parts/:partSessionId/:logType`
+  (raw conversation; one shared check, `resolveSessionLogsAccess`) are owner-only
   (owner = `userId` of the session's artisyn log); exceptions only with `?teamId`: the team
   owner, or a `team-with-prompts` caller in a restricted team, and only for members who have
   acknowledged the disclosure. `GET .../contexts` stays owner-only. `DELETE
@@ -133,7 +134,8 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   are rate-limited per IP/email — see [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md).
 - **No GET mutates state** under a cookie session (e.g. export download leaves the job in
   place) — checked by the `security-check` skill.
-- **Body limits** (`common/body-limits.ts`; oversize → 413): `POST /api/v2/logs` uses
+- **Body limits** (`common/body-limits.ts`; oversize → 413): `POST /api/v2/logs` and
+  `POST /api/v2/logs/append` (`LOG_INGEST_ROUTES`) use
   `LOGS_MAX_BODY_MB` (counted decompressed); the hook JSON POSTs listed in `HOOK_API_ROUTES` get
   `HOOK_API_BODY_LIMIT`; everything else `GLOBAL_BODY_LIMIT`. A new hook-called POST must be
   added to `HOOK_API_ROUTES`. Parsers are wrapped in `throwMiddlewareErrors()` so a 413/400 is not
@@ -156,6 +158,14 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   (`selectBudgetTreeCostMicros`), so a budget never under-counts; their figures can therefore
   exceed the cost the session list shows. Rules:
   [algorithms/budget-spend-math.md](algorithms/budget-spend-math.md).
+- **Gzip of `/api` JSON answers** — `common/json-gzip.ts` (`createJsonGzipMiddleware`,
+  registered in `AppModule.configure()` after the security headers) wraps `res.json` on every
+  `/api/*` route: every such answer gets `Vary: Accept-Encoding`, and one whose JSON text is at
+  least `API_GZIP_MIN_BYTES` (default 8192) goes out with `Content-Encoding: gzip` when the client
+  accepts gzip (not `q=0`) and the request is not `HEAD`. ETag / 304 keep working; bodies are
+  unchanged once decoded. Answers sent with `@Res()` streams, `res.send`/`res.end` (log parts,
+  downloads, static) are not touched. Why not `compression`:
+  [static-asset-serving.md](static-asset-serving.md) § 6.
 - **SPA and static files** are served by `ServeStaticModule` + a precompressed-static middleware;
   see [static-asset-serving.md](static-asset-serving.md).
 
@@ -168,10 +178,18 @@ Installed hooks are upgraded late, so every route a hook calls (`api-key` routes
   ignored, never a 400 (e.g. `snapshotId`, `okfSnapshotId`). Response shapes for callers that
   omit new params stay unchanged (e.g. un-chunked uploads still get `{ warnings }`).
 - A missing route on an older server answers 404, and the hook treats that as "feature off"
-  (tool-monitoring config, OTEL realtime) — keep that behaviour when adding hook features.
+  (tool-monitoring config, OTEL realtime, append uploads) — keep that behaviour when adding hook
+  features. A new hook-called POST route that an old server would see as unknown must keep its
+  bodies under the 512,000-byte global parser limit, or the old server answers 413, not 404.
 - A non-validation 400 on `/api/v2/logs` makes the hook stop gzip-compressing, so size errors
   must stay 413 and gzip errors `400 Malformed gzip request body`.
 - `POST /api/v1/logs` was removed: hooks older than 1.7.0 get 404 and must be upgraded.
+- `POST /api/v2/logs` optional params `contentSha256` (64 lowercase hex, single upload or
+  chunk 0; anything else ignored, stored in `upload_queue.content_sha256`, a mismatch fails the
+  row with `content-hash-mismatch`) and `uploadFeedback=1`. Only with `uploadFeedback=1` does
+  the single-upload, chunk-complete and deleted-session answer carry `failedUploads`
+  (`{sessionId, type}[]`, each server-side failure reported once) and the deleted-session
+  answer `sessionDeleted: true`. Old hooks send neither and see unchanged shapes.
 
 Compatibility matrix and per-feature history: [hook-api-versioning.md](hook-api-versioning.md).
 
@@ -269,8 +287,20 @@ grep the controller.
   its shape only grows (optional `asOf=YYYY-MM-DD`).
 - `POST /api/v1/log-echo` — the installer's API-key check; must keep answering 200.
 - `POST /api/v2/logs` — only stages the raw body into `upload_queue`; parsing happens later in
-  the scheduler, so a 200 does not mean the session is visible yet. Chunk / snapshot params and
+  the scheduler, so a 200 does not mean the session is visible yet. A session that is itself, or
+  under an ancestor, deleted (`SessionTombstoneService`) gets 201 `{complete:true, warnings}`
+  with nothing staged — checked on a single upload, chunk 0 and a later chunk of an unstaged
+  upload, like the foreign-session path. Chunk / snapshot params and
   responses: [hook-api-versioning.md](hook-api-versioning.md), [upload-queue.md](upload-queue.md).
+- `POST /api/v2/logs/append` — hook `3.3.0`+: stages only the new lines of a `claude` /
+  `claude-subagent` transcript with a required `startLine` (0-based record index); same params as
+  a non-chunked `POST /api/v2/logs` otherwise, same answers. Its own 400s: other `type`s
+  (`Append is supported only for claude and claude-subagent logs`), missing or non-`^\d{1,9}$`
+  `startLine`. A delta that does not continue the stored log is never a synchronous error — the
+  worker fails it as `upload-full`, reported once via `failedUploads`. On an older server the
+  route answers 404 (or 413 for a body over the 512,000-byte global parser limit) and the hook
+  falls back to the full upload: [hook-api-versioning.md](hook-api-versioning.md),
+  [upload-queue.md](upload-queue.md) § "Append rows".
 - `POST /api/v2/turn-end-cost-advisor` answers `applied:false` before the session is ingested;
   `POST /api/v2/session-attribution` applies only a newer `promptWatermark`.
 - `POST /api/v2/otel-realtime` — 409 for a session of another user, `ignored:'deleted'` for a
@@ -288,7 +318,22 @@ grep the controller.
   (`logs/session-logs-access.ts`, owner-only rule). The delta route (Session Map poll) takes an
   opaque `cursor`: absent / invalid / oversized → full snapshot; next cursor `''` when too long;
   `workflows: null` means unchanged; `{reload:true}` when the stored logs no longer extend the
-  cursor. Types: `logs/dto/session-logs-delta.dto.ts`.
+  cursor. Types: `logs/dto/session-logs-delta.dto.ts`. `/logs` and the non-reload delta answers
+  are streamed under the per-worker `LogStreamLimiter`; a failure after the first byte destroys
+  the socket.
+- `GET …/sessions/:sessionId/logs/parts` (the viewer's manifest of the tree's stored log blobs,
+  one per `logs` row with a body, each with a revision `rev`, plus the `/logs` small figures,
+  `derivedLagging`, and the root's OTEL `liveness` with `serverTime` for the Session Map) and `GET …/logs/parts/:partSessionId/:logType` (one blob's body, a JSON array,
+  `?rev=` only a cache-buster) use the same access chain; the manifest answers 422 like `/logs`
+  for a NULL root claude body. The part route answers 400 for a `logType` other than
+  `claude` / `artisyn` / `claude-subagent`, 404 `Session log part not found` for a part outside the
+  tree, 304 on a matching `If-None-Match` (no body read, no stream permit), and serves the stored
+  gzip copy with `Content-Encoding: gzip` when it is valid and accepted. A disposable disk cache
+  (`logs/part-cache/`) sits behind the part route: a hit checks only the row's revision in the DB
+  and streams the cached gzip file; a miss reads the DB as before and fills the cache afterwards.
+  Headers, ETag, 304 and the stream permit are the same either way. Logic:
+  `logs/session-log-parts.service.ts`; types: `logs/dto/session-log-parts.dto.ts`; details in
+  `session-log-view.md` ("The parts API") and [session-part-cache.md](session-part-cache.md).
 - `GET …/sessions/export-scope` (statistics export) is repo owner or team owner and bypasses the
   team access mode.
 - `PUT …/settings/team` is team owner only; both settings PUTs trigger a recompute, except when
@@ -378,6 +423,11 @@ grep the controller.
   (`GET admin/auth/pending-registrations`, `POST …/:id/resend`, `DELETE …/:id`) are gated the same
   way (404 in `strict-managed`).
 - `GET /api/v1/admin/retention` is `admin-or-team-owner`, not `admin`.
+- `GET /api/v1/admin/system` carries `partCache` (additive; `PartCacheView` in
+  `logs/part-cache/part-cache.types.ts`): config, the last sweep's figures read from the cache's
+  state file (the request never scans the folder) and `removedByDataDeletion`, which counts only
+  the answering worker since its start. The contract row `F01-admin-system` pins only the status;
+  the shape is asserted in `@S-ADM-01`. See [session-part-cache.md](session-part-cache.md).
 - Model pricing: model ids contain `/`, so `PUT …/model-pricing/price` and `…/override` carry the
   id in the body; `fetch-anthropic` never answers an HTTP error (`{ result }`), while
   `import-openrouter` answers 502 on a fetch failure; an override over a future row → 409.

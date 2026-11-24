@@ -1,0 +1,179 @@
+/* "Start from" switch, clone source fields and clone progress of the New workspace dialog. */
+
+.segmented {
+  display: inline-flex;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: 0.125rem;
+  gap: 0.125rem;
+}
+
+.segment {
+  border-radius: calc(var(--radius-md) - 2px);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+}
+
+.segment:hover {
+  color: var(--color-foreground);
+}
+
+.segment[aria-checked="true"] {
+  background-color: var(--color-accent);
+  color: var(--color-foreground);
+  font-weight: 500;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}
+
+.linkButton {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-muted-foreground);
+}
+
+.errorText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-destructive);
+  overflow-wrap: anywhere;
+}
+
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-danger-border);
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.boxLink {
+  color: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+.gitMessage {
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.spin {
+  width: 0.875rem;
+  height: 0.875rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.progressHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.track {
+  position: relative;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background-color: var(--color-muted);
+}
+
+.bar {
+  height: 100%;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+  transition: width 0.3s ease;
+}
+
+.barIndeterminate {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 30%;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+  animation: slide 1.2s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+.lastLine {
+  min-height: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-muted-foreground);
+}

@@ -173,6 +173,66 @@ pub async fn exec_capture(
     }
 }
 
+/// Runs `argv` as `user` without a TTY and without stdin, like [`exec_capture`], but calls
+/// `on_stderr` with every stderr chunk as it arrives (git's progress lines during a clone or a
+/// push). Stdout and stderr are also collected into the [`ExecOutput`]; of the stderr only the
+/// last [`STDERR_KEEP`] bytes are kept, which still hold the final error lines of a long run.
+/// A non-zero exit code is not an error here.
+pub async fn exec_progress(
+    docker: &Docker,
+    container: &str,
+    user: &str,
+    argv: &[String],
+    timeout: Duration,
+    mut on_stderr: impl FnMut(&[u8]) + Send,
+) -> DockerResult<ExecOutput> {
+    let what = describe(argv);
+    let run = async {
+        let exec = docker
+            .create_exec(
+                container,
+                CreateExecOptions::<String> {
+                    attach_stdin: Some(false),
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    tty: Some(false),
+                    cmd: Some(argv.to_vec()),
+                    user: Some(user.to_string()),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        let StartExecResults::Attached { mut output, .. } =
+            docker.start_exec(&exec.id, None).await?
+        else {
+            return Err(DockerError::Failed("exec started detached".into()));
+        };
+        let mut out = ExecOutput::default();
+        while let Some(chunk) = output.next().await {
+            match chunk? {
+                LogOutput::StdErr { message } => {
+                    on_stderr(&message);
+                    out.stderr.extend_from_slice(&message);
+                    if out.stderr.len() > STDERR_KEEP {
+                        let cut = out.stderr.len() - STDERR_KEEP;
+                        out.stderr.drain(..cut);
+                    }
+                }
+                LogOutput::StdOut { message } | LogOutput::Console { message } => {
+                    out.stdout.extend_from_slice(&message)
+                }
+                LogOutput::StdIn { .. } => {}
+            }
+        }
+        out.exit_code = exit_code(docker, &exec.id).await?;
+        Ok(out)
+    };
+    match tokio::time::timeout(timeout, run).await {
+        Ok(res) => res,
+        Err(_) => Err(DockerError::Timeout(what)),
+    }
+}
+
 /// A byte stream from a container.
 pub type ByteStream = Pin<Box<dyn Stream<Item = DockerResult<Bytes>> + Send>>;
 

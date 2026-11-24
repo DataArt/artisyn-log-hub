@@ -15,7 +15,7 @@
  * `logs` row of the API key's user; a missing session and a foreign one both get the same 404.
  */
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { analyzeBash, type BashParser } from '@loghub/bash-view';
+import { analyzeShellCommand, type ShellParsers } from '@loghub/bash-view';
 import { sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
@@ -41,7 +41,7 @@ import {
 import { filterUserPrompts } from './okf-task-context';
 import type { OkfFactsResponse, OkfFactsSeqItem } from './okf-usage.types';
 import { bundleOfPath } from './okf-paths';
-import { getServerBashParser } from './server-bash-parser';
+import { getServerShellParsers } from './server-shell-parsers';
 
 /** DD-18: top non-KB reads per agent. */
 export const OKF_FACTS_OTHER_READS_TOP = 20;
@@ -68,11 +68,11 @@ function cutPrompt(text: string): string {
 
 /** What one node read, changed and ran — repo-relative paths, any extension. */
 export interface NodeFileFacts {
-  /** Path → read bytes (Read tool + `analyzeBash` reads; a Bash call's bytes split evenly). */
+  /** Path → read bytes (Read tool + shell analysis reads; a Bash / PowerShell call's bytes split evenly). */
   reads: Map<string, number>;
-  /** Written paths (Edit / MultiEdit / Write / NotebookEdit + `analyzeBash` changes). */
+  /** Written paths (Edit / MultiEdit / Write / NotebookEdit + shell analysis changes). */
   changes: Set<string>;
-  /** `analyzeBash` `runs` labels, first-seen order. */
+  /** Shell analysis `runs` labels (Bash and PowerShell), first-seen order. */
   runs: string[];
 }
 
@@ -83,7 +83,7 @@ export interface NodeFileFacts {
 export function collectNodeFileFacts(
   entries: readonly object[],
   roots: readonly string[],
-  parser: BashParser | null,
+  parsers: ShellParsers,
   isSubagentLog: boolean,
 ): NodeFileFacts {
   const facts: NodeFileFacts = {
@@ -164,16 +164,12 @@ export function collectNodeFileFacts(
           if (rel !== null) facts.changes.add(rel);
           break;
         }
-        case 'Bash': {
-          if (parser === null) break;
+        case 'Bash':
+        case 'PowerShell': {
           const command = asString(input['command']);
-          if (command === null || command.trim() === '') break;
-          let analysis: ReturnType<typeof analyzeBash>;
-          try {
-            analysis = analyzeBash(parser, command);
-          } catch {
-            break;
-          }
+          if (command === null) break;
+          const analysis = analyzeShellCommand(parsers, name, command);
+          if (analysis === null) break;
           for (const label of analysis.runs) {
             if (!runsSeen.has(label)) {
               runsSeen.add(label);
@@ -315,13 +311,13 @@ export class OkfFactsService {
       (await getDescendantSessionIds(this.db, [rootId])).get(rootId) ?? [];
     const nodeIds = [rootId, ...descendants];
 
-    const [nodes, rootsBySessionId, snapshot, startedAt, parser] =
+    const [nodes, rootsBySessionId, snapshot, startedAt, parsers] =
       await Promise.all([
         loadOkfNodeTranscripts(this.db, nodeIds),
         loadArtisynRootsBySessionIds(this.db, nodeIds),
         this.loadSnapshot(rootId, userId),
         this.loadStartedAt(rootId),
-        getServerBashParser(),
+        getServerShellParsers(),
       ]);
     const repoRootsOf = (id: number): string[] =>
       rootsBySessionId.get(id) ?? rootsBySessionId.get(rootId) ?? [];
@@ -361,7 +357,7 @@ export class OkfFactsService {
 
     const agents: OkfFactsResponse['agents'] = nodes.map((node) => {
       const roots = repoRootsOf(node.id);
-      const detail = extractOkfDetail(node.lines, roots, parser, {
+      const detail = extractOkfDetail(node.lines, roots, parsers, {
         isSubagentLog: node.isSubagent,
         snapshotFiles,
         bundleRoots: bundles?.map((b) => b.root),
@@ -370,7 +366,7 @@ export class OkfFactsService {
       const fileFacts = collectNodeFileFacts(
         node.lines,
         roots,
-        parser,
+        parsers,
         node.isSubagent,
       );
 

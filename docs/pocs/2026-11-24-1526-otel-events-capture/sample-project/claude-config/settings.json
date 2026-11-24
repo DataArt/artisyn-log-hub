@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node -e \"process.stdout.write('poc hook: prompt seen')\"" }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node -e \"process.exit(0)\"" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node -e \"process.stdout.write('ok')\"" }] }
+    ]
+  }
+}

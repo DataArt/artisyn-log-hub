@@ -7,7 +7,7 @@ tags:
   - sessions
   - scheduler
   - hooks
-generated: { by: "human:denistsyplakov", at: "2026-10-30T00:00:00+04:00" }
+generated: { by: "claude", at: "2026-11-23T00:00:00+04:00" }
 ---
 
 # Session Data Retention
@@ -82,15 +82,20 @@ admin Data Retention tab shows the count as the **OTEL-only Sessions** card
 
 For each eligible root, `SessionsService.hardPurgeExpiredSessions()` (`server/src/sessions/sessions.service.ts`):
 
-1. Walks the session tree (`getDescendantSessionIds`) to find all descendants.
+1. Walks the session tree (`getDescendantSessionIds` with `includeDeleted: true`, since the
+   descendant walk otherwise stops at deleted sessions) to find all descendants.
 2. Splits descendants into still-active vs. already individually soft-deleted — only active ones
    get their child data captured/purged; an already soft-deleted descendant's data is already gone.
 3. In one transaction per root (so one bad root can't roll back roots already purged earlier in
    the same tick): writes a `deleted_session_log` audit row per active session (`deletedByUserId:
    null` marks it as an automated purge, not a user action — see `docs/knowledgebase/db-tables.md`
-   § `deleted_session_log`), deletes child data (`session_stats`, `session_call_tokens`,
+   § `deleted_session_log`). Since 2026-11-23-session-logs-streaming (DD-29) the row also carries
+   `owner_user_id` (read from `logs` before the purge) and `repository_url`, so it is a tombstone
+   that account deletion and repository removal can clear ("fresh start"). It then deletes child
+   data (`session_stats`, `session_call_tokens`,
    `session_costs`, `user_favorite_sessions`, `session_file_stats`, `session_okf_access` (step c2),
-   `logs`, orphaned `contexts`, queued `upload_queue` rows, and — step 0 — the OTEL facts tables, see
+   `logs`, orphaned `contexts`, queued `upload_queue` rows, the DD-28 survivor tables (step 0b,
+   below), `turn_end_advisor_runs` of the session ids, and — step 0 — the OTEL facts tables, see
    below), then hard-deletes
    the `sessions` rows themselves — root and every descendant (including any already-soft-deleted
    one, whose bare row is still hard-deleted even though its data was already purged).
@@ -109,8 +114,26 @@ For each eligible root, `SessionsService.hardPurgeExpiredSessions()` (`server/sr
 2. `otel_calls`, `otel_spans`, `otel_cost_buckets`, `otel_reclass_queue`.
 
 All five tables also cascade on a hard delete of `sessions`, but a soft delete keeps the
-`sessions` row, so the explicit deletes are what clears them on soft delete. `logs_otel` (the raw
-chunks) is not touched here; it cascades on the hard delete as before.
+`sessions` row, so the explicit deletes are what clears them on soft delete.
+
+### Survivor tables (step 0b, DD-28)
+
+Since 2026-11-23-session-logs-streaming the purge also deletes the tables that used to survive a
+soft delete until the hard delete cascaded them: `logs_otel` (the raw chunks), `otel_api_calls`,
+`session_request_ids`, `session_tool_stats`, `session_harness_usage`, `session_changed_paths`,
+`session_cause_stats`, `session_attribution`, `session_attribution_runs`,
+`session_prompt_watermark`; and (step f2) `turn_end_advisor_runs` by the `session_id` string,
+which has no FK and so never cascaded at all. `upload_queue_measurements` is kept.
+`DeletedSessionCleanupService` purges the survivors of sessions deleted before this change and
+deletes live sub-agents left under a deleted parent (see `db-tables.md` § soft delete).
+
+**Tombstones and fresh start.** A deleted session's `deleted_session_log` row blocks every later
+upload of it or its descendants (`SessionTombstoneService`), also after the retention purge
+removed the `sessions` row. Account deletion clears the user's tombstones (by `owner_user_id`) and
+admin / team repository removal clears the repository's (by `repository_url`), hard-deleting their
+`deleted` sessions rows too. Audit rows written before migration 0096 have neither
+`repository_url` nor (for retention) `owner_user_id`, so a repository or account deletion does not
+clear them — an accepted limitation.
 
 **Deleted-session cleanup.** A session soft-deleted while an older server build (one that does not
 know these tables) was running keeps its OTEL rows. The projection drain
@@ -151,7 +174,7 @@ references them). Account deletion needs no explicit sweep: `harness_snapshots.u
 `okf_snapshots.user_id` have `ON DELETE CASCADE` on `users`.
 
 This is a genuine hard delete, distinct from user-triggered `deleteSession()`, which only
-soft-deletes (`deleted = true`) and leaves the row and its data in place.
+soft-deletes (`deleted = true`): it purges the data but leaves the `sessions` row in place.
 
 ## Tests
 

@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { Suspense, useCallback, useState } from 'react';
-import type { UseQueryResult } from '@tanstack/react-query';
 import type {
   RepoConfig,
   RepositorySession,
@@ -17,7 +16,10 @@ import { AdvisorTab } from './AdvisorTab';
 import type { SessionUsage } from './session-log/usage/session-usage-derive';
 import type { TreeCodeImpact } from './session-log/tree-code-impact';
 import type { ParsedSession } from './session-log/types';
-import { fetchSessionChangeSurface, type SessionLogsData } from '../../api';
+import type { SubagentMetaMap } from './session-log/log-parser';
+import { fetchSessionChangeSurface } from '../../api';
+import type { SessionLogsQueryView } from './session-parts/useSessionLogParts';
+import { AllSessionPartsGate } from './session-parts/AllSessionPartsGate';
 import { isChartTab } from '../../tab-ids';
 import type { LensId } from './session-lenses';
 import type { SessionTab } from './useRepositoryViewState';
@@ -42,10 +44,14 @@ export interface SessionTabContentProps {
   onLensSwitch: (lens: LensId) => void;
   repoId: number;
   teamId?: number;
-  logsQuery: UseQueryResult<SessionLogsData>;
+  logsQuery: SessionLogsQueryView;
   parsedLogs: ParsedSession | null;
   subagentLogsMap: Map<string, Record<string, unknown>[]>;
   agentParentMap: Map<string, string | null>;
+  /** Every manifest sub-agent's `.meta.json` labels, loaded or not. */
+  subagentMeta: SubagentMetaMap;
+  /** Bare ids of every sub-agent in the manifest, loaded or not (DD-31). */
+  knownAgentIds: ReadonlySet<string>;
   pricing: ModelPricingMap | null | undefined;
   repoConfig: RepoConfig | null;
   topN: number | null;
@@ -56,8 +62,6 @@ export interface SessionTabContentProps {
   codeImpact: TreeCodeImpact;
   /** Undefined until the logs have loaded (the tab bar shows no count then). */
   bashCount: number | undefined;
-  /** session-map DD-10: the Map tab hands its own poll to the pane's Refresh button. */
-  registerMapRefresh: (fn: (() => void) | null) => void;
   /** `tool_use` id of a Tools/MCP "Open in session" link (`tu` param, DD-19). */
   targetToolUseId?: string | null;
   /** Clears the `tu` param once the Logs tab has acted on it. */
@@ -76,6 +80,8 @@ export function SessionTabContent({
   parsedLogs,
   subagentLogsMap,
   agentParentMap,
+  subagentMeta,
+  knownAgentIds,
   pricing,
   repoConfig,
   topN,
@@ -85,7 +91,6 @@ export function SessionTabContent({
   usage,
   codeImpact,
   bashCount,
-  registerMapRefresh,
   targetToolUseId,
   onTargetToolUseConsumed,
 }: SessionTabContentProps) {
@@ -148,6 +153,9 @@ export function SessionTabContent({
       logsData={logsQuery.data}
       isLoading={logsQuery.isLoading}
       error={logsQuery.error}
+      agentParentMap={agentParentMap}
+      subagentMeta={subagentMeta}
+      knownAgentIds={knownAgentIds}
       pricing={pricing ?? undefined}
       repoConfig={repoConfig}
       sessionSubagentCost={selectedSession.costBreakdown.subagentCost}
@@ -159,39 +167,45 @@ export function SessionTabContent({
       onOpenAnatomy={() => onSessionTabChange('sysctx')}
     />
   ) : sessionTab === 'bash' ? (
-    <Suspense fallback={<LazyFallback />}>
-      <SessionBashTab
+    // DD-33: the views below aggregate over the whole agent tree, so they wait for every part.
+    <AllSessionPartsGate>
+      <Suspense fallback={<LazyFallback />}>
+        <SessionBashTab
+          mainLogs={mainLogs}
+          subagentLogsMap={subagentLogsMap}
+          pricing={pricing ?? undefined}
+          sessionModel={parsedLogs?.summary.model}
+        />
+      </Suspense>
+    </AllSessionPartsGate>
+  ) : isChartTab(sessionTab) ? (
+    <AllSessionPartsGate>
+      <Suspense fallback={<LazyFallback />}>
+        <SessionChartsTab
+          chart={sessionTab}
+          onOpenChart={onSessionTabChange}
+          parsedLogs={parsedLogs}
+          subagentLogsMap={subagentLogsMap}
+          agentParentMap={agentParentMap}
+          isLoading={logsQuery.isLoading}
+          error={logsQuery.error}
+          pricing={pricing ?? null}
+          logsData={logsQuery.data}
+          topN={topN}
+          onTopNChange={onTopNChange}
+        />
+      </Suspense>
+    </AllSessionPartsGate>
+  ) : sessionTab === 'usage' ? (
+    <AllSessionPartsGate>
+      <SessionUsageTab
         mainLogs={mainLogs}
         subagentLogsMap={subagentLogsMap}
-        pricing={pricing ?? undefined}
-        sessionModel={parsedLogs?.summary.model}
-      />
-    </Suspense>
-  ) : isChartTab(sessionTab) ? (
-    <Suspense fallback={<LazyFallback />}>
-      <SessionChartsTab
-        chart={sessionTab}
-        onOpenChart={onSessionTabChange}
-        parsedLogs={parsedLogs}
-        subagentLogsMap={subagentLogsMap}
-        agentParentMap={agentParentMap}
         isLoading={logsQuery.isLoading}
         error={logsQuery.error}
-        pricing={pricing ?? null}
-        logsData={logsQuery.data}
-        topN={topN}
-        onTopNChange={onTopNChange}
+        codeImpact={codeImpact}
       />
-    </Suspense>
-  ) : sessionTab === 'usage' ? (
-    <SessionUsageTab
-      mainLogs={mainLogs}
-      subagentLogsMap={subagentLogsMap}
-      isLoading={logsQuery.isLoading}
-      error={logsQuery.error}
-      usage={usage}
-      codeImpact={codeImpact}
-    />
+    </AllSessionPartsGate>
   ) : sessionTab === 'advisor' ? (
     <AdvisorTab
       turnEndAdvisor={turnEndAdvisor}
@@ -207,16 +221,18 @@ export function SessionTabContent({
       />
     </Suspense>
   ) : sessionTab === 'harness-usage' ? (
-    <Suspense fallback={<LazyFallback />}>
-      <SessionHarnessUsageTab
-        mainLogs={mainLogs}
-        subagentLogsMap={subagentLogsMap}
-        agentParentMap={agentParentMap}
-        workflows={logsQuery.data?.workflows}
-        isLoading={logsQuery.isLoading}
-        error={logsQuery.error}
-      />
-    </Suspense>
+    <AllSessionPartsGate>
+      <Suspense fallback={<LazyFallback />}>
+        <SessionHarnessUsageTab
+          mainLogs={mainLogs}
+          subagentLogsMap={subagentLogsMap}
+          agentParentMap={agentParentMap}
+          workflows={logsQuery.data?.workflows}
+          isLoading={logsQuery.isLoading}
+          error={logsQuery.error}
+        />
+      </Suspense>
+    </AllSessionPartsGate>
   ) : sessionTab === 'okf' ? (
     <Suspense fallback={<LazyFallback />}>
       <SessionOkfTab
@@ -254,17 +270,20 @@ export function SessionTabContent({
       />
     </Suspense>
   ) : sessionTab === 'session-map' ? (
-    <Suspense fallback={<LazyFallback />}>
-      <SessionMapTab
-        repoId={repoId}
-        sessionId={selectedSession.sessionId}
-        teamId={teamId}
-        firstPrompt={selectedSession.firstPrompt}
-        pricing={pricing ?? undefined}
-        repoConfig={repoConfig}
-        registerRefresh={registerMapRefresh}
-      />
-    </Suspense>
+    <AllSessionPartsGate key={selectedSession.sessionId} keepOnceLoaded>
+      <Suspense fallback={<LazyFallback />}>
+        <SessionMapTab
+          repoId={repoId}
+          sessionId={selectedSession.sessionId}
+          teamId={teamId}
+          firstPrompt={selectedSession.firstPrompt}
+          pricing={pricing ?? undefined}
+          repoConfig={repoConfig}
+          logs={logsQuery.data}
+          logsError={logsQuery.error}
+        />
+      </Suspense>
+    </AllSessionPartsGate>
   ) : sessionTab === 'raw-logs' ? (
     <RawLogsTab
       rawLogs={logsQuery.data?.main ?? []}

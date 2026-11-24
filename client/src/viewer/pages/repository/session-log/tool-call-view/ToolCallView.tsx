@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { shellOfTool } from '@loghub/bash-view';
 import { cn } from '../../../../lib/cn';
 import { formatDuration } from '../../../../lib/format';
 import { formatCompact } from '../log-parser';
@@ -26,14 +27,13 @@ function ToolCallBody({
   turnFiles,
   subAgents,
 }: Omit<ToolCallViewProps, 'defaultOpen'>) {
-  if (call.name === 'Bash')
-    return <BashCommandView call={call} charsPerToken={charsPerToken} />;
-  if (call.name === 'PowerShell')
+  const shell = shellOfTool(call.name);
+  if (shell !== null)
     return (
       <BashCommandView
         call={call}
         charsPerToken={charsPerToken}
-        forceFallback
+        shell={shell}
       />
     );
   if (call.section === 'file')

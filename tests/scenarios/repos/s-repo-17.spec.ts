@@ -11,13 +11,34 @@
 // (`TOOL_USAGE_REBUILD_INTERVAL_MS`, modes.ts); `waitForToolUsage` polls the summary route until
 // nothing is pending.
 //
+// Step 9 (2026-11-23-session-logs-streaming, DD-26) runs the source hook's Stop against the stand
+// on a throwaway project whose wrapper files it writes itself: the old manifest records only the
+// summed size of a session's wrapper files, so a same-size rewrite is seen only by the v2
+// manifest's fingerprint, and the hook re-sends the `tool-calls` log.
+//
 // Replaces: none (new functionality).
 import { randomBytes } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import type { ScenarioUser } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
+import {
+  copyToolDir,
+  makeFakeGitRepo,
+  makeFakeHome,
+  readHookLog,
+  readManifest,
+  runHook,
+  telemetryDir,
+  tempDirs,
+  workDir,
+  writeStandConfig,
+} from '../helpers/hook-process';
+import { storedBody } from '../helpers/ingest';
 import { ownRepoId, uploadPromptSession } from '../helpers/prompt-session';
+import { waitForQueueIdle } from '../helpers/queue';
 import { logTurns, selectSessionTab } from '../helpers/session-view';
 import { addTeamRepo, browserAs, createTeam, inviteAndAccept } from '../helpers/teams';
 import {
@@ -462,5 +483,71 @@ test('@S-REPO-17 Tools/MCP tab: configured tools, MCP and wrapped CLI calls, cal
 
     await reupload('2.32.2');
     expect((await getConfig(owner)).tools[0].hint, 'the fixed hook: no hint').toBeNull();
+  });
+
+  await test.step('9. DD-26: the hook re-sends a `tool-calls` log whose wrapper record was rewritten at the same size; an unchanged one is skipped', async () => {
+    const hkSid = sid('hook');
+    await uploadToolSessionTree(
+      api,
+      ownerKey,
+      { sessionId: hkSid, repoUrl, prompt: `hook tools ${run}`, steps: [{ bash: 'ce list', result: 'result-one' }] },
+      { db, userId: owner.id },
+    );
+    const dirs = tempDirs();
+    try {
+      const toolDir = copyToolDir(dirs);
+      const repo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:scn/${run}/tools.git` });
+      const home = makeFakeHome(dirs);
+      writeStandConfig(repo, stand.url, ownerKey);
+      // What the CLI tool wrapper writes per call (tool-wrap-records.js): a records file and the
+      // captured stdout, under <workDir>/tool-wrap/<sessionId>/calls/.
+      const calls = path.join(workDir(repo), 'tool-wrap', hkSid, 'calls');
+      fs.mkdirSync(calls, { recursive: true });
+      const startedAtMs = Date.now() - 60_000;
+      fs.writeFileSync(
+        path.join(calls, 'hk1.jsonl'),
+        [
+          { type: 'start', callId: 'hk1', sessionId: hkSid, tool: 'ce', args: ['list'], real: '/usr/local/bin/ce', cwd: repo, shell: 'bash', capture: 'full', startedAtMs },
+          { type: 'exit', callId: 'hk1', endedAtMs: startedAtMs + 150, exitCode: 0 },
+        ]
+          .map((r) => JSON.stringify(r))
+          .join('\n') + '\n',
+      );
+      const outFile = path.join(calls, 'hk1.out');
+      fs.writeFileSync(outFile, 'result-one\n');
+      const key = `tool-calls/${hkSid}`;
+      const stop = async () => {
+        const res = await runHook(toolDir, { hook_event_name: 'Stop', session_id: `r17-${run}-stop`, cwd: repo }, { home });
+        expect(res.code, res.stderr).toBe(0);
+        await waitForQueueIdle(db, owner.id);
+      };
+      const sends = () => readHookLog(repo, 'send-logs-hook.js').filter((l) => l.includes(`${key}: uploaded`)).length;
+      const storedStdout = async () => {
+        const body = (await storedBody(db, hkSid, 'tool-calls')) ?? [];
+        const line = body.find((l): l is { callId: string; stdout?: string } => typeof l === 'object' && l !== null && (l as { callId?: string }).callId === 'hk1');
+        return line?.stdout ?? null;
+      };
+
+      await stop();
+      expect(sends(), 'first Stop sends the tool-calls log').toBe(1);
+      expect(await storedStdout()).toBe('result-one\n');
+      const oldManifestSize = readManifest(telemetryDir(repo)).get(key);
+      expect(oldManifestSize).toBeGreaterThan(0);
+
+      await stop();
+      expect(sends(), 'unchanged wrapper files: skipped').toBe(1);
+
+      // Same length, new content, a later mtime: the old manifest's Σ(size+1) cannot see it, the
+      // v2 fingerprint can.
+      fs.writeFileSync(outFile, 'result-two\n');
+      const later = new Date(Date.now() + 5_000);
+      fs.utimesSync(outFile, later, later);
+      await stop();
+      expect(sends(), 'a same-size rewrite is re-sent').toBe(2);
+      expect(readManifest(telemetryDir(repo)).get(key), 'the old manifest size did not change').toBe(oldManifestSize);
+      expect(await storedStdout()).toBe('result-two\n');
+    } finally {
+      dirs.cleanup();
+    }
   });
 });

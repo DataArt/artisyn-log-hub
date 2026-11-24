@@ -21,6 +21,9 @@ import {
   closeWorkstream,
   discardWorkstream,
   type CloseMode,
+  type CloseResult,
+  type PushRemote,
+  type PushResult,
   type WorkstreamSummary,
 } from "../../api/workstreams";
 import { Button } from "../../ui/button";
@@ -33,6 +36,8 @@ import {
   DialogTitle,
 } from "../../ui/dialog";
 import styles from "./CloseWorkstreamDialog.module.css";
+import { PushOption } from "./PushOption";
+import { PushResultView } from "./PushResultView";
 
 export type CloseOutcome = CloseMode | "discard";
 
@@ -53,7 +58,8 @@ type Phase =
   | { kind: "conflict"; message: string }
   | { kind: "failed"; message: string; mode: CloseMode | null }
   | { kind: "discardConfirm" }
-  | { kind: "discarding" };
+  | { kind: "discarding" }
+  | { kind: "pushed"; mode: CloseMode; result: CloseResult; push: PushResult };
 
 function UncommittedList({ paths }: { paths: string[] }) {
   return (
@@ -99,12 +105,15 @@ function OptionButton({
   description,
   primary,
   onClick,
+  onAim,
   testId,
 }: {
   title: string;
   description: string;
   primary?: boolean;
   onClick: () => void;
+  /** Hover / focus enters (`true`) or leaves (`false`) the option. */
+  onAim: (aimed: boolean) => void;
   testId: string;
 }) {
   return (
@@ -112,6 +121,10 @@ function OptionButton({
       variant={primary ? "default" : "outline"}
       className={styles.option}
       onClick={onClick}
+      onMouseEnter={() => onAim(true)}
+      onMouseLeave={() => onAim(false)}
+      onFocus={() => onAim(true)}
+      onBlur={() => onAim(false)}
       data-testid={testId}
     >
       <span>{title}</span>
@@ -136,6 +149,17 @@ export function CloseWorkstreamDialog({
   const [phase, setPhase] = useState<Phase>({ kind: "checking" });
   /** Files the agent left unsaved, from the last check (shown with the options). */
   const [unsaved, setUnsaved] = useState<string[]>([]);
+  /** The remote a close can push to (D12), from the last check. */
+  const [pushRemote, setPushRemote] = useState<PushRemote | null>(null);
+  /** "Push to <remote>" is checked (unchecked on every opening). */
+  const [push, setPush] = useState(false);
+  /** The way to close the pointer or focus is on; the push option names its branch, or is
+   *  disabled for "Already merged elsewhere". Null = none, which reads as "Bring into main". */
+  const [aim, setAim] = useState<CloseMode | null>(null);
+  /** The workstream's own branch from the last check; null from an older server. */
+  const [streamBranch, setStreamBranch] = useState<string | null>(null);
+  const aimAt = (mode: CloseMode) => (aimed: boolean) =>
+    setAim((cur) => (aimed ? mode : cur === mode ? null : cur));
   /** "Close anyway" was chosen for the listed files. */
   const forceRef = useRef(false);
 
@@ -149,6 +173,10 @@ export function CloseWorkstreamDialog({
     try {
       const check = await closeCheck(stream.id);
       setUnsaved(check.uncommitted);
+      // An older server sends no `pushRemote`: no push option then.
+      setPushRemote(check.pushRemote ?? null);
+      setStreamBranch(check.branch ?? null);
+      setPush(false);
       // Unsaved files do not stop the close: "Bring into main" takes them along (owner,
       // 2026-11-14); only "Already merged elsewhere", which deletes them, lists them (409).
       if (check.agentBusy) {
@@ -168,14 +196,21 @@ export function CloseWorkstreamDialog({
 
   const close = async (mode: CloseMode, commit = false) => {
     setPhase({ kind: "working", mode });
+    const wantPush = push && pushRemote !== null && mode !== "merged_elsewhere";
     try {
       const result = await closeWorkstream(
         stream.id,
         mode,
         forceRef.current,
         commit,
+        wantPush,
       );
       refresh();
+      if (wantPush && result.push) {
+        // Show what the push did before leaving; the workstream is closed either way.
+        setPhase({ kind: "pushed", mode, result, push: result.push });
+        return;
+      }
       onDone(mode, result);
     } catch (err) {
       if (err instanceof ApiError && err.code === "uncommitted") {
@@ -282,24 +317,38 @@ export function CloseWorkstreamDialog({
       body = (
         <>
           <UnsavedNotice paths={unsaved} base={stream.baseBranch} />
+          <PushOption
+            pushRemote={pushRemote}
+            branch={
+              aim === "for_now"
+                ? (streamBranch ?? "the workstream's branch")
+                : stream.baseBranch
+            }
+            checked={push}
+            onChange={setPush}
+            disabled={aim === "merged_elsewhere"}
+          />
           <div className={styles.options}>
             <OptionButton
               primary
               title="Bring into main"
               description={`Add all of this work to ${stream.baseBranch}, files the agent has not saved included, and close the workstream.`}
               onClick={() => void close("bring_into_main", true)}
+              onAim={aimAt("bring_into_main")}
               testId="close-bring-into-main"
             />
             <OptionButton
               title="Already merged elsewhere"
               description="This work already reached its destination. Close the workstream and free its space."
               onClick={() => void close("merged_elsewhere")}
+              onAim={aimAt("merged_elsewhere")}
               testId="close-merged-elsewhere"
             />
             <OptionButton
               title="Close for now"
               description="Stop the workstream. You can reopen it from History."
               onClick={() => void close("for_now")}
+              onAim={aimAt("for_now")}
               testId="close-for-now"
             />
           </div>
@@ -397,13 +446,33 @@ export function CloseWorkstreamDialog({
     case "discarding":
       body = spinner("Discarding the workstream…", "close-discarding");
       break;
+    case "pushed": {
+      const { mode, result } = phase;
+      body = (
+        <>
+          <PushResultView result={phase.push} />
+          <DialogFooter>
+            <Button
+              onClick={() => onDone(mode, result)}
+              data-testid="close-push-done"
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </>
+      );
+      break;
+    }
   }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (!o && !locked) onClose();
+        if (o || locked) return;
+        // After a push the workstream is already closed: leaving is "done", not "cancel".
+        if (phase.kind === "pushed") onDone(phase.mode, phase.result);
+        else onClose();
       }}
     >
       <DialogContent
@@ -421,7 +490,9 @@ export function CloseWorkstreamDialog({
           <DialogTitle>
             {phase.kind === "discardConfirm"
               ? "Discard workstream"
-              : `Close ${stream.name}`}
+              : phase.kind === "pushed"
+                ? `Closed ${stream.name}`
+                : `Close ${stream.name}`}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Choose what happens to the work of {stream.name}.

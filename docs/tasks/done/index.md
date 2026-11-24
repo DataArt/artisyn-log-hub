@@ -53,3 +53,11 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-19-export-import-staging-mount] Mount the Export/Import Staging Dir in the Release Compose — archived 2026-11-20
 - [2026-11-19-okf-v03-support] OKF Tab Support for v0.3 and Any-Version Bundles — archived 2026-11-21
 - [2026-11-13-session-cost-diagnosis] Session Cost Diagnosis Report ("Why Was This Session Expensive") — not implemented, merged into 2026-11-02-session-antipatterns — archived 2026-11-21
+- [2026-11-22-bash-tab-powershell] Shell Tab: PowerShell Calls Next to Bash, Fully Formatted — archived 2026-11-22
+
+- [2026-11-22-workhub-remote-git-vault] Work Hub Remote Git Repositories and Credential Vault — archived 2026-11-23
+- [2026-11-23-session-logs-streaming] Session Logs: Pre-Compressed Storage, Delivery in Parts, Bounded Memory — archived 2026-11-24
+- [2026-11-21-okf-tab-minimal] OKF Tab — Cut Down to Four Clear Views — archived 2026-11-24
+- [2026-11-05-auth-mode-admin-invite] Auth Mode 5 — Admin-Provisioned Users, Set-Password Links by Email — archived 2026-11-24
+- [2026-11-24-session-parts-disk-cache] Disk File Cache for Session Log Parts — archived 2026-11-24
+- [2026-11-24-traffic-optimization] Traffic Optimization: Append Uploads and Compressed Large Answers — archived 2026-11-24

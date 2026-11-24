@@ -3,7 +3,7 @@ type: "Algorithm"
 title: "OKF access extraction: which KB paths a tree node read, searched, listed or wrote"
 description: "How one transcript (a root session or a sub-agent) becomes session_okf_access rows — per repo path and operation, with result bytes and call counts — and the ordered access sequence of the facts route."
 tags: [algorithm]
-generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
+generated: { by: "ai:claude", at: "2026-11-22T00:00:00+04:00" }
 reviewed: no
 reviewer: none
 ---
@@ -14,7 +14,8 @@ reviewer: none
 
 The OKF tabs (session and repo) answer "which knowledge-base files did the agents actually read
 and how much of them went into the context". Agents mostly read the KB through Bash in fragments
-(`sed -n`, `grep -n`, `cat`), not through the Read tool, so a Read-only count misses most of the
+(`sed -n`, `grep -n`, `cat`) — on Windows also through PowerShell (`Get-Content`,
+`Select-String`) — not through the Read tool, so a Read-only count misses most of the
 use. This algorithm turns one transcript (one tree node: the root session or one sub-agent) into
 `session_okf_access` rows — per repo path, per operation — with the result bytes, the call count,
 whether the read followed the node's own edit, and the order of first access. How the tabs count
@@ -38,10 +39,15 @@ longer written) and no tab reads them: rules 13–16 now feed only the sequence 
 - Helpers it relies on:
   - `server/src/logs/change-surface/path-normalise.ts` — `resolveRepoPath(absPath, roots)` (rule 3),
     `collapseRepoRelative(p)` (rules 3, 14) and `truncateChangedPath` (`CHANGED_PATH_MAX_LENGTH` = 1024);
-  - `packages/bash-view/src/bash-analyze.ts` — `analyzeBash` and its `readAccess` field (rule 5,
-    documented in [bash-command-view](bash-command-view.md) rule 5.9);
-  - `server/src/logs/okf/server-bash-parser.ts` — `getServerBashParser()`, the server's
-    `tree-sitter-bash` loader (WASM from `dist/wasm/`, else `node_modules`).
+  - `packages/bash-view/src/shell.ts` — `analyzeShellCommand(parsers, toolName, command)`, which
+    dispatches to `analyzeBash` (`bash-analyze.ts`, its `readAccess` field documented in
+    [bash-command-view](bash-command-view.md) rule 5.9) or `analyzePowerShell` (`ps-analyze.ts`,
+    [powershell-command-view](powershell-command-view.md)) (rule 5);
+  - `server/src/logs/okf/server-shell-parsers.ts` — `getServerShellParsers()` →
+    `{ bash, powershell }`, from `server-bash-parser.ts` (`getServerBashParser()`,
+    `tree-sitter-bash`) and `server-powershell-parser.ts` (`getServerPowerShellParser()`,
+    `tree-sitter-powershell`); both load their WASM from `dist/wasm/`, else `node_modules`, and
+    share one runtime init (`server-wasm-runtime.ts`).
 - Callers: `server/src/logs/okf/okf-access-writer.ts` (`writeSessionOkfAccess`,
   `rebuildOkfAccessForNodes`) from ingest, import, the file-stats heal and
   `recompute-all-sessions`; `okf-facts.service.ts` for the facts route.
@@ -51,9 +57,10 @@ longer written) and no tab reads them: rules 13–16 now feed only the sequence 
 
 ## Input and output
 
-`extractOkfDetail(entries, roots, parser, { isSubagentLog, snapshotFiles, bundleRoots })` takes
+`extractOkfDetail(entries, roots, parsers, { isSubagentLog, snapshotFiles, bundleRoots })` takes
 the parsed NDJSON lines of one `claude` / `claude-subagent` log, the session's candidate repo
-roots, the Bash parser (`null` skips Bash calls only) and, optionally, `snapshotFiles` — the files
+roots, the shell parsers `parsers: ShellParsers = { bash, powershell }` (a `null` parser skips
+that shell's calls only) and, optionally, `snapshotFiles` — the files
 of the root's bound OKF snapshot as `repoRelPath → { size, hash }` — and `bundleRoots` — the
 repo-relative root folders of that snapshot's bundles (`''` = the repo root; only pointer
 resolution uses them, rule 14). It returns
@@ -77,8 +84,8 @@ resolution uses them, rule 14). It returns
 2. **Bytes (DD-1).** A call's bytes = UTF-8 bytes of its `tool_result` content: the string, or
    the sum of the `text` blocks (image and other blocks count 0). The first `tool_result` of a
    `tool_use_id` wins. Not `computeToolResultBytes` (UTF-16, Read only).
-3. **Path resolution (DD-5, DD-6).** A path is made absolute against, in order, the Bash
-   `workDir` (Bash only) and the line `cwd` (`\` → `/`; an absolute path — `/…` or `X:/…` — is
+3. **Path resolution (DD-5, DD-6).** A path is made absolute against, in order, the shell
+   analysis `workDir` (Bash / PowerShell only) and the line `cwd` (`\` → `/`; an absolute path — `/…` or `X:/…` — is
    kept; a `~` path, or a relative one with no absolute base, is dropped). Then
    `resolveRepoPath(abs, roots)` strips the longest matching root (case-insensitive, on a `/`
    boundary, the rest keeps its case; msys `/d/…` also tried as `D:/…`). The root itself resolves
@@ -96,10 +103,10 @@ resolution uses them, rule 14). It returns
    | Grep with `path` that has an extension and no trailing `/` | `grep` | file |
    | Grep with a folder `path`, or no `path` (cwd) | `grep` | folder |
    | Glob (`path` or cwd, plus the static prefix of `pattern`) | `list` | folder |
-   | Bash `readAccess` kind `read` | `read` | file |
-   | Bash `readAccess` kind `grep` | `grep` | file, or folder when the path ends `/` or has no extension |
-   | Bash `readAccess` kind `list` | `list` | folder |
-   | Bash `changes` | `write` | file |
+   | Bash / PowerShell `readAccess` kind `read` | `read` | file |
+   | Bash / PowerShell `readAccess` kind `grep` | `grep` | file, or folder when the path ends `/` or has no extension |
+   | Bash / PowerShell `readAccess` kind `list` | `list` | folder |
+   | Bash / PowerShell `changes` | `write` | file |
    | any other tool | nothing | |
 
    The static prefix of a glob is its leading segments before the first segment with `* ? [ ] {
@@ -114,21 +121,32 @@ resolution uses them, rule 14). It returns
    | Bash `sed -n 'a,bp'` | `{ from: a, to: b }` |
    | Bash `head -n N` / `head -N` | `{ from: 1, to: N }` |
    | Bash `tail -n N` | `{ from: -N, to: null }` |
+   | PowerShell `Get-Content -TotalCount N` / `-Head N` / `-First N` | `{ from: 1, to: N }` |
+   | PowerShell `Get-Content -Tail N` / `-Last N` | `{ from: -N, to: null }` |
 
-   The Bash ranges come from `BashReadAccess.range` ([bash-command-view](bash-command-view.md)
-   rule 5.9). A Read with neither `offset` nor `limit`, and every other Bash read, has no range.
+   The shell ranges come from `BashReadAccess.range` ([bash-command-view](bash-command-view.md)
+   rule 5.9, [powershell-command-view](powershell-command-view.md)). A Read with neither `offset`
+   nor `limit`, and every other shell read (also a piped `Select-Object -First`), has no range.
    A ranged access adds `rangedCalls += 1` and `rangedBytes += <its share>` to its row; both are
    also counted in `calls` / `bytes`. Only `read` accesses carry a range.
 
-   **Patterns.** A `grep` access carries the Grep tool's `pattern`, or the Bash
-   `BashReadAccess.pattern`; Glob and `list` carry none. Patterns feed only the code events and
+   **Patterns.** A `grep` access carries the Grep tool's `pattern`, or the shell
+   `BashReadAccess.pattern` (PowerShell: the literal `Select-String -Pattern`); Glob and `list` carry none. Patterns feed only the code events and
    the sequence (rules 13, 17), never the access row.
 
-   **`ls <file>` (FR-8).** A Bash `list` access whose path has an extension and no trailing `/`
+   **`ls <file>` (FR-8).** A Bash / PowerShell `list` access whose path has an extension and no trailing `/`
    (`ls docs/kb/a.md`) lists one named file: it produces no folder row and no access at all.
-5. **Bash.** The command goes through `analyzeBash(parser, command)` (the same analysis the
-   client's Bash view runs). With no parser, an empty command or a parse exception the call adds
-   nothing.
+5. **Shell calls (Bash and PowerShell).** A `Bash` or `PowerShell` call's `input.command` goes
+   through `analyzeShellCommand(parsers, toolName, command)` — `analyzeBash` with the Bash parser
+   or `analyzePowerShell` with the PowerShell parser, the same analyses the client's shell view
+   runs. It returns `null` — and the call adds nothing — when that shell's parser is `null`, the
+   command is blank or the analysis throws; so a missing PowerShell parser skips PowerShell calls
+   only. The PowerShell analysis gives the same `readAccess` / `changes` / `workDir` shape
+   (`Get-Content` → `read`, `Select-String` → `grep`, `Get-ChildItem` / `Get-Item` / `Test-Path`
+   → `list`, `Set-Content` / `Out-File` / `Remove-Item` / … → `changes`, `Set-Location` →
+   `workDir`); its rules are in [powershell-command-view](powershell-command-view.md). Since
+   `OKF_EXTRACT_VERSION` 5 the background backfill re-extracts the stored nodes that have
+   PowerShell calls ([../okf-usage.md](../okf-usage.md)).
 6. **Keys (DD-4).** A file key is the repo-relative path; a folder key is the repo-relative folder
    plus `/`, the repo root is `/`. Only file keys ending `.md` (any case) are stored; folder keys
    are always stored. Keys longer than 1024 characters are cut to 1024 (`truncateChangedPath`).
@@ -252,6 +270,7 @@ resolution uses them, rule 14). It returns
 - `grep` on a file with output is a search hit: OA-03.
 - Bash fragments: `sed -n` OA-02, `grep -n` on a file OA-03, `cat` OA-04, `cd <dir> && cat` (Bash
   `workDir`) OA-17.
+- PowerShell fragments (real server PowerShell parser): `Get-Content -TotalCount` (ranged read, `\` path) OA-39, `Select-String` grep OA-40, `Get-ChildItem` list OA-41, `Set-Content` write OA-42, `Set-Location` + relative path OA-43, alias `cat` OA-44; no PowerShell parser: PowerShell calls skipped, Bash still analysed OA-45.
 - Multi-file `cat` splits the bytes, remainder to the first: OA-05; a non-`.md` path takes its
   share and is then dropped: OA-06.
 - Folder access: `grep -rn` over a folder OA-07, `ls` OA-08, Glob OA-09, Grep tool with a folder,
@@ -304,8 +323,9 @@ Each row is one transcript. `input.calls` are tool calls in order; for call *k* 
 `result` when given, else a string of `resultBytes` ASCII characters. Every line carries
 `cwd` = `input.cwd` (default `/work/acme-app`) and `isSidechain: true` when the call says
 `sidechain`. `input.roots` defaults to `["/work/acme-app"]`, `input.subagent` (default false) is
-`isSubagentLog`, and a row with `noParser: true` passes `parser = null` (otherwise the real server
-parser). `input.prompt` (optional) is the string content of a first `user` line before any call; a
+`isSubagentLog`, a row with `noParser: true` passes `parsers = { bash: null, powershell: null }`
+and a row with `noPowerShellParser: true` passes `{ bash, powershell: null }` (otherwise both real
+server parsers). `input.prompt` (optional) is the string content of a first `user` line before any call; a
 call with `isError: true` gets `is_error: true` on its `tool_result`; a call with `repeat: N` is
 emitted N times (ids keep counting `t<k>`). `expected.rows` is the exact `access` result, in order. A row may also give
 `input.snapshotFiles` (`{ path: { size, hash } }`, passed as the `snapshotFiles` map),
@@ -314,7 +334,7 @@ emitted N times (ids keep counting `t<k>`). `expected.rows` is the exact `access
 and `expected.eventCount` / `expected.pointerCount` (list lengths), `expected.truncated` and
 `expected.seq` (the exact sequence).
 
-Rows (38): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorithm-examples/okf-access-extraction.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (45): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorithm-examples/okf-access-extraction.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -329,6 +349,7 @@ Rows (38): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorith
   `\` not converted -> OA-13.
 - The second occurrence of a `tool_use` id counted -> OA-14 (`b.md`).
 - Non-`.md` file rows kept -> OA-15, OA-06.
+- PowerShell calls not analysed -> OA-39 to OA-44 (no rows); the PowerShell analysis `workDir` ignored -> OA-43; a missing PowerShell parser skipping Bash calls too -> OA-45; `cat` in PowerShell sent to the Bash tables -> still OA-44, the alias rule is pinned by [powershell-command-view](powershell-command-view.md) PV-31.
 - Bash `workDir` ignored -> OA-17 (`index.md` resolved against the repo root).
 - `seq` per row instead of per key, or reset per op -> OA-11, OA-18.
 - UTF-16 length or image bytes counted -> OA-19 (5, or more than 6).

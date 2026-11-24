@@ -15,8 +15,10 @@ import {
   withTree,
 } from './syntax.ts';
 
-const WIDTH = 80;
-const IND = '  ';
+/** Line width the layout breaks at (also used by the PowerShell layout). */
+export const WIDTH = 80;
+/** One indentation step. */
+export const IND = '  ';
 /** Heredoc bodies with more lines than this are folded out of the script. */
 export const HEREDOC_INLINE_MAX = 8;
 

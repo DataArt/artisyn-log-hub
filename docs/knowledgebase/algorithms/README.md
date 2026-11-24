@@ -4,7 +4,7 @@ title: Algorithm docs (doc-driven table tests)
 description: Format of the per-algorithm docs in docs/knowledgebase/algorithms/, how their rows file docs/algorithm-examples/<name>.json becomes a table-driven unit test through scripts/algo-docs/load-examples.cjs in jest, vitest and node --test, and the AI-plus-owner review recorded in front-matter.
 resource: scripts/algo-docs/load-examples.cjs
 tags: [testing, algorithms, unit-tests, docs, review]
-generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00Z" }
+generated: { by: "claude-code", at: "2026-11-22T23:30:00+04:00" }
 ---
 
 # Algorithm docs
@@ -54,7 +54,11 @@ format where the two differ).
 | [repo-url-normalization](repo-url-normalization.md) | `server/src/logs/repo-url-normalizer.ts` | jest |
 | [ndjson-tolerance](ndjson-tolerance.md) | hook `ndjson-sanitize.js`, `server/src/logs/ndjson-parser.ts` | `node --test`, jest |
 | [upload-error-classify](upload-error-classify.md) | `server/src/logs/upload-error.ts` | jest |
+| [ingest-hash-skip](ingest-hash-skip.md) | `server/src/logs/ingest-skip.ts` (`decideIngestSkip`), `ingest-version.ts` (`INGEST_VERSION`); caller `LogsService.checkUnchanged` | jest |
+| [ingest-append](ingest-append.md) | `server/src/logs/ingest-append.ts` (`decideIngestAppend`); caller `LogsService.upsert` (append mode, `UpsertIngestMeta.appendStartLine`) | jest |
+| [hook-upload-skip](hook-upload-skip.md) | hook `upload-skip.js` (`decideUploadSkip`, `canResumePending`, `paramsSha256`), `append-upload.js` (`planAppend`, `stateAfterFull`, `chooseAppendEncoding`); callers `send-logs-hook.js`, `prompt-upload-hook.js`, `upload-logs.js` | `node --test` |
 | [log-retention](log-retention.md) | `server/src/log-retention/log-retention-plan.ts` | jest |
+| [rebuild-load-governor](rebuild-load-governor.md) | `server/src/common/load-governor/rebuild-pace.ts` (`decideRebuildPace`), driven by `rebuild-governor.ts` | jest |
 | [login-backoff](login-backoff.md) | `server/src/auth/login-backoff.service.ts`; Work Hub twin `work-hub/server/src/auth/backoff.rs` | jest, `cargo test` |
 | [password-policy](password-policy.md) | `server/src/auth/utils/password-policy.ts`; Work Hub twin `work-hub/server/src/auth/password_policy.rs` | jest, `cargo test` |
 | [auth-startup-config](auth-startup-config.md) | `server/src/auth/config/auth-startup-validation.ts`; Work Hub twin `work-hub/server/src/auth/startup.rs` | jest, `cargo test` |
@@ -62,6 +66,9 @@ format where the two differ).
 | [workhub-names](workhub-names.md) | `work-hub/server/src/names.rs` (`validate_display_name`, `name_key`, `derive_branch`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
 | [workhub-repo-path](workhub-repo-path.md) | `work-hub/server/src/repo_path.rs` (`normalize`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
 | [workhub-devcontainer-subset](workhub-devcontainer-subset.md) | `work-hub/server/src/devcontainer.rs` (`parse`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
+| [workhub-remote-url](workhub-remote-url.md) | `work-hub/server/src/connections/remote_url.rs` (`parse`, `resolve`, `pr_url`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
+| [workhub-git-providers](workhub-git-providers.md) | `work-hub/server/src/connections/providers.rs` (`all`, `get`, `git_header`, `api_request`, `token_page_url`, `ssh_keys_page_url`, `greeting_user`, `base64_encode`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
+| [workhub-connection-fields](workhub-connection-fields.md) | `work-hub/server/src/connections/fields.rs` (`validate_base_url`, `validate_remote_name`, `validate_pat`, `validate_private_key`, `validate_expose_env`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
 | [workhub-terminal-replay](workhub-terminal-replay.md) | `work-hub/web/src/terminal/replay.ts` (`replaySegments`) | vitest (`work-hub/web`) |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
@@ -71,10 +78,11 @@ format where the two differ).
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
 | [session-lens-row](session-lens-row.md) | `client/.../repository/session-lenses.ts` (`lensRow`, `lensDefaultTab`), `client/.../repository/session-tab-groups.ts` (`pickGroupTab`) | vitest |
-| [session-map-delta-merge](session-map-delta-merge.md) | `client/.../session-log/session-map/session-map-delta-merge.ts` (`mergeSessionMapDelta`, `toParseInputs`) | vitest |
+| [session-map-state](session-map-state.md) | `client/.../session-log/session-map/session-map-state.ts` (`buildSessionMapState`, `toParseInputs`) | vitest |
 | [session-map-model](session-map-model.md) | `client/.../session-log/session-map/session-map-model.ts` | vitest |
 | [nav-filter-match](nav-filter-match.md) | `client/.../pages/map/nav-tree.ts` (`matchNavFilter`) | vitest |
 | [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |
+| [powershell-command-view](powershell-command-view.md) | `packages/bash-view/src/ps-*.ts`, `shell.ts` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/powershell-browser-parser.ts`, server `server/src/logs/okf/server-powershell-parser.ts`) | vitest |
 | [okf-access-extraction](okf-access-extraction.md) | `server/src/logs/okf/okf-access-extractor.ts` | jest |
 | [okf-task-context](okf-task-context.md) | `server/src/logs/okf/okf-task-context.ts` | jest |
 | [okf-snapshot](okf-snapshot.md) | hook `okf-snapshot.js` | `node --test` |

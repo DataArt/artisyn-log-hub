@@ -824,11 +824,11 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
     }
 
     // Recompute after the extract-version bump: a session stamped by the previous extractor (3)
-    // carries version 4 once recomputed.
+    // carries the current version (5) once recomputed.
     await db.query('UPDATE sessions SET okf_extract_version = 3 WHERE session_id = $1', [sid]);
     expect((await owner.api.post(`/api/v1/repositories/${repoOf(owner)}/recompute-all-sessions`)).status()).toBe(201);
     const after = await db.query<{ v: number | null }>('SELECT okf_extract_version AS v FROM sessions WHERE session_id = $1', [sid]);
-    expect(after.rows[0].v).toBe(4);
+    expect(after.rows[0].v).toBe(5);
     expect((await repoOkf(owner, {})).summary, 'the recompute keeps the reads').toMatchObject({ unitsRead: 1, reads: 2 });
   });
 });

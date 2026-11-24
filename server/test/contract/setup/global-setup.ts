@@ -38,6 +38,62 @@ async function dropStaleContractSchemas(pool: Pool): Promise<void> {
   }
 }
 
+/** Loads world-v1 (and its derived session costs) in one transaction. */
+async function loadWorld(pool: Pool, schemaName: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await resetWorldV1(client, schemaName);
+    await recomputeWorldSessionCosts(client);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** How long the schema's write counters must stay unchanged to count as settled. */
+const DRAIN_QUIET_MS = 3000;
+/** Upper bound on the wait; the world is reloaded afterwards either way. */
+const DRAIN_SETTLE_TIMEOUT_MS = 120_000;
+const DRAIN_POLL_MS = 250;
+
+/**
+ * Waits until the background drains' start-up pass (every drain runs one tick in
+ * `onModuleInit`, even with its interval parked) has stopped writing: the schema's
+ * insert/update/delete counters stay unchanged for {@link DRAIN_QUIET_MS}. The caller then
+ * reloads the world, so every row starts from world-v1 exactly as written, never from what a
+ * start-up pass derived from it.
+ */
+async function settleStartupDrains(
+  pool: Pool,
+  schemaName: string,
+): Promise<void> {
+  const deadline = Date.now() + DRAIN_SETTLE_TIMEOUT_MS;
+  let last = '';
+  let quietSince = Date.now();
+  while (Date.now() < deadline) {
+    const { rows } = await pool.query<{ writes: string | null }>(
+      `SELECT sum(n_tup_ins + n_tup_upd + n_tup_del)::text AS writes
+         FROM pg_stat_user_tables WHERE schemaname = $1`,
+      [schemaName],
+    );
+    const current = rows[0]?.writes ?? '';
+    if (current !== last) {
+      last = current;
+      quietSince = Date.now();
+    } else if (Date.now() - quietSince >= DRAIN_QUIET_MS) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, DRAIN_POLL_MS));
+  }
+  console.warn(
+    `[contract setup] background drains still writing after ${DRAIN_SETTLE_TIMEOUT_MS} ms; reloading the world anyway`,
+  );
+}
+
 export default async function globalSetup(): Promise<void> {
   // A database URL handed in by the caller wins over whatever server/.env(.local) loaded during
   // the AppModule import. TEST_DATABASE_URL comes first (a dev container points tests at its test
@@ -75,6 +131,26 @@ export default async function globalSetup(): Promise<void> {
   // the same reason: a tick writes budget_notices / recipients / events no row made. The F26
   // rows read world-v1's hand-written notice; what the job writes is the scenarios' job.
   process.env.BUDGET_CHECK_ENABLED = 'false';
+  // The drains of 2026-11-23 session-logs-streaming (DD-10, DD-6, DD-22, DD-28) are parked for
+  // the same reason: the gzip builder writes `logs.body_rev` / `body_gz` for every world log,
+  // the workflows backfill writes `session_stats.workflows`, the re-extract drain rewrites
+  // per-session stats and the deleted-session cleanup purges survivor rows — none of them a
+  // write a row made. Their start-up pass still runs once at boot; `settleStartupDrains` below
+  // waits it out and reloads the world afterwards.
+  process.env.LOG_BODY_GZ_INTERVAL_MS = '3600000';
+  process.env.WORKFLOWS_BACKFILL_INTERVAL_MS = '3600000';
+  process.env.SESSION_REEXTRACT_INTERVAL_MS = '3600000';
+  process.env.DELETED_SESSION_CLEANUP_INTERVAL_MS = '3600000';
+  // 2026-11-24 traffic-optimization (DD-10): every `/api` JSON answer to a gzip-accepting
+  // client is gzipped whatever the fixture size, so the `expect.headers` rows of F17 / F25 see
+  // `Content-Encoding: gzip`. superagent decodes it, so no other row notices. The 8192-byte
+  // default threshold itself is the scenarios' job (@S-OTEL-01 / @S-SESS-03).
+  process.env.API_GZIP_MIN_BYTES = '1';
+  // The rebuild governor (DD-15) would stretch those start-up passes while jest compiles at
+  // full CPU; the contract run measures no load behaviour, so it never slows down or pauses.
+  process.env.REBUILD_SLOWDOWN_CPU_PERCENT = '100';
+  process.env.REBUILD_PAUSE_CPU_PERCENT = '100';
+  process.env.REBUILD_HARD_CAP_MS = '1000';
   process.env.UPLOAD_QUEUE_LEASE_TIMEOUT_MS = '150';
   process.env.UPLOAD_QUEUE_TICK_BUDGET_MS = '500';
   process.env.AI_TOOL_VERSION_CHECK_ENABLED = 'false';
@@ -146,18 +222,11 @@ export default async function globalSetup(): Promise<void> {
     password: process.env.DB_PASSWORD,
     options: `-c search_path=${schemaName}`,
   });
-  const client = await worldPool.connect();
   try {
-    await client.query('BEGIN');
-    await resetWorldV1(client, schemaName);
-    await recomputeWorldSessionCosts(client);
-    await client.query('COMMIT');
+    await loadWorld(worldPool, schemaName);
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => undefined);
-    throw err;
-  } finally {
-    client.release();
     await worldPool.end();
+    throw err;
   }
 
   const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -169,6 +238,13 @@ export default async function globalSetup(): Promise<void> {
   const port =
     typeof address === 'object' && address !== null ? address.port : 0;
   process.env.CONTRACT_BASE_URL = `http://127.0.0.1:${port}`;
+
+  try {
+    await settleStartupDrains(worldPool, schemaName);
+    await loadWorld(worldPool, schemaName);
+  } finally {
+    await worldPool.end();
+  }
 
   (
     global as unknown as { __CONTRACT_APP__?: INestApplication }

@@ -38,8 +38,8 @@ This skill's steps:
 
 ## Simplicity guard
 
-This skill is only for genuinely small changes: UI tweaks, copy changes, a single well-understood
-behavior fix, a config value — roughly one module, no data concerns. File count is a warning, not
+This skill is for changes of moderate size with no tricky data work — a new endpoint or column is
+fine here. File count is a warning, not
 a blocker: past the configured threshold (`.claude/repo_config/project-env.json →
 simpleTrack.fileCountWarnThreshold`, default 20 files), still proceed, but warn the user in your
 report that the task may be too large for the simple track.
@@ -50,10 +50,10 @@ going, but add this exact warning near the top of your report (fill in the concr
 "Task does not look that simple because <reasons>. I recommend considering the full
 `/adlc-lh:review-deep $ARGUMENTS` instead."
 
-- database schema or migration changes
-- API contract changes (new/changed endpoints, request/response shapes)
-- cross-module impact (client + server + shared all touched non-trivially)
-- security, auth, or data-integrity concerns
+- tricky data work: a migration or backfill that transforms existing data, a data-integrity or
+  consistency risk, concurrent writes to the same data
+- a very large change: many modules touched non-trivially
+- security or auth concerns
 - anything you cannot fully understand from the requirements plus a quick look at the code
 
 ## Steps

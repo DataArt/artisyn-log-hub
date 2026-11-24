@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" font-family="Segoe UI, -apple-system, Roboto, sans-serif">
+  <style>
+    .t { fill:#0a0a0b; font-size:14px; }
+    .m { fill:#71717a; font-size:13px; }
+    .s { fill:#71717a; font-size:12px; }
+    .b { font-weight:600; }
+    .h { fill:#0a0a0b; font-size:18px; font-weight:500; }
+    .cap { fill:#3352cc; font-size:13px; font-weight:600; }
+    .note { fill:#1e40af; font-size:12px; font-style:italic; }
+  </style>
+  <rect width="1100" height="640" fill="#ffffff"/>
+  <text x="20" y="30" fill="#0a0a0b" font-size="16" font-weight="600">New workspace dialog: "empty repository" (today) or "clone from a connection" (FR-4)</text>
+
+  <!-- dialog -->
+  <text x="20" y="66" class="cap">Clone from a connection</text>
+  <rect x="20" y="78" width="512" height="520" rx="10" fill="#fff" stroke="#e4e4e7"/>
+  <text x="44" y="114" class="h">New workspace</text>
+  <text x="506" y="112" class="m">✕</text>
+
+  <text x="44" y="150" class="t b">Name</text>
+  <rect x="44" y="160" width="464" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="56" y="183" class="t">log-hub</text>
+
+  <text x="44" y="226" class="t b">Start from</text>
+  <rect x="44" y="236" width="226" height="56" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <circle cx="62" cy="256" r="6" fill="#fff" stroke="#a1a1aa"/>
+  <text x="76" y="261" class="t">Empty repository</text>
+  <text x="76" y="280" class="s">Today's behaviour</text>
+  <rect x="282" y="236" width="226" height="56" rx="8" fill="#eff6ff" stroke="#3352cc" stroke-width="2"/>
+  <circle cx="300" cy="256" r="6" fill="#fff" stroke="#3352cc" stroke-width="2"/><circle cx="300" cy="256" r="3" fill="#3352cc"/>
+  <text x="314" y="261" class="t b">Clone from a connection</text>
+  <text x="314" y="280" class="s">Needs a connection</text>
+
+  <text x="44" y="322" class="t b">Connection</text>
+  <rect x="44" y="332" width="464" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <rect x="54" y="341" width="22" height="18" rx="4" fill="#0a0a0b"/><text x="57" y="354" fill="#fff" font-size="9" font-weight="700">GH</text>
+  <text x="84" y="355" class="t">github-dataart · github.com</text>
+  <text x="488" y="355" class="m">⌄</text>
+  <text x="44" y="384" class="s">No connection yet? <tspan fill="#3352cc">Add connection…</tspan></text>
+
+  <text x="44" y="414" class="t b">Repository URL</text>
+  <rect x="44" y="424" width="464" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="56" y="447" class="t">git@github.com:DataArt/artisyn-log-hub.git</text>
+
+  <text x="44" y="492" class="t b">Branch</text>
+  <rect x="44" y="502" width="464" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="56" y="525" class="t">main <tspan class="s">(remote default)</tspan></text>
+  <text x="488" y="525" class="m">⌄</text>
+
+  <rect x="322" y="552" width="88" height="34" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="366" y="574" class="t b" text-anchor="middle">Cancel</text>
+  <rect x="420" y="552" width="88" height="34" rx="6" fill="#3352cc"/>
+  <text x="464" y="574" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Create</text>
+
+  <!-- states on the right -->
+  <text x="560" y="66" class="cap">While cloning</text>
+  <rect x="560" y="78" width="520" height="150" rx="10" fill="#fff" stroke="#e4e4e7"/>
+  <text x="584" y="112" class="t b">Cloning DataArt/artisyn-log-hub…</text>
+  <text x="584" y="134" class="s">Receiving objects 48% (12 034 / 25 070), 31 MiB</text>
+  <rect x="584" y="148" width="472" height="8" rx="4" fill="#f4f4f5"/>
+  <rect x="584" y="148" width="226" height="8" rx="4" fill="#3352cc"/>
+  <rect x="968" y="176" width="88" height="34" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="1012" y="198" class="t b" text-anchor="middle">Cancel</text>
+
+  <text x="560" y="262" class="cap">Clone failed — no workspace is created</text>
+  <rect x="560" y="274" width="520" height="110" rx="10" fill="#fff" stroke="#e4e4e7"/>
+  <rect x="584" y="292" width="472" height="74" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="598" y="314" fill="#991b1b" font-size="13" font-weight="600">Could not clone the repository</text>
+  <text x="598" y="334" fill="#991b1b" font-size="12">remote: Repository not found (or connection has no access).</text>
+  <text x="598" y="352" fill="#991b1b" font-size="12">Check the URL or run "Test" on the connection.</text>
+
+  <text x="560" y="418" class="cap">Credential rejected by the host</text>
+  <rect x="560" y="430" width="520" height="80" rx="10" fill="#fff" stroke="#e4e4e7"/>
+  <rect x="584" y="446" width="472" height="48" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="598" y="466" fill="#92400e" font-size="13">gitlab-corp: the host rejected the SSH key.</text>
+  <text x="598" y="484" fill="#3352cc" font-size="13" font-weight="600">Update key in Connections</text>
+
+  <text x="560" y="548" class="note">URL only (SSH or HTTPS form, copied from the host); no repository picker.</text>
+  <text x="560" y="566" class="note">Branch list via ls-remote through the WH sidecar, remote default preselected.</text>
+  <text x="560" y="584" class="note">The new workspace is granted the connection; the container sees the sidecar URL only.</text>
+</svg>

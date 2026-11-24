@@ -219,6 +219,11 @@ export interface BashAnalysis {
   inline: string[];
   /** Number of paths / command names skipped because they are not literal. */
   unresolved: number;
+  /**
+   * Paths of `changes` the command removed (`rm` / `rmdir` positionals; PowerShell `Remove-Item`
+   * and its aliases). They stay in `changes`, so its count is unchanged.
+   */
+  deleted: string[];
 }
 
 export type Env = Record<string, string>;
@@ -270,7 +275,11 @@ export function literal(n: Node, env: Env): string | null {
 const isAbs = (p: string): boolean =>
   /^([A-Za-z]:)?[\\/]/.test(p) || p.startsWith('~');
 
-function joinPath(cwd: string | null, p: string): string {
+/**
+ * `p` resolved against `cwd` (`/`-separated, `.` / `..` segments applied); an absolute `p` or a
+ * missing `cwd` gives `p` with `/` separators.
+ */
+export function joinPath(cwd: string | null, p: string): string {
   const norm = p.replace(/\\/g, '/');
   if (isAbs(norm) || !cwd) return norm;
   const parts = cwd.split('/');
@@ -279,6 +288,148 @@ function joinPath(cwd: string | null, p: string): string {
     else if (seg !== '.' && seg !== '') parts.push(seg);
   }
   return parts.join('/');
+}
+
+/** The extras of one read access (`range` / `pattern`), as passed to a `WordSink`. */
+export type WordReadMeta = ReadMeta;
+
+/** Where `analyzeWords` reports what one command does to files. `null` = not a literal word. */
+export interface WordSink {
+  read(p: string | null, kind?: BashReadKind, meta?: WordReadMeta): void;
+  write(p: string | null): void;
+  /** A removed path (`rm` / `rmdir`); it is a change too. */
+  del(p: string | null): void;
+  run(label: string): void;
+  /** An inline interpreter script given by `-e` / `-c` / `--eval`: its line count. */
+  script(command: string, lines: number): void;
+}
+
+/**
+ * What one external command does, from its base name and literal arguments only (no syntax
+ * tree): the write / read tables, `grep` / `git grep`, `sed`, `mv`, `cp`, run labels and
+ * inline `-e` / `-c` scripts. Shared by the Bash analysis and the PowerShell analysis of
+ * native commands (`ps-analyze.ts`). `cd` and heredoc scripts are the caller's.
+ */
+export function analyzeWords(
+  base: string,
+  args: (string | null)[],
+  sink: WordSink,
+): void {
+  const flags = args.filter(
+    (a): a is string => a !== null && a.startsWith('-'),
+  );
+  const pos = args.filter((a) => a === null || !a.startsWith('-'));
+  if (W_CMDS.has(base)) {
+    const removes = base === 'rm' || base === 'rmdir';
+    pos.forEach((p) => (removes ? sink.del(p) : sink.write(p)));
+  } else if (R_CMDS.has(base)) {
+    const range =
+      base === 'head' || base === 'tail' ? headTailRange(base, args) : null;
+    pos
+      // `tail -n +5`: the `+N` count is not a path.
+      .filter((p) => !(range && p !== null && /^\+\d+$/.test(p)))
+      .forEach((p) => sink.read(p, readKindOf(base), range ? { range } : {}));
+  } else if (base === 'grep' || base === 'rg') {
+    const g = grepArgs(args);
+    const meta: ReadMeta = g.pattern !== null ? { pattern: g.pattern } : {};
+    g.paths.forEach((p) => sink.read(p, 'grep', meta));
+  } else if (
+    base === 'git' &&
+    args[0] === 'grep' &&
+    grepArgs(args.slice(1)).paths.length > 0
+  ) {
+    // `git grep <pattern> <paths>` searches like `grep`; without paths it searches the whole
+    // tree and stays a `git grep` run.
+    const g = grepArgs(args.slice(1));
+    const meta: ReadMeta = g.pattern !== null ? { pattern: g.pattern } : {};
+    g.paths.forEach((p) => sink.read(p, 'grep', meta));
+  } else if (base === 'sed') {
+    const inPlace = flags.some(
+      (f) => /^-i/.test(f) || /^--in-place(=|$)/.test(f),
+    );
+    // `-e <script>` / `--expression <script>` give the script itself (not a path);
+    // `-f <file>` / `--file <file>` give a script file (a read). Either means no positional
+    // is the script.
+    let scriptGiven = false;
+    /** The first `-e` script, when one is given that way. */
+    let exprScript: string | null | undefined;
+    const files: (string | null)[] = [];
+    for (let k = 0; k < args.length; k++) {
+      const a = args[k];
+      if (a === '-e' || a === '--expression') {
+        scriptGiven = true;
+        k++;
+        if (exprScript === undefined) exprScript = args[k] ?? null;
+      } else if (a === '-f' || a === '--file') {
+        scriptGiven = true;
+        k++;
+        sink.read(args[k] ?? '');
+      } else if (a !== null && a.startsWith('--expression=')) {
+        scriptGiven = true;
+        if (exprScript === undefined)
+          exprScript = a.slice('--expression='.length);
+      } else if (a !== null && a.startsWith('--file=')) {
+        scriptGiven = true;
+        sink.read(a.slice('--file='.length));
+      } else if (a === null || !a.startsWith('-')) files.push(a);
+    }
+    // `sed -n 'a,bp' file` prints only lines a..b: a ranged read (DD-4).
+    const quiet = flags.some(
+      (f) => /^-[a-zA-Z]*n/.test(f) || f === '--quiet' || f === '--silent',
+    );
+    const range =
+      quiet && !inPlace
+        ? sedPrintRange(scriptGiven ? exprScript : files[0])
+        : null;
+    files
+      .slice(scriptGiven ? 0 : 1)
+      .forEach((p) =>
+        inPlace ? sink.write(p) : sink.read(p, 'read', range ? { range } : {}),
+      );
+  } else if (base === 'mv') {
+    pos.forEach((p) => sink.write(p));
+  } else if (base === 'cp') {
+    pos.slice(0, -1).forEach((p) => sink.read(p));
+    sink.write(pos.at(-1) ?? '');
+  } else if (!NOT_RUNS.has(base)) {
+    const sub = args[0] ?? '';
+    const label =
+      RUN_SCRIPT_TOOLS.test(base) && sub === 'run'
+        ? `${base} run ${args[1] ?? '?'}`
+        : SUBCOMMAND_TOOLS.test(base) && sub && !sub.startsWith('-')
+          ? `${base} ${sub}`
+          : base;
+    sink.run(label);
+  }
+  if (SCRIPT_CMDS.test(base)) {
+    // The script is the argument right after the first `-e` / `-c` / `--eval`; when it is
+    // missing or not literal it counts as 1 line.
+    const flagAt = args.findIndex(
+      (a) => a === '-e' || a === '-c' || a === '--eval',
+    );
+    if (flagAt >= 0) {
+      const body = args[flagAt + 1];
+      sink.script(base, typeof body === 'string' ? body.split('\n').length : 1);
+    }
+  }
+}
+
+/**
+ * `p` as shown relative to the analysis' working dir `root`: `.` for the dir itself, the rest
+ * below it, `../` steps for a near sibling (at most two levels up, sharing at least two
+ * leading segments), else `p` unchanged.
+ */
+export function relativeToWorkDir(root: string | null, p: string): string {
+  if (!root) return p;
+  if (p === root) return '.';
+  if (p.startsWith(root + '/')) return p.slice(root.length + 1);
+  const up = root.split('/');
+  const pp = p.split('/');
+  let k = 0;
+  while (k < up.length && k < pp.length && up[k] === pp[k]) k++;
+  return k >= 2 && up.length - k <= 2
+    ? '../'.repeat(up.length - k) + pp.slice(k).join('/')
+    : p;
 }
 
 interface WalkState {
@@ -310,26 +461,31 @@ function analyzeTree(rootNode: Node): BashAnalysis {
   const noted = new Set<number>();
   let unresolved = 0;
 
+  /** Paths (full, like `written`) removed by `rm` / `rmdir`. */
+  const removed = new Set<string>();
+
+  /** Records a path; returns its full form, or null when it is ignored or not literal. */
   const add = (
     list: string[],
     st: WalkState,
     p: string | null,
     kind: BashReadKind = 'read',
     meta: ReadMeta = {},
-  ): void => {
+  ): string | null => {
     if (p === null) {
       unresolved++;
-      return;
+      return null;
     }
-    if (p === '' || p === '-' || /^&?\d+$/.test(p)) return;
+    if (p === '' || p === '-' || /^&?\d+$/.test(p)) return null;
     const full = joinPath(st.cwd, p);
     // A device is ignored however it is reached (`/dev/null`, `../dev/null` from `/tmp`).
-    if (full.startsWith('/dev/')) return;
+    if (full.startsWith('/dev/')) return null;
     if (!list.includes(full)) list.push(full);
     if (list === read && !readKind.has(full)) {
       readKind.set(full, kind);
       readMeta.set(full, meta);
     }
+    return full;
   };
   const run = (label: string): void => {
     if (!runs.includes(label)) runs.push(label);
@@ -361,9 +517,6 @@ function analyzeTree(rootNode: Node): BashAnalysis {
     const args = n
       .childrenForFieldName('argument')
       .map((a) => literal(a, st.env));
-    const flags = args.filter(
-      (a): a is string => a !== null && a.startsWith('-'),
-    );
     const pos = args.filter((a) => a === null || !a.startsWith('-'));
     const base = name.replace(/^.*[\\/]/, '');
     if (base === 'cd') {
@@ -378,108 +531,29 @@ function analyzeTree(rootNode: Node): BashAnalysis {
       if (found.workDir === null) found.workDir = st.cwd;
       return;
     }
-    if (W_CMDS.has(base)) pos.forEach((p) => add(written, st, p));
-    else if (R_CMDS.has(base)) {
-      const range =
-        base === 'head' || base === 'tail' ? headTailRange(base, args) : null;
-      pos
-        // `tail -n +5`: the `+N` count is not a path.
-        .filter((p) => !(range && p !== null && /^\+\d+$/.test(p)))
-        .forEach((p) =>
-          add(read, st, p, readKindOf(base), range ? { range } : {}),
-        );
-    } else if (base === 'grep' || base === 'rg') {
-      const g = grepArgs(args);
-      const meta: ReadMeta = g.pattern !== null ? { pattern: g.pattern } : {};
-      g.paths.forEach((p) => add(read, st, p, 'grep', meta));
-    } else if (
-      base === 'git' &&
-      args[0] === 'grep' &&
-      grepArgs(args.slice(1)).paths.length > 0
-    ) {
-      // `git grep <pattern> <paths>` searches like `grep`; without paths it searches the whole
-      // tree and stays a `git grep` run.
-      const g = grepArgs(args.slice(1));
-      const meta: ReadMeta = g.pattern !== null ? { pattern: g.pattern } : {};
-      g.paths.forEach((p) => add(read, st, p, 'grep', meta));
-    } else if (base === 'sed') {
-      const inPlace = flags.some(
-        (f) => /^-i/.test(f) || /^--in-place(=|$)/.test(f),
-      );
-      // `-e <script>` / `--expression <script>` give the script itself (not a path);
-      // `-f <file>` / `--file <file>` give a script file (a read). Either means no positional
-      // is the script.
-      let scriptGiven = false;
-      /** The first `-e` script, when one is given that way. */
-      let exprScript: string | null | undefined;
-      const files: (string | null)[] = [];
-      for (let k = 0; k < args.length; k++) {
-        const a = args[k];
-        if (a === '-e' || a === '--expression') {
-          scriptGiven = true;
-          k++;
-          if (exprScript === undefined) exprScript = args[k] ?? null;
-        } else if (a === '-f' || a === '--file') {
-          scriptGiven = true;
-          k++;
-          add(read, st, args[k] ?? '');
-        } else if (a !== null && a.startsWith('--expression=')) {
-          scriptGiven = true;
-          if (exprScript === undefined)
-            exprScript = a.slice('--expression='.length);
-        } else if (a !== null && a.startsWith('--file=')) {
-          scriptGiven = true;
-          add(read, st, a.slice('--file='.length));
-        } else if (a === null || !a.startsWith('-')) files.push(a);
-      }
-      // `sed -n 'a,bp' file` prints only lines a..b: a ranged read (DD-4).
-      const quiet = flags.some(
-        (f) => /^-[a-zA-Z]*n/.test(f) || f === '--quiet' || f === '--silent',
-      );
-      const range =
-        quiet && !inPlace
-          ? sedPrintRange(scriptGiven ? exprScript : files[0])
-          : null;
-      files
-        .slice(scriptGiven ? 0 : 1)
-        .forEach((p) =>
-          inPlace
-            ? add(written, st, p)
-            : add(read, st, p, 'read', range ? { range } : {}),
-        );
-    } else if (base === 'mv') {
-      pos.forEach((p) => add(written, st, p));
-    } else if (base === 'cp') {
-      pos.slice(0, -1).forEach((p) => add(read, st, p));
-      add(written, st, pos.at(-1) ?? '');
-    } else if (!NOT_RUNS.has(base)) {
-      const sub = args[0] ?? '';
-      const label =
-        RUN_SCRIPT_TOOLS.test(base) && sub === 'run'
-          ? `${base} run ${args[1] ?? '?'}`
-          : SUBCOMMAND_TOOLS.test(base) && sub && !sub.startsWith('-')
-            ? `${base} ${sub}`
-            : base;
-      run(label);
-    }
     // One note per script as written: a loop body walked once per `for` value notes it once.
-    if (SCRIPT_CMDS.test(base) && !noted.has(n.startIndex)) {
+    const firstNote = SCRIPT_CMDS.test(base) && !noted.has(n.startIndex);
+    if (firstNote) {
       noted.add(n.startIndex);
       for (const h of heredocs)
         scripts.push({ command: base, lines: h.split('\n').length - 1 });
-      // The script is the argument right after the first `-e` / `-c` / `--eval`; when it is
-      // missing or not literal it counts as 1 line.
-      const flagAt = args.findIndex(
-        (a) => a === '-e' || a === '-c' || a === '--eval',
-      );
-      if (flagAt >= 0) {
-        const body = args[flagAt + 1];
-        scripts.push({
-          command: base,
-          lines: typeof body === 'string' ? body.split('\n').length : 1,
-        });
-      }
     }
+    analyzeWords(base, args, {
+      read: (p, kind, meta) => {
+        add(read, st, p, kind, meta);
+      },
+      write: (p) => {
+        add(written, st, p);
+      },
+      del: (p) => {
+        const full = add(written, st, p);
+        if (full !== null) removed.add(full);
+      },
+      run,
+      script: (cmd, lines) => {
+        if (firstNote) scripts.push({ command: cmd, lines });
+      },
+    });
   };
 
   const walk = (n: Node, st: WalkState, heredocs: string[] = []): void => {
@@ -620,18 +694,7 @@ function analyzeTree(rootNode: Node): BashAnalysis {
   if (!rootNode.hasError) walkSeq(rootNode.children, st);
 
   const root = found.workDir;
-  const rel = (p: string): string => {
-    if (!root) return p;
-    if (p === root) return '.';
-    if (p.startsWith(root + '/')) return p.slice(root.length + 1);
-    const up = root.split('/');
-    const pp = p.split('/');
-    let k = 0;
-    while (k < up.length && k < pp.length && up[k] === pp[k]) k++;
-    return k >= 2 && up.length - k <= 2
-      ? '../'.repeat(up.length - k) + pp.slice(k).join('/')
-      : p;
-  };
+  const rel = (p: string): string => relativeToWorkDir(root, p);
 
   const reads = read.filter((p) => !written.includes(p));
   return {
@@ -648,6 +711,7 @@ function analyzeTree(rootNode: Node): BashAnalysis {
       (s) => `inline ${s.command} script, ${s.lines} lines — not analysed`,
     ),
     unresolved,
+    deleted: written.filter((p) => removed.has(p)).map(rel),
   };
 }
 

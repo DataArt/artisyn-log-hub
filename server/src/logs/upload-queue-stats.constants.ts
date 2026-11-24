@@ -40,5 +40,19 @@ export function getMeasurementPruneIntervalMs(): number {
  * Outcome of a single processing attempt recorded in `upload_queue_measurements`. Declared
  * once here and imported everywhere it is needed (schema, worker, stats service, specs) so
  * it never degrades to a bare `string`.
+ *
+ * - `skipped` — the server hash skip dropped an unchanged upload without parsing it (DD-20 of
+ *   2026-11-23-session-logs-streaming);
+ * - `superseded` — a newer upload of the same whole-file log replaced this one (DD-16/DD-19);
+ * - `upload-full` — an append row's delta did not fit the stored log, so the hook is asked to
+ *   re-send the whole file (2026-11-24-traffic-optimization).
+ *
+ * The admin stats count only `success` / `failure`, so the other outcomes stay out of the
+ * throughput and failure figures.
  */
-export type UploadQueueMeasurementOutcome = 'success' | 'failure';
+export type UploadQueueMeasurementOutcome =
+  | 'success'
+  | 'failure'
+  | 'skipped'
+  | 'superseded'
+  | 'upload-full';

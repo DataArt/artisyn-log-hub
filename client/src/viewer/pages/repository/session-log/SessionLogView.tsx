@@ -4,10 +4,9 @@ import type { SessionLogsData } from '../../../api';
 import type { ModelPricingMap } from '../../../../models/pricing';
 import type { RepoConfig } from '../../../../models/repositories';
 import {
-  buildAgentParentMap,
-  buildSubagentMeta,
   computeWorkflowCostPerToken,
   parseSessionLogs,
+  type SubagentMetaMap,
 } from './log-parser';
 import { PromptTurnList, isSystemOnlyTurn } from './PromptTurnList';
 import { StartupContextLine } from './StartupContextLine';
@@ -15,11 +14,19 @@ import { NoPricingBadge } from '../../../components/NoPricingBadge';
 import { getSessionLogsErrorMessage } from './session-logs-error';
 import { resolveTurnAnchor } from './turn-anchor';
 import { findTurnIndexForToolUse } from './tool-use-turn';
+import { useSessionParts } from '../session-parts/SessionPartsContext';
 
 interface Props {
   logsData: SessionLogsData | undefined;
   isLoading: boolean;
   error: Error | null;
+  /**
+   * Every manifest sub-agent's parent, `.meta.json` labels and bare id — loaded or not
+   * (`useSessionLogParts`): `logsData.subagents` holds the loaded parts only.
+   */
+  agentParentMap: Map<string, string | null>;
+  subagentMeta: SubagentMetaMap;
+  knownAgentIds: ReadonlySet<string>;
   pricing?: ModelPricingMap;
   repoConfig?: RepoConfig | null;
   /** Server-computed sub-agent cost (`costBreakdown.subagentCost`, D2.3). Used to derive the accurate workflow cost rate. */
@@ -46,6 +53,9 @@ export function SessionLogView({
   logsData,
   isLoading,
   error,
+  agentParentMap,
+  subagentMeta,
+  knownAgentIds,
   pricing,
   repoConfig,
   sessionSubagentCost,
@@ -57,6 +67,7 @@ export function SessionLogView({
   onOpenAnatomy,
 }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const { requestAll, allLoaded } = useSessionParts();
   const subagentLogsMap = useMemo(() => {
     const map = new Map<string, Record<string, unknown>[]>();
     for (const sa of logsData?.subagents ?? []) {
@@ -67,24 +78,6 @@ export function SessionLogView({
     }
     return map;
   }, [logsData]);
-
-  // Authoritative agentId -> parentAgentId map, from the DB's sessions.parent_session_id (via
-  // the /logs endpoint's per-subagent parentSessionId field) — both stripped of any "agent-"
-  // prefix so they key identically to subagentLogsMap/turn.agentActivations[].agentId. This is
-  // the reliable source for cost rollup: a background-launched agent's completion can arrive
-  // after its parent's own session already ended, so transcript content (agent_progress /
-  // tool_use+toolUseResult) cannot always reconstruct nesting beyond depth 1, but
-  // parent_session_id always can.
-  const agentParentMap = useMemo(
-    () => buildAgentParentMap(logsData?.subagents ?? []),
-    [logsData],
-  );
-
-  // Per-agent `.meta.json` labels (agent description, workflow phase) from the server.
-  const subagentMeta = useMemo(
-    () => buildSubagentMeta(logsData?.subagents ?? []),
-    [logsData],
-  );
 
   const parsed = useMemo(
     () =>
@@ -97,9 +90,17 @@ export function SessionLogView({
             pricing,
             harnessSnapshot: logsData.harnessSnapshot ?? null,
             subagentMeta,
+            knownSubagentIds: knownAgentIds,
           })
         : null,
-    [logsData, repoConfig, subagentLogsMap, pricing, subagentMeta],
+    [
+      logsData,
+      repoConfig,
+      subagentLogsMap,
+      pricing,
+      subagentMeta,
+      knownAgentIds,
+    ],
   );
 
   // Same single filter `PromptTurnList` applies, so the anchor list and the rendered list
@@ -110,9 +111,19 @@ export function SessionLogView({
   );
 
   // Deep link to one tool call (DD-19): resolve the turn holding the `tool_use` id and hand it
-  // to the target-turn state, which the scroll effect below then acts on.
+  // to the target-turn state, which the scroll effect below then acts on. The call may sit in
+  // any sub-agent's log, so every part loads first (impl-plan DD-33).
+  const deepLinkLoadRequested = useRef<string | null>(null);
   useEffect(() => {
-    if (!targetToolUseId || parsed === null) return;
+    if (!targetToolUseId) return;
+    if (!allLoaded) {
+      if (deepLinkLoadRequested.current !== targetToolUseId) {
+        deepLinkLoadRequested.current = targetToolUseId;
+        void requestAll();
+      }
+      return;
+    }
+    if (parsed === null) return;
     const turnIndex = findTurnIndexForToolUse(
       parsed.turns,
       targetToolUseId,
@@ -123,6 +134,8 @@ export function SessionLogView({
     onTargetToolUseConsumed?.();
   }, [
     targetToolUseId,
+    allLoaded,
+    requestAll,
     parsed,
     subagentLogsMap,
     agentParentMap,
@@ -172,8 +185,16 @@ export function SessionLogView({
       sessionSubagentCost,
       subagentLogsMap,
       agentParentMap,
+      logsData?.subagentStats,
     );
-  }, [parsed, pricing, sessionSubagentCost, subagentLogsMap, agentParentMap]);
+  }, [
+    parsed,
+    pricing,
+    sessionSubagentCost,
+    subagentLogsMap,
+    agentParentMap,
+    logsData?.subagentStats,
+  ]);
 
   if (isLoading) {
     return (

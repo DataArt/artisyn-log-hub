@@ -11,6 +11,8 @@ export const ROUTE = {
   workstream: "/w/:wsId/s/:streamId",
   history: "/w/:wsId/history",
   settings: "/w/:wsId/settings",
+  connections: "/connections",
+  admin: "/admin",
 } as const;
 
 export const routes = {
@@ -23,6 +25,8 @@ export const routes = {
     `/w/${encodeURIComponent(wsId)}/s/${encodeURIComponent(streamId)}`,
   history: (wsId: string) => `/w/${encodeURIComponent(wsId)}/history`,
   settings: (wsId: string) => `/w/${encodeURIComponent(wsId)}/settings`,
+  connections: ROUTE.connections,
+  admin: ROUTE.admin,
 };
 
 /** Where to go after signing in: the page the guard bounced from, else the workspaces list. */

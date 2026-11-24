@@ -12,6 +12,12 @@ import { fetchRecording, fetchRecordingMeta } from "../api/workstreams";
 import { cn } from "../lib/cn";
 import { playRecording } from "./replay";
 import styles from "./ReplayView.module.css";
+import {
+  blockPrivateModes,
+  handleCopyKey,
+  installCopyHandlers,
+  MOUSE_MODES,
+} from "./selection";
 import { openTerminalLink, XTERM_BASE_OPTIONS } from "./xterm-theme";
 
 type Status = "loading" | "ready" | "empty" | "error";
@@ -44,6 +50,10 @@ export function ReplayView({ workstreamId, className }: ReplayViewProps) {
     });
     term.loadAddon(new WebLinksAddon((_event, uri) => openTerminalLink(uri)));
     term.open(host);
+    // The recording turns mouse reporting on where the CLI did: block it so a drag selects text.
+    const blockedModes = blockPrivateModes(term, MOUSE_MODES);
+    term.attachCustomKeyEventHandler((e) => handleCopyKey(term, e) ?? true);
+    const removeCopyHandlers = installCopyHandlers(term, host);
 
     void (async () => {
       try {
@@ -72,6 +82,8 @@ export function ReplayView({ workstreamId, className }: ReplayViewProps) {
 
     return () => {
       disposed = true;
+      blockedModes.dispose();
+      removeCopyHandlers();
       term.dispose();
     };
   }, [workstreamId]);

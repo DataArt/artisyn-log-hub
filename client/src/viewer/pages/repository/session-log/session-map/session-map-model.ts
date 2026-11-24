@@ -26,7 +26,7 @@ import type {
   ToolCallDetail,
 } from '../types';
 import { agentRowLabel } from '../workflow-agent-rows';
-import type { SessionMapParseInputs } from './session-map-delta-merge';
+import type { SessionMapParseInputs } from './session-map-state';
 import {
   AGENT_LABEL_MAX,
   FAMILIES,

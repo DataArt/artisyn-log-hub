@@ -50,6 +50,17 @@ async fn open(ctx: &Ctx, name: &str) -> Value {
     s
 }
 
+/// The close response: the `Workstream` shape plus `push` (null: no push was asked for).
+#[track_caller]
+fn assert_closed(v: &Value, context: &str) {
+    assert!(v["push"].is_null(), "{context}: push {v}");
+    let mut summary = v.clone();
+    if let Some(o) = summary.as_object_mut() {
+        o.remove("push");
+    }
+    assert_workstream(&summary, context);
+}
+
 fn ws_path(id: Uuid, tail: &str) -> String {
     format!("/api/v1/workstreams/{id}/{tail}")
 }
@@ -120,9 +131,26 @@ fn check_close_for_now_reopen(ctx: &Ctx) -> BoxFuture<'_, ()> {
                 .await
                 .expect_status(200, "close check")
                 .json();
-        assert_keys(&check, &["uncommitted", "agentBusy"], "close check");
+        assert_keys(
+            &check,
+            &["uncommitted", "agentBusy", "pushRemote", "branch"],
+            "close check",
+        );
+        assert!(
+            check["branch"]
+                .as_str()
+                .is_some_and(|b| b.starts_with("ws/")),
+            "branch: {check}"
+        );
         assert_eq!(check["uncommitted"], json!([]), "a fresh worktree: {check}");
         assert!(check["agentBusy"].is_boolean(), "agentBusy: {check}");
+        // The world's workspace has the remote `origin` (harness): it is offered for a push.
+        assert_keys(
+            &check["pushRemote"],
+            &["name", "connectionName", "providerName", "defaultBranch"],
+            "close check pushRemote",
+        );
+        assert_eq!(check["pushRemote"]["name"], "origin", "pushRemote: {check}");
 
         // An uncommitted file: listed by the check, and blocks "bring into main".
         ctx.sh(
@@ -159,7 +187,7 @@ fn check_close_for_now_reopen(ctx: &Ctx) -> BoxFuture<'_, ()> {
             .await
             .expect_status(200, "close for now")
             .json();
-        assert_workstream(&closed, "closed");
+        assert_closed(&closed, "closed");
         assert_eq!(closed["state"], "closed");
         assert!(
             closed["closedAt"].is_string() && closed["mergedAt"].is_null(),
@@ -233,7 +261,7 @@ fn bring_into_main_and_discard(ctx: &Ctx) -> BoxFuture<'_, ()> {
             .await
             .expect_status(200, "bring into main")
             .json();
-        assert_workstream(&closed, "brought into main");
+        assert_closed(&closed, "brought into main");
         assert_eq!(closed["state"], "closed");
         assert!(closed["mergedAt"].is_string(), "mergedAt: {closed}");
         w.a.get(&format!(
@@ -286,7 +314,7 @@ fn merged_elsewhere(ctx: &Ctx) -> BoxFuture<'_, ()> {
             .await
             .expect_status(200, "already merged elsewhere")
             .json();
-        assert_workstream(&done, "done");
+        assert_closed(&done, "done");
         assert_eq!(done["state"], "done");
         let left = ctx
             .containers_with(&[(names::LABEL_WORKSTREAM, id.to_string())])

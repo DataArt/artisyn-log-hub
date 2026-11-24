@@ -6,6 +6,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
+import { RebuildGovernor } from '../../common/load-governor/rebuild-governor';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
 import { registerSessionCostDrainHandler } from '../../model-pricing/session-cost-invalidation';
@@ -47,6 +48,7 @@ export class SessionCostRecomputeService
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly schedulerRegistry: SchedulerRegistry,
+    private readonly governor: RebuildGovernor,
   ) {}
 
   onModuleInit(): void {
@@ -76,9 +78,19 @@ export class SessionCostRecomputeService
     await this.startDrain();
   }
 
+  /**
+   * Runs one drain. Each batch is paced by `RebuildGovernor` (DD-15 of
+   * 2026-11-23-session-logs-streaming), except under `SESSION_COST_RECOMPUTE_INLINE=true`, where
+   * a pricing write awaits the drain and must not be held back by the load.
+   */
   private startDrain(): Promise<void> {
-    const run = drainStaleSessionCosts(this.db)
+    const governed = process.env.SESSION_COST_RECOMPUTE_INLINE !== 'true';
+    const run = drainStaleSessionCosts(
+      this.db,
+      governed ? () => this.governor.admit() : undefined,
+    )
       .then((count) => {
+        if (governed) this.governor.reportIdle();
         if (count > 0) {
           this.logger.log(`Recomputed ${count} stale session cost(s)`);
         }

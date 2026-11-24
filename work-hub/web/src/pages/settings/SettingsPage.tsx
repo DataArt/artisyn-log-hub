@@ -1,5 +1,5 @@
 // `#/w/:wsId/settings` — workspace settings (FR-12, D9 Settings): the name (read-only), the
-// working branch and what the workspace was started from.
+// working branch, its git remotes and the agent login.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "../../ui/select";
 import { useToast } from "../../ui/toast";
+import { RemotesSection } from "./RemotesSection";
 import styles from "./SettingsPage.module.css";
 
 function Row({
@@ -159,8 +160,8 @@ function SettingsForm({ workspace }: { workspace: WorkspaceDetail }) {
           </SelectContent>
         </Select>
       </Row>
-      <Row label="Repository">
-        <p className={styles.mutedText}>none — started empty</p>
+      <Row label="Remotes">
+        <RemotesSection workspaceId={workspace.id} />
       </Row>
       <Row label="Container">
         <p className={styles.mutedText}>Work Hub default</p>

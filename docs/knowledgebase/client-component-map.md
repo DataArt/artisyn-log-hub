@@ -109,14 +109,14 @@ One folder per session tab; flat files are the Logs tab and the shared parsing. 
 |---|---|---|
 | `log-parser.ts`, `types.ts`, `tool-calls.ts`, `tool-outcome.ts` | Transcript → turns; the only place that decides a tool call's section and outcome | [`algorithms/tool-call-sections.md`](algorithms/tool-call-sections.md), [`algorithms/tool-call-outcome.md`](algorithms/tool-call-outcome.md) |
 | `SessionLogView.tsx`, `PromptTurn*.tsx`, `SubAgent*.tsx`, `Workflow*.tsx`, `workflow-agent-rows.ts` | Logs tab | [`algorithms/workflow-agent-rows.md`](algorithms/workflow-agent-rows.md) |
-| `tool-call-view/` | The shared tool-call view (modal, sub-agent detail, step modal, Bash tab) | [`algorithms/bash-command-view.md`](algorithms/bash-command-view.md) |
+| `tool-call-view/` | The shared tool-call view (modal, sub-agent detail, step modal, Shell tab) | [`algorithms/bash-command-view.md`](algorithms/bash-command-view.md) |
 | `SessionInfoTab.tsx`, `SessionInfo*Section.tsx`, `session-info-derive.ts` | Info tab | — |
 | `summary/` | Summary tab (default landing tab): executive band, "Where to look next" cards, detected issues (`summary/detectors/`, thresholds in `detectors/thresholds.ts`) | — |
 | `usage/` | Statistics tab (session-scope usage, computed client-side) | [`session-metrics-scope.md`](session-metrics-scope.md) |
 | `charts/` | Chart tabs (Dashboard, Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap); `chart-tab.ts` = `CHART_TABS` and the last-chart storage | [`llm-call-math.md`](llm-call-math.md) |
 | `call-tree/`, `CallTreeView.tsx` | Call Tree tab | — |
 | `session-map/` | Session Map tab (realtime / replay, `smSel` URL param, own `logs/delta` poll) | [`session-map.md`](session-map.md) |
-| `bash-tab/` | Bash tab (`bashCall` URL param) | [`algorithms/bash-command-view.md`](algorithms/bash-command-view.md) |
+| `bash-tab/` | Shell tab — Bash and PowerShell calls (`bashCall`, `shell` URL params) | [`algorithms/bash-command-view.md`](algorithms/bash-command-view.md) |
 | `RawLogsTab.tsx`, `raw-logs/` | Raw Logs tab | [`raw-logs-renderers.md`](raw-logs-renderers.md) |
 | `change-surface/` | Change surface tab | [`change-surface.md`](change-surface.md) |
 | `harness-usage/` | Harness usage tab | [`harness-usage-tab.md`](harness-usage-tab.md) |

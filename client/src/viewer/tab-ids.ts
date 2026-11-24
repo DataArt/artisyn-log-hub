@@ -268,10 +268,20 @@ export const TAB_REGISTRY: readonly TabRow[] = [
   {
     scope: 'session',
     id: 'bash',
-    label: 'Bash',
+    label: 'Shell',
     group: 'transcript',
-    description: 'Every shell command the session tree ran, with exit status.',
-    synonyms: ['shell', 'commands', 'terminal', 'cli', 'fail'],
+    description:
+      'Bash / PowerShell — every shell command the session tree ran, with exit status.',
+    synonyms: [
+      'shell',
+      'bash',
+      'powershell',
+      'pwsh',
+      'commands',
+      'terminal',
+      'cli',
+      'fail',
+    ],
   },
   {
     scope: 'session',

@@ -56,6 +56,14 @@ const { writeTelemetry } = require('./write-telemetry');
 const { uploadFile, uploadFileChunked, uploadFileMaybeCompressed, CHUNK_SIZE_BYTES, acquireUploadLockWithWait, releaseUploadLock, describeUploadLockHolder, formatServerOrigin } = require('./upload-logs');
 const { collectScopedFiles, findProjectSlugDirs, transcriptBelongsToRepo } = require('./session-files');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
+const {
+  uploadWithAppend, stateAfterFull, appendStateForEntry, readScopedAppendState, failedUploadsIncludeKey,
+  formatAppendResultLine, formatAppendFallbackLine,
+} = require('./append-upload');
+const {
+  MANIFEST_V2_NAME, decideUploadSkip, paramsSha256, readManifestV1, writeManifestV1, readManifestV2, writeManifestV2,
+  recordScopedClaudeUpload, forgetFailedUploadsInMaps, forgetFailedUploads,
+} = require('./upload-skip');
 const { buildProcessMarkerEnv, killProcessTree } = require('./process-marker');
 const { readKnownSnapshots, rememberSnapshot, forgetSnapshot, recordSessionSnapshot } = require('./harness-state');
 const { buildHarnessSnapshot, HARNESS_SNAPSHOT_SCHEMA_VERSION } = require('./harness-snapshot');
@@ -190,59 +198,39 @@ function writeCodeInventoryState(workDir, roots) {
 
 /** @param {string} manifestPath @returns {Map<string, number>} */
 function readManifest(manifestPath) {
-  const map = new Map();
-  try {
-    const lines = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n/);
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const spaceIdx = trimmed.lastIndexOf(' ');
-      if (spaceIdx === -1) continue;
-      const key = trimmed.slice(0, spaceIdx);
-      const sizeStr = trimmed.slice(spaceIdx + 1);
-      const size = parseInt(sizeStr, 10);
-      if (!key || isNaN(size)) continue;
-      map.set(key, size);
-    }
-  } catch {
-    // file missing or unreadable — start fresh
-  }
-  return map;
+  return readManifestV1(manifestPath);
 }
 
 /**
- * Rewrite the manifest file from the current map.
+ * Rewrite both manifests from the current maps, in the same flush: the old `.claude-logs.sent`
+ * (unchanged format, still read by older hooks) and `.claude-logs.sent.v2` (DD-26, see
+ * `upload-skip.js`). Each is written with temp file + rename, not a direct write: this rewrites the
+ * WHOLE map (tens of thousands of lines), and a crash or a full disk partway through a direct
+ * `writeFileSync` leaves a truncated manifest whose missing entries would silently look
+ * un-uploaded. A failure is logged and never stops the run.
  * @param {string} telemetryDir
  * @param {string} manifestPath
  * @param {Map<string, number>} map
+ * @param {string|null} sessionId
+ * @param {string|null} cwd
+ * @param {Map<string, object>} [mapV2] - absent only for callers that keep no v2 map
  */
-function writeManifest(telemetryDir, manifestPath, map, sessionId, cwd) {
-  const tmpPath = `${manifestPath}.tmp`;
-  try {
-    fs.mkdirSync(telemetryDir, { recursive: true });
-    let content = '';
-    for (const [key, size] of map) {
-      content += `${key} ${size}\n`;
-    }
-    // Temp file + rename, not a direct write: this rewrites the WHOLE map (tens of thousands of
-    // lines), and a crash or a full disk partway through a direct `writeFileSync` leaves a
-    // truncated manifest. `readManifest()` cannot tell a truncated file from a shorter one, so the
-    // entries past the cut would silently look un-uploaded and the next run would re-upload them.
-    // `renameSync` over an existing file is atomic on both NTFS and POSIX, so a reader sees either
-    // the old manifest or the new one — never a partial one. Same pattern `otel-receiver.js` uses
-    // for chunk files and `harness-state.js` for its own state.
-    fs.writeFileSync(tmpPath, content, 'utf8');
-    fs.renameSync(tmpPath, manifestPath);
-  } catch (err) {
-    const msg = `failed to write manifest: ${err.message}`;
+function writeManifest(telemetryDir, manifestPath, map, sessionId, cwd, mapV2) {
+  const fail = (what, err) => {
+    const msg = `failed to write ${what}: ${err.message}`;
     process.stderr.write(`send-logs-hook: ${msg}\n`);
     hookLog(HOOK_FILE, sessionId, 'error', msg, cwd);
-    // Leaving the temp behind would accumulate one file per failed write, and it is never read.
-    try {
-      fs.unlinkSync(tmpPath);
-    } catch {
-      // never existed, or already gone
-    }
+  };
+  try {
+    writeManifestV1(manifestPath, map);
+  } catch (err) {
+    fail('manifest', err);
+  }
+  if (!mapV2) return;
+  try {
+    writeManifestV2(path.join(telemetryDir, MANIFEST_V2_NAME), mapV2);
+  } catch (err) {
+    fail('manifest v2', err);
   }
 }
 
@@ -696,6 +684,8 @@ async function uploadOtelChunkNoManifest(chunk, serverUrl, apiKey, timeoutMs, cw
   const result = bodyBytes > CHUNK_SIZE_BYTES
     ? await uploadFileChunked(serverUrl, apiKey, 'claude-otel', sessionId, body, timeoutMs, null, cwd, null, null, telemetryDir, manifestKey)
     : await uploadFileMaybeCompressed(serverUrl, apiKey, 'claude-otel', sessionId, body, timeoutMs, null, cwd, null, null);
+  // DD-25: the server flags the failures it reports as delivered, so act on them here too.
+  applyScopedUploadFeedback(telemetryDir, result, manifestKey, null, cwd);
 
   if (!result.success) {
     hookLog(HOOK_FILE, null, 'fail', `${manifestKey}: ${result.reason}`, cwd);
@@ -1471,6 +1461,48 @@ function formatAbortedLine(result, left) {
 }
 
 /**
+ * The `hook.log` line for a DD-25 `sessionDeleted: true` answer. The upload counts as done and is
+ * never retried: the session was deleted on the server, which ignores everything sent for it.
+ * @param {string} manifestKey
+ * @returns {string}
+ */
+function formatSessionDeletedLine(manifestKey) {
+  return `${manifestKey}: session deleted on the server — upload ignored, not retried`;
+}
+
+/**
+ * The `hook.log` line for the manifest keys forgotten because of DD-25 `failedUploads`.
+ * @param {string[]} keys
+ * @returns {string}
+ */
+function formatFailedUploadsLine(keys) {
+  return `server reported failed uploads — will re-send: ${keys.join(', ')}`;
+}
+
+/**
+ * DD-25 feedback on a path that keeps no manifest in memory (the `SessionEnd` flush, the OTEL
+ * sweep): forget each `failedUploads` entry's keys in both manifest files so the next `Stop` scan
+ * re-sends them, and log `sessionDeleted`. The caller holds `.upload.lock`. Never throws.
+ * @param {string} telemetryDir
+ * @param {{ failedUploads?: Array<{sessionId: string, type: string}>, sessionDeleted?: true }} result
+ * @param {string} manifestKey - the upload this result belongs to (kept in the manifest)
+ * @param {string|null} sessionId
+ * @param {string|null} cwd
+ */
+function applyScopedUploadFeedback(telemetryDir, result, manifestKey, sessionId, cwd) {
+  if (result && result.sessionDeleted === true) {
+    hookLog(HOOK_FILE, sessionId, 'result', formatSessionDeletedLine(manifestKey), cwd);
+  }
+  if (!result || !Array.isArray(result.failedUploads) || result.failedUploads.length === 0) return;
+  try {
+    const removed = forgetFailedUploads(telemetryDir, result.failedUploads, manifestKey);
+    if (removed.length > 0) hookLog(HOOK_FILE, sessionId, 'result', formatFailedUploadsLine(removed), cwd);
+  } catch (err) {
+    hookLog(HOOK_FILE, sessionId, 'warn', `failed uploads not forgotten in the manifest: ${err.message}`, cwd);
+  }
+}
+
+/**
  * The `SessionEnd` flush — upload just this session's own `artisyn` and `claude` files, plus its
  * `tool-calls` upload when the CLI tool wrapper recorded anything (`collectScopedFiles`).
  *
@@ -1478,10 +1510,16 @@ function formatAbortedLine(result, left) {
  * must stay short and bounded. The full multi-session scan, manifest bookkeeping, context-injection
  * prepends, `hook-status` reporting and otel prune all stay on the `Stop` path.
  *
- * Like `prompt-upload-hook.js` this writes no `.claude-logs.sent` entry: the manifest
- * records what a *full* run has shipped, and a scoped flush that wrote to it would make the next
- * full run skip a file it never really processed. The server's upsert is idempotent, so the overlap
- * is free.
+ * Like `prompt-upload-hook.js` this records at most ONE manifest entry (DD-26 scoped-path
+ * recording): after a 201 for the ending session's own `claude` transcript, and only when
+ * `sanitizeNdjson` would drop no line of it, its key goes into both manifests with the read size
+ * and the pre-read mtime, so the next `Stop` does not re-send an unchanged transcript. Sanitizing
+ * runs here only to detect drops — the raw body is still what is sent. Nothing else is recorded:
+ * never the `artisyn` file (the full scan's body carries prepends this flush does not), never
+ * `tool-calls`. The server's upsert is idempotent, so any overlap is free.
+ *
+ * The session's own transcript tries the append path first (`uploadWithAppend`, append state read
+ * from the v2 manifest) and records the resulting append state with its entry.
  *
  * @param {string|null} cwd
  * @param {string} sessionId
@@ -1505,6 +1543,17 @@ async function runSessionEndFlush(cwd, sessionId, serverUrl, apiKey, timeoutMs, 
   for (let i = 0; i < files.length; i++) {
     const { namespace, filePath } = files[i];
     const manifestKey = `${namespace}/${path.basename(filePath)}`;
+    const isOwnTranscript = namespace === 'claude' && path.basename(filePath) === `${sessionId}.jsonl`;
+
+    // DD-26: the pre-read mtime of the session's own transcript, for the scoped-path recording.
+    let preReadMtimeMs = null;
+    if (isOwnTranscript) {
+      try {
+        preReadMtimeMs = fs.statSync(filePath).mtimeMs;
+      } catch {
+        preReadMtimeMs = null;
+      }
+    }
 
     let body;
     try {
@@ -1517,13 +1566,66 @@ async function runSessionEndFlush(cwd, sessionId, serverUrl, apiKey, timeoutMs, 
     }
 
     const bodyBytes = Buffer.byteLength(body);
+
+    // Append path for the session's own transcript (Design Decisions 18–20); any doubt falls
+    // through to the full upload below.
+    if (isOwnTranscript) {
+      const appended = await uploadWithAppend({
+        buf: body,
+        state: readScopedAppendState(telemetryDir, sessionId),
+        manifestKey, serverUrl, apiKey, namespace, sessionId,
+        parentSessionId: null, workflowRunId: null, agentMeta: null,
+        timeoutMs, hookSessionId: sessionId, cwd, telemetryDir,
+      });
+      const recordAppend = (newState) => {
+        if (preReadMtimeMs === null) return;
+        try {
+          recordScopedClaudeUpload(telemetryDir, sessionId, bodyBytes, preReadMtimeMs, newState);
+        } catch (err) {
+          hookLog(HOOK_FILE, sessionId, 'warn', `${manifestKey}: manifest not recorded: ${err.message}`, cwd);
+        }
+      };
+      let fallbackReason;
+      if (appended.kind === 'none') {
+        recordAppend(appended.newState);
+        continue;
+      } else if (appended.kind === 'appended') {
+        applyScopedUploadFeedback(telemetryDir, appended.result, manifestKey, sessionId, cwd);
+        hookLog(HOOK_FILE, sessionId, 'result', formatAppendResultLine(manifestKey, appended), cwd);
+        if (!failedUploadsIncludeKey(appended.result.failedUploads, manifestKey)) {
+          out.uploaded++;
+          recordAppend(appended.newState);
+          continue;
+        }
+        fallbackReason = 'failed-feedback'; // Design Decision 19
+      } else {
+        fallbackReason = appended.reason;
+      }
+      const fallbackLine = formatAppendFallbackLine(manifestKey, fallbackReason);
+      if (fallbackLine) hookLog(HOOK_FILE, sessionId, 'result', fallbackLine, cwd);
+    }
+
     const result = bodyBytes > CHUNK_SIZE_BYTES
       ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null, telemetryDir, manifestKey)
       : await uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null);
+    // DD-25 feedback (a failed chunked upload can still carry `failedUploads` of earlier chunks).
+    applyScopedUploadFeedback(telemetryDir, result, manifestKey, sessionId, cwd);
 
     if (result.success) {
       out.uploaded++;
       hookLog(HOOK_FILE, sessionId, 'result', `${manifestKey}: uploaded ${(bodyBytes / 1024).toFixed(0)} KB`, cwd);
+      // DD-26 scoped-path recording. Sanitizing only detects drops here: a body with a dropped
+      // line is not what the full scan would send, so it is left for the next `Stop` to record.
+      // The append state goes with it (Design Decisions 15, 19): none when the server reported
+      // this very file as failed.
+      if (isOwnTranscript && preReadMtimeMs !== null && sanitizeNdjson(body).dropped.length === 0) {
+        const fullState = failedUploadsIncludeKey(result.failedUploads, manifestKey) ? null : stateAfterFull(body);
+        try {
+          recordScopedClaudeUpload(telemetryDir, sessionId, bodyBytes, preReadMtimeMs, fullState);
+        } catch (err) {
+          hookLog(HOOK_FILE, sessionId, 'warn', `${manifestKey}: manifest not recorded: ${err.message}`, cwd);
+        }
+      }
     } else {
       failed++;
       if (isRetryableUploadFailure(result)) out.retryableFailures++;
@@ -1564,8 +1666,10 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   mode = 'in-process', stuckTakenOver = 0) {
   const manifestPath = path.join(telemetryDir, '.claude-logs.sent');
 
-  // Load manifest
+  // Load both manifests (DD-26): the old size-only one and v2 (size, pre-read mtime, params hash,
+  // `tool-calls` fingerprint). The skip test needs both; both are written in the same flush.
   const manifest = readManifest(manifestPath);
+  const manifestV2 = readManifestV2(path.join(telemetryDir, MANIFEST_V2_NAME));
 
   // -------------------------------------------------------------------------
   // §2.1 Artisyn files
@@ -1767,9 +1871,10 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   // <workDir>/tool-wrap/<sessionId>/ holds the per-call files the CLI tool wrapper wrote
   // (tool-wrap-records.js). Each session is assembled into one NDJSON file and uploaded as log kind
   // `tool-calls`; the server keeps one such log per session, so every upload re-sends the whole set.
-  // The manifest "size" of `tool-calls/<sessionId>` is a fingerprint of the source files, so an
-  // unchanged session is skipped without being assembled again. An old server stores the upload as
-  // an inert generic log. Fail-open: a failure here never affects the other namespaces.
+  // The old manifest "size" of `tool-calls/<sessionId>` is Σ(size+1) of the source files and the v2
+  // entry adds their sha256 fingerprint (`fp`, DD-26), so an unchanged session is skipped without
+  // being assembled again while a same-size rewrite is still re-sent. An old server stores the
+  // upload as an inert generic log. Fail-open: a failure here never affects the other namespaces.
   try {
     const toolWrapRecords = require('./tool-wrap-records');
     const twWorkDir = getWorkDirPath(cwd);
@@ -1780,7 +1885,17 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
         const size = toolWrapRecords.toolCallsSourceSize(twWorkDir, sessionId);
         if (size === 0) continue;
         const manifestKey = `tool-calls/${sessionId}`;
-        const filePath = manifest.get(manifestKey) === size
+        const fp = toolWrapRecords.toolCallsFingerprint(twWorkDir, sessionId);
+        const { skip } = decideUploadSkip({
+          isCurrentArtisyn: false,
+          oldSize: manifest.get(manifestKey),
+          v2: manifestV2.get(manifestKey),
+          statSize: size,
+          statMtimeMs: 0,
+          paramsSha256: paramsSha256({ type: 'tool-calls', sessionId }),
+          fp,
+        });
+        const filePath = skip
           ? toolWrapRecords.uploadFilePath(twWorkDir, sessionId)
           : toolWrapRecords.assembleToolCallsUpload(twWorkDir, sessionId);
         if (!filePath) continue;
@@ -1789,6 +1904,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
           sessionId,
           filePath,
           size,
+          fp,
           manifestKey,
           isCurrentSession: hookSessionId !== null && sessionId === hookSessionId,
         });
@@ -1819,6 +1935,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   // fingerprint is written only after a successful upload either way).
   let manifestDirtyCount = 0;
   let manifestLastFlushMs = Date.now();
+  /** v2 entries the last `pruneManifest()` removed (the return value counts the old manifest's). */
+  let prunedV2Entries = 0;
 
   /**
    * Drop manifest entries whose file is gone, so the store stays bounded.
@@ -1839,15 +1957,23 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
    */
   function pruneManifest(seenKeys) {
     let removed = 0;
-    for (const key of Array.from(manifest.keys())) {
-      if (seenKeys.has(key)) continue;
-      const slashIdx = key.indexOf('/');
-      if (slashIdx <= 0) continue; // malformed key — leave it alone
-      const namespace = key.slice(0, slashIdx);
-      if (!prunableNamespaces.has(namespace)) continue;
-      manifest.delete(key);
-      removed++;
-    }
+    /** @param {Map<string, unknown>} map @returns {number} */
+    const pruneMap = (map) => {
+      let n = 0;
+      for (const key of Array.from(map.keys())) {
+        if (seenKeys.has(key)) continue;
+        const slashIdx = key.indexOf('/');
+        if (slashIdx <= 0) continue; // malformed key — leave it alone
+        const namespace = key.slice(0, slashIdx);
+        if (!prunableNamespaces.has(namespace)) continue;
+        map.delete(key);
+        n++;
+      }
+      return n;
+    };
+    removed += pruneMap(manifest);
+    // The v2 manifest is pruned by the very same rule (DD-26), so the two never drift apart.
+    prunedV2Entries = pruneMap(manifestV2);
     return removed;
   }
 
@@ -1861,7 +1987,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     } else if (manifestDirtyCount === 0) {
       return;
     }
-    writeManifest(telemetryDir, manifestPath, manifest, hookSessionId, cwd);
+    writeManifest(telemetryDir, manifestPath, manifest, hookSessionId, cwd, manifestV2);
     manifestDirtyCount = 0;
     manifestLastFlushMs = Date.now();
   }
@@ -2177,36 +2303,76 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
    *   call passes no `snapshotQuery`, so the server never returns the field for them.
    */
   async function processFile(entry, extraEvents) {
-    const { namespace, sessionId, filePath, size, isCurrentSession, manifestKey: mkOverride, parentSessionId, workflowRunId, agentDescription, workflowPhase } = entry;
+    const { namespace, sessionId, filePath, size, fp, isCurrentSession, manifestKey: mkOverride, parentSessionId, workflowRunId, agentDescription, workflowPhase } = entry;
     const agentMeta = agentDescription || workflowPhase ? { agentDescription, workflowPhase } : null;
     const manifestKey = mkOverride ?? `${namespace}/${path.basename(filePath)}`;
     /** True when this upload is a backlog session's artisyn body carrying the OKF lines. */
     let carriedBacklogOkf = false;
+    const isCurrentArtisyn = isCurrentSession && namespace === 'artisyn';
+    const isToolCalls = namespace === 'tool-calls';
+    const isOtel = namespace === 'claude-otel';
+    const fileParamsSha256 = paramsSha256({
+      type: namespace, sessionId, parentSessionId, workflowRunId, agentDescription, workflowPhase,
+    });
 
-    // Skip logic. Applies to the current session's own files too — only the current-session
-    // artisyn entry is exempt (see the matching guard on the manifest write below).
-    if (!(isCurrentSession && namespace === 'artisyn')) {
-      const recorded = manifest.get(manifestKey);
-      if (recorded !== undefined && recorded === size) {
-        // A `claude-otel` chunk recorded at its current size has provably been uploaded already —
-        // that entry is only ever written after a successful upload. Since a chunk is immutable
-        // once written, the local copy is now pure dead weight, so delete it here too, not just on
-        // the upload path. Without this branch the chunks that were already uploaded by an earlier
-        // hook version would never be reclaimed: they are skipped before reaching the upload code,
-        // so they would sit on disk and in the manifest until retention expired them (7 days by
-        // default). On this repo that was 31,748 chunks / 473 MB and 31,745 manifest entries.
-        if (namespace === 'claude-otel') {
-          try {
-            fs.unlinkSync(filePath);
-            if (manifest.delete(manifestKey)) flushManifest(false);
-          } catch {
-            // Locked or unreadable — leave both the file and its entry alone; the retention prune
-            // is the fallback, exactly as before.
-          }
-        }
-        skippedCount++;
-        return { success: true, reason: null };
+    // The stat the skip test and the v2 entry use, taken BEFORE the read (DD-26): a write that
+    // lands between this stat and the read leaves a newer mtime on disk than the one recorded, so
+    // the next run re-sends instead of skipping it. `tool-calls` has no single source file: its
+    // "size" is Σ(size+1) of the source files and its mtime is not compared (0), `fp` covers it.
+    // `claude-otel` chunks are immutable and never get a v2 entry, so the scan size is enough.
+    let statSize = size;
+    let statMtimeMs = 0;
+    if (!isToolCalls && !isOtel && !isCurrentArtisyn) {
+      try {
+        const st = fs.statSync(filePath);
+        statSize = st.size;
+        statMtimeMs = st.mtimeMs;
+      } catch {
+        // Gone or unreadable: an impossible mtime never matches a v2 entry, so the file is "sent"
+        // and the read below reports the real error.
+        statMtimeMs = -1;
       }
+    }
+
+    // Skip logic (`decideUploadSkip`, DD-26). Applies to the current session's own files too —
+    // only the current-session artisyn entry is exempt (see the matching guard on the manifest
+    // write below). `claude-otel` keeps the size-only rule: it never gets a v2 entry.
+    const decision = decideUploadSkip({
+      isCurrentArtisyn,
+      oldSize: manifest.get(manifestKey),
+      v2: isOtel ? undefined : manifestV2.get(manifestKey),
+      statSize,
+      statMtimeMs,
+      paramsSha256: fileParamsSha256,
+      fp: isToolCalls ? fp : undefined,
+    });
+    if (decision.skip) {
+      if (decision.adopt && !isOtel) {
+        // First run of a v2-aware hook: the old manifest alone proved this upload; record the v2
+        // entry from the current stat so the next run can compare mtime / params / fp.
+        const adopted = { size: statSize, mtimeMs: statMtimeMs, paramsSha256: fileParamsSha256 };
+        if (isToolCalls && typeof fp === 'string') adopted.fp = fp;
+        manifestV2.set(manifestKey, adopted);
+        flushManifest(false);
+      }
+      // A `claude-otel` chunk recorded at its current size has provably been uploaded already —
+      // that entry is only ever written after a successful upload. Since a chunk is immutable
+      // once written, the local copy is now pure dead weight, so delete it here too, not just on
+      // the upload path. Without this branch the chunks that were already uploaded by an earlier
+      // hook version would never be reclaimed: they are skipped before reaching the upload code,
+      // so they would sit on disk and in the manifest until retention expired them (7 days by
+      // default). On this repo that was 31,748 chunks / 473 MB and 31,745 manifest entries.
+      if (namespace === 'claude-otel') {
+        try {
+          fs.unlinkSync(filePath);
+          if (manifest.delete(manifestKey)) flushManifest(false);
+        } catch {
+          // Locked or unreadable — leave both the file and its entry alone; the retention prune
+          // is the fallback, exactly as before.
+        }
+      }
+      skippedCount++;
+      return { success: true, reason: null };
     }
 
     // Read file content
@@ -2218,6 +2384,83 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       hookLog(HOOK_FILE, hookSessionId, 'fail', `${manifestKey}: cannot read file: ${err.message}`, cwd);
       failedCount++;
       return { success: false, reason: `cannot read file: ${err.message}`, retryable: true };
+    }
+    /** The byte length actually read — what both manifests record (DD-26), not the scan size. */
+    const readSize = body.length;
+    /** The raw file bytes, before sanitizing — what the append state describes. */
+    const rawBuf = body;
+
+    // Append path (traffic optimization, Design Decisions 18–21): a `claude` / `claude-subagent`
+    // transcript only grows, so when the v2 entry knows how much the server already holds, only
+    // the new complete lines are sent. Any doubt returns `full-needed` and the full upload below
+    // runs exactly as before.
+    const isClaudeLog = namespace === 'claude' || namespace === 'claude-subagent';
+    /** Why the full upload runs instead of an append (null: not a claude log). */
+    let appendFallbackReason = null;
+    if (isClaudeLog) {
+      const appended = await uploadWithAppend({
+        buf: rawBuf,
+        state: appendStateForEntry(manifestV2.get(manifestKey), fileParamsSha256),
+        manifestKey, serverUrl, apiKey, namespace, sessionId,
+        parentSessionId: parentSessionId || null,
+        workflowRunId: workflowRunId || null,
+        agentMeta, timeoutMs, hookSessionId, cwd, telemetryDir,
+      });
+      const recordAppendState = (newState) => {
+        manifest.set(manifestKey, readSize);
+        manifestV2.set(manifestKey, {
+          size: readSize,
+          mtimeMs: statMtimeMs,
+          paramsSha256: fileParamsSha256,
+          appendBytes: newState.bytes,
+          appendLines: newState.lines,
+          appendSha256: newState.sha256,
+        });
+        flushManifest(false);
+      };
+      if (appended.kind === 'none') {
+        // No new complete line since the last upload: nothing to send.
+        recordAppendState(appended.newState);
+        skippedCount++;
+        return { success: true, reason: null };
+      }
+      if (appended.kind === 'appended') {
+        const appendResult = appended.result;
+        // DD-25 feedback for OTHER keys, as on the full path; this file's own key is Design
+        // Decision 19's business and is checked right after.
+        if (Array.isArray(appendResult.failedUploads) && appendResult.failedUploads.length > 0) {
+          const forgotten = forgetFailedUploadsInMaps(manifest, manifestV2, appendResult.failedUploads, manifestKey);
+          if (forgotten.length > 0) {
+            manifestDirtyCount += forgotten.length;
+            flushManifest(false);
+            hookLog(HOOK_FILE, hookSessionId, 'result', formatFailedUploadsLine(forgotten), cwd);
+          }
+        }
+        if (appendResult.sessionDeleted === true) {
+          hookLog(HOOK_FILE, hookSessionId, 'result', formatSessionDeletedLine(manifestKey), cwd);
+        }
+        hookLog(HOOK_FILE, hookSessionId, 'result', formatAppendResultLine(manifestKey, appended), cwd);
+        if (failedUploadsIncludeKey(appendResult.failedUploads, manifestKey)) {
+          // Design Decision 19: the server could not process an earlier upload of this file, so
+          // its copy is not what the append state says — re-send the whole file now.
+          appendFallbackReason = 'failed-feedback';
+        } else {
+          recordAppendState(appended.newState);
+          uploadedCount++;
+          return {
+            success: true,
+            reason: null,
+            warnings: appendResult.warnings,
+            statusCode: appendResult.statusCode,
+            unreachable: false,
+            errorCode: appendResult.errorCode,
+          };
+        }
+      } else {
+        appendFallbackReason = appended.reason;
+      }
+      const fallbackLine = formatAppendFallbackLine(manifestKey, appendFallbackReason);
+      if (fallbackLine) hookLog(HOOK_FILE, hookSessionId, 'result', fallbackLine, cwd);
     }
 
     // No trailing-partial-line trim for otel any more: the receiver writes each chunk to a .tmp
@@ -2312,6 +2555,23 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     // Committed right away, so the next backlog file carries only the ref once the body landed.
     if (success && carriedBacklogOkf) commitOkfReport(unknownOkfSnapshotId);
 
+    // DD-25 upload feedback. `failedUploads`: the server could not process those uploads and has
+    // flagged the failures delivered — forget their keys in both in-memory manifests so this scan
+    // (if the file is still ahead in the queue) or the next one re-sends them. This upload's own
+    // key is kept: it just went through with the current bytes. `sessionDeleted`: the session is
+    // deleted on the server; the 201 counts as done and is never retried.
+    if (Array.isArray(result.failedUploads) && result.failedUploads.length > 0) {
+      const forgotten = forgetFailedUploadsInMaps(manifest, manifestV2, result.failedUploads, manifestKey);
+      if (forgotten.length > 0) {
+        manifestDirtyCount += forgotten.length;
+        flushManifest(false);
+        hookLog(HOOK_FILE, hookSessionId, 'result', formatFailedUploadsLine(forgotten), cwd);
+      }
+    }
+    if (result.sessionDeleted === true) {
+      hookLog(HOOK_FILE, hookSessionId, 'result', formatSessionDeletedLine(manifestKey), cwd);
+    }
+
     if (success) {
       // `claude-otel` chunks are DELETED once uploaded, not fingerprinted. Unlike a session
       // transcript, a chunk is immutable after it is written: the receiver writes one file per
@@ -2348,7 +2608,26 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
         // The current session's own artisyn file is the one exception: its uploaded body carries the
         // context prepends and this run's hook-status event, none of which the on-disk size reflects,
         // so an unchanged size there would wrongly skip a body that is different every run.
-        manifest.set(manifestKey, size);
+        //
+        // Both manifests get the entry in the same flush (DD-26): the old one the byte length read
+        // (Σ(size+1) for `tool-calls`), v2 that size plus the pre-read mtime, the params hash and
+        // for `tool-calls` the fingerprint.
+        const recordedSize = isToolCalls ? size : readSize;
+        const v2Entry = { size: recordedSize, mtimeMs: isToolCalls ? 0 : statMtimeMs, paramsSha256: fileParamsSha256 };
+        if (isToolCalls && typeof fp === 'string') v2Entry.fp = fp;
+        // Append state after a full upload of a claude log (Design Decisions 15 and 19): none when
+        // the server reported this very file as failed, or when the file ends in a parseable record
+        // without a newline (`stateAfterFull` → null). The next upload is then a full one again.
+        if (isClaudeLog && !failedUploadsIncludeKey(result.failedUploads, manifestKey)) {
+          const fullState = stateAfterFull(rawBuf);
+          if (fullState) {
+            v2Entry.appendBytes = fullState.bytes;
+            v2Entry.appendLines = fullState.lines;
+            v2Entry.appendSha256 = fullState.sha256;
+          }
+        }
+        manifest.set(manifestKey, recordedSize);
+        manifestV2.set(manifestKey, v2Entry);
         flushManifest(false);
       }
       uploadedCount++;
@@ -2453,11 +2732,12 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     filesToProcess.map((f) => f.manifestKey ?? `${f.namespace}/${path.basename(f.filePath)}`),
   );
   const prunedEntries = pruneManifest(seenManifestKeys);
-  if (prunedEntries > 0) {
+  if (prunedEntries > 0 || prunedV2Entries > 0) {
     // Force the write even if no upload happened this run: a pure-pruning run still shrank the map.
-    manifestDirtyCount += prunedEntries;
+    manifestDirtyCount += prunedEntries + prunedV2Entries;
     hookLog(HOOK_FILE, hookSessionId, 'result',
       `manifest prune: removed=${prunedEntries} remaining=${manifest.size}`
+      + ` v2removed=${prunedV2Entries} v2remaining=${manifestV2.size}`
       + ` namespaces=${Array.from(prunableNamespaces).sort().join(',') || 'none'}`,
       cwd);
   }
@@ -2501,6 +2781,10 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       commitOkfReport(unknownOkfSnapshotId);
     }
   }
+  // The deferred pass runs after the final flush above. It never records its own entry, but its
+  // response can carry DD-25 `failedUploads`, which `processFile` forgets in the in-memory
+  // manifests — persist that, or the next Stop would still skip the failed files. No-op when clean.
+  flushManifest(true);
 
   // Surface any server-reported broken-upload warnings the same way `timeout-on-upload`
   // does: a recommendation while the condition persists, cleared once it no longer does.

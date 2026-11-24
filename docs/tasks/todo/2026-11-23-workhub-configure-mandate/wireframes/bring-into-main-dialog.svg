@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="860" viewBox="0 0 1280 860" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <title>Bring into main — progress dialog, conflict, build failure with Retry, workspace notice (FR-19)</title>
+  <rect width="1280" height="860" fill="#ffffff"/>
+
+  <!-- dimmed workspace page behind -->
+  <line x1="0" y1="48" x2="1280" y2="48" stroke="#e5e7eb"/>
+  <text x="16" y="29" font-size="14" font-weight="600" fill="#111827">Artisyn AI Work Hub</text>
+  <text x="160" y="29" font-size="14" fill="#9ca3af">›</text>
+  <text x="176" y="29" font-size="14" fill="#6b7280">research</text>
+  <rect x="0" y="48" width="1280" height="44" fill="#f9fafb"/>
+  <rect x="0" y="92" width="256" height="508" fill="#fafafa"/>
+  <rect width="1280" height="600" fill="#000" opacity="0.5"/>
+
+  <!-- ===== A: in progress ===== -->
+  <text x="40" y="76" font-size="12" font-weight="600" fill="#ffffff">A · In progress</text>
+  <rect x="40" y="88" width="390" height="340" rx="8" fill="#ffffff"/>
+  <text x="62" y="121" font-size="17" fill="#111827">Bring test-pw into main</text>
+  <text x="404" y="122" font-size="16" fill="#6b7280">×</text>
+  <rect x="62" y="136" width="346" height="8" rx="4" fill="#e5e7eb"/>
+  <rect x="62" y="136" width="200" height="8" rx="4" fill="#3b4fd8"/>
+  <g font-size="13">
+    <text x="62" y="178" fill="#047857">✓</text><text x="84" y="178" fill="#111827">Secure commits (ws/test-pw)</text>
+    <text x="62" y="206" fill="#047857">✓</text><text x="84" y="206" fill="#111827">Merge into main</text>
+    <text x="62" y="234" fill="#3b4fd8">◐</text><text x="84" y="234" font-weight="600" fill="#111827">Apply changed devcontainer.json</text>
+    <text x="84" y="252" font-size="12" fill="#6b7280">build · postCreateCommand · new checkpoint</text>
+    <rect x="84" y="260" width="324" height="6" rx="3" fill="#e5e7eb"/>
+    <rect x="84" y="260" width="120" height="6" rx="3" fill="#3b4fd8"/>
+    <text x="62" y="292" fill="#9ca3af">○</text><text x="84" y="292" fill="#6b7280">Remove the workstream</text>
+  </g>
+  <text x="62" y="332" font-size="12" fill="#6b7280">.devcontainer/ changed in this merge, so new</text>
+  <text x="62" y="348" font-size="12" fill="#6b7280">workstreams get it — no Configure needed.</text>
+  <text x="62" y="372" font-size="12" fill="#6b7280">Closing this dialog does not stop the operation.</text>
+  <rect x="356" y="384" width="52" height="30" rx="6" fill="#fff" stroke="#d1d5db"/>
+  <text x="367" y="404" font-size="13" font-weight="600" fill="#111827">Hide</text>
+
+  <!-- ===== B: merge conflict ===== -->
+  <text x="450" y="76" font-size="12" font-weight="600" fill="#ffffff">B · Merge conflict</text>
+  <rect x="450" y="88" width="390" height="340" rx="8" fill="#ffffff"/>
+  <text x="472" y="121" font-size="17" fill="#111827">Bring test-pw into main</text>
+  <g font-size="13">
+    <text x="472" y="160" fill="#047857">✓</text><text x="494" y="160" fill="#111827">Secure commits (ws/test-pw)</text>
+    <text x="472" y="188" fill="#dc2626">✕</text><text x="494" y="188" font-weight="600" fill="#b91c1c">Merge into main — conflicts</text>
+    <text x="472" y="216" fill="#d1d5db">○</text><text x="494" y="216" fill="#9ca3af">Apply changed devcontainer.json</text>
+    <text x="472" y="244" fill="#d1d5db">○</text><text x="494" y="244" fill="#9ca3af">Remove the workstream</text>
+  </g>
+  <rect x="472" y="262" width="346" height="108" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="484" y="284" font-size="13" fill="#374151">Merge aborted. Conflicting files:</text>
+  <text x="496" y="304" font-size="12" font-family="Consolas, monospace" fill="#111827">• .devcontainer/devcontainer.json</text>
+  <text x="496" y="322" font-size="12" font-family="Consolas, monospace" fill="#111827">• package.json</text>
+  <text x="484" y="346" font-size="12" fill="#374151">Resolve them in the workstream (main is refreshed</text>
+  <text x="484" y="362" font-size="12" fill="#374151">there; ask the agent to merge it). Nothing was built.</text>
+  <rect x="690" y="384" width="128" height="30" rx="6" fill="#3b4fd8"/>
+  <text x="702" y="404" font-size="13" font-weight="600" fill="#ffffff">Back to workstream</text>
+
+  <!-- ===== C: build failed after merge ===== -->
+  <text x="860" y="76" font-size="12" font-weight="600" fill="#ffffff">C · Build failed after the merge</text>
+  <rect x="860" y="88" width="390" height="340" rx="8" fill="#ffffff"/>
+  <text x="882" y="121" font-size="17" fill="#111827">Bring test-pw into main</text>
+  <g font-size="13">
+    <text x="882" y="160" fill="#047857">✓</text><text x="904" y="160" fill="#111827">Secure commits (ws/test-pw)</text>
+    <text x="882" y="188" fill="#047857">✓</text><text x="904" y="188" fill="#111827">Merge into main</text>
+    <text x="882" y="216" fill="#dc2626">✕</text><text x="904" y="216" font-weight="600" fill="#b91c1c">Apply changed devcontainer.json</text>
+    <text x="882" y="244" fill="#047857">✓</text><text x="904" y="244" fill="#111827">Remove the workstream</text>
+  </g>
+  <rect x="882" y="258" width="346" height="80" rx="4" fill="#f8fafc" stroke="#e5e7eb"/>
+  <text x="892" y="278" font-size="11" font-family="Consolas, monospace" fill="#374151">Step 4/6 : RUN apt-get install -y chromiun</text>
+  <text x="892" y="294" font-size="11" font-family="Consolas, monospace" fill="#374151">E: Unable to locate package chromiun</text>
+  <text x="892" y="310" font-size="11" font-family="Consolas, monospace" fill="#b91c1c">build failed (exit 100)</text>
+  <text x="892" y="328" font-size="11" fill="#6b7280">… full log ⌄</text>
+  <text x="882" y="358" font-size="12" fill="#374151">The merge is kept. New workstreams use the old</text>
+  <text x="882" y="374" font-size="12" fill="#374151">container until the definition applies.</text>
+  <rect x="1124" y="384" width="56" height="30" rx="6" fill="#fff" stroke="#d1d5db"/>
+  <text x="1135" y="404" font-size="13" font-weight="600" fill="#111827">Close</text>
+  <rect x="1188" y="384" width="48" height="30" rx="6" fill="#3b4fd8"/>
+  <text x="1196" y="404" font-size="13" font-weight="600" fill="#ffffff">Retry</text>
+
+  <!-- ===== D: workspace notice after closing C ===== -->
+  <text x="40" y="470" font-size="12" font-weight="600" fill="#ffffff">D · Workspace page after the dialog was closed</text>
+  <rect x="0" y="600" width="1280" height="260" fill="#ffffff"/>
+  <line x1="0" y1="600" x2="1280" y2="600" stroke="#e5e7eb"/>
+  <rect x="0" y="600" width="1280" height="44" fill="#f9fafb"/>
+  <rect x="12" y="608" width="168" height="28" rx="14" fill="#eef0fb" stroke="#3b4fd8"/>
+  <text x="28" y="627" font-size="13" fill="#3b4fd8">main (working branch)</text>
+  <text x="200" y="627" font-size="14" font-weight="600" fill="#111827">+ Open workstream</text>
+  <rect x="0" y="644" width="1280" height="44" fill="#fffbeb"/>
+  <line x1="0" y1="688" x2="1280" y2="688" stroke="#fde68a"/>
+  <rect x="4" y="646" width="1272" height="40" rx="4" fill="none" stroke="#f59e0b" stroke-dasharray="5 3"/>
+  <text x="16" y="671" font-size="13" fill="#92400e">⚠ devcontainer.json from main is not applied yet — new workstreams use the previous container.  build failed (exit 100)</text>
+  <text x="1000" y="671" font-size="13" font-weight="600" fill="#3b4fd8">Show log</text>
+  <rect x="1078" y="652" width="56" height="28" rx="6" fill="#3b4fd8"/>
+  <text x="1088" y="671" font-size="13" font-weight="600" fill="#ffffff">Retry</text>
+  <rect x="0" y="688" width="256" height="172" fill="#fafafa"/>
+  <text x="12" y="712" font-size="12" font-weight="600" fill="#6b7280">FILES</text>
+
+  <!-- notes -->
+  <rect x="300" y="700" width="960" height="146" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+  <g font-size="12" fill="#b45309">
+    <text x="314" y="722" font-weight="600">Notes (FR-19)</text>
+    <text x="314" y="742">Replaces today's single "Bring into main" spinner; opened from the close dialog's "Bring into main" option.</text>
+    <text x="314" y="760">The apply row appears only when .devcontainer/** changed in the merge; otherwise the dialog has three steps.</text>
+    <text x="314" y="778">B: merge aborted, workstream stays open, nothing built. C: merge kept, workstream closed as "brought into main".</text>
+    <text x="314" y="796">D: banner (new, dashed) persists across reloads until an apply succeeds; Retry = the definition-apply route.</text>
+    <text x="314" y="814">While a configure session is live, A shows "Applies when configuration is finished" instead of the apply row.</text>
+    <text x="314" y="832">Closing a dialog never cancels; reopening the page shows the current step.</text>
+  </g>
+</svg>

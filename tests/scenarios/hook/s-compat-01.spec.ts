@@ -28,6 +28,10 @@
 //     201 + JSON `{warnings: []}` for a single request, `{complete: false}` then
 //     `{complete: true, warnings: [...]}` for chunks.
 //
+// Steps 9–9b (2026-11-23-session-logs-streaming, DD-34): 2.6.1 sends none of the new upload
+// params, gets none of the new response fields, and a second Stop is accepted exactly as before
+// (its own old-format manifest keeps working next to the server-side hash skip).
+//
 // Steps 10–11 (OKF tab, 2026-11-21): 2.6.1 predates the OKF snapshot AND the `git.root` field, so
 // its session is never bound (`okf_snapshot_id` null); a hook between the two (root sent, no
 // snapshot; no frozen copy exists) is uploaded inline with helpers/okf.ts. Without a snapshot the
@@ -63,6 +67,11 @@
 //     3.0.0 `Stop` therefore uploads in-process and spawns its own 3.0.0 receiver, which takes the
 //     uploader role queue-only (port busy); the next `Stop` hands off a job and that receiver runs
 //     it. The detached 3.0.0 receiver is killed through its `uploader.lock` pid at the end.
+//
+// Steps 18–19 (2026-11-24 traffic optimization, hook 3.3.0 append uploads): 3.1.0 — the hook of
+// the last release (`v1.5.1`) — re-sends a grown transcript whole on `POST /api/v2/logs` and the new
+// server stores it as before; the current hook sends the second Stop's new lines to
+// `POST /api/v2/logs/append` and the stored body still equals the file.
 //
 // Replaces:
 //   - server/test/upload-queue.e2e-spec.ts — «v1 unmodified» (1)
@@ -164,6 +173,8 @@ function transcriptLines(sid: string, branch: string, cwd: string, turns: number
 }
 
 interface ProxiedCall {
+  /** The request path, e.g. `/api/v2/logs` or `/api/v2/logs/append` (hook 3.3.0). */
+  path: string;
   query: URLSearchParams;
   status: number;
   contentType: string;
@@ -199,9 +210,11 @@ async function startStandProxy(standUrl: string): Promise<StandProxy> {
       });
     }
     const forward = () => {
-      const query = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
+      const reqUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const query = reqUrl.searchParams;
+      const reqPath = reqUrl.pathname;
       if (proxy.failChunk !== null && query.get('chunkIndex') === proxy.failChunk) {
-        calls.push({ query, status: 500, contentType: 'application/json', body: '{"message":"injected"}' });
+        calls.push({ path: reqPath, query, status: 500, contentType: 'application/json', body: '{"message":"injected"}' });
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end('{"message":"injected"}');
         return;
@@ -215,7 +228,7 @@ async function startStandProxy(standUrl: string): Promise<StandProxy> {
           up.on('data', (c: Buffer) => out.push(c));
           up.on('end', () => {
             const text = Buffer.concat(out).toString('utf8');
-            calls.push({ query, status: up.statusCode ?? 0, contentType: String(up.headers['content-type'] ?? ''), body: text });
+            calls.push({ path: reqPath, query, status: up.statusCode ?? 0, contentType: String(up.headers['content-type'] ?? ''), body: text });
             res.writeHead(up.statusCode ?? 502, up.headers);
             res.end(text);
           });
@@ -317,6 +330,7 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
   const dirs = tempDirs();
   let proxy: StandProxy | undefined;
   let lockProxy: StandProxy | undefined;
+  let appendProxy: StandProxy | undefined;
   let shared: ReceiverProcess | undefined;
   let legacyReceiver: ReceiverProcess | undefined;
   let legacyShared: ReceiverProcess | undefined;
@@ -475,6 +489,34 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
         const body: unknown = JSON.parse(c.body);
         expect(isRecord(body) && Array.isArray(body.warnings), c.body).toBe(true);
       }
+      // 2026-11-23-session-logs-streaming (DD-24/DD-25/DD-34): 2.6.1 sends neither `uploadFeedback`
+      // nor `contentSha256`, so the new server answers it exactly as before — no `failedUploads`, no
+      // `sessionDeleted` field in any response.
+      for (const c of proxy!.calls) {
+        expect(c.query.has('uploadFeedback')).toBe(false);
+        expect(c.query.has('contentSha256')).toBe(false);
+        const body: unknown = JSON.parse(c.body);
+        expect(isRecord(body) && ('failedUploads' in body || 'sessionDeleted' in body), c.body).toBe(false);
+      }
+    });
+
+    await test.step('9b. a second 2.6.1 Stop: whatever it re-sends is accepted as before (201, no new fields), nothing fails, the session is unchanged', async () => {
+      const before = proxy!.calls.length;
+      await fire('Stop');
+      const done = lastDone(hookLog());
+      expect(done.failed, hookLog().join('\n')).toBe(0);
+      await waitForQueueIdle(db, owner.id);
+      for (const c of proxy!.calls.slice(before)) {
+        expect(c.status, c.body).toBe(201);
+        const body: unknown = JSON.parse(c.body);
+        expect(isRecord(body) && ('failedUploads' in body || 'sessionDeleted' in body), c.body).toBe(false);
+      }
+      expect(await sessionRowCount(db, v26.sid)).toBe(1);
+      const status = await db.query<{ n: string }>(
+        "SELECT count(*) AS n FROM upload_queue WHERE session_id = $1 AND status = 'failed'",
+        [v26.sid],
+      );
+      expect(Number(status.rows[0].n), 'no failed queue row').toBe(0);
     });
 
     await test.step('8. the hook-status of 2.6.1 is below the baseline: hook state «outdated», ingest unaffected', async () => {
@@ -897,6 +939,72 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       expect(await storedBody(db, sid, 'claude'), 'the queued upload reached the server').toHaveLength(4);
       expect(legacyShared.exitCode(), 'the 2.32.3 receiver is still up').toBeUndefined();
     });
+
+    // Steps 18–19 (2026-11-24 traffic optimization, hook 3.3.0): append uploads against the stand.
+    appendProxy = await startStandProxy(stand.url);
+    /** A transcript of `turns` turns, written as its first `firstTurns` turns, then grown to all of them. */
+    const growingTranscript = (sid: string, repo: string, home: string, turns: number, firstTurns: number) => {
+      const rows = transcriptLines(sid, 'main', repo, turns);
+      const file = path.join(claudeProjectDir(home, repo), `${sid}.jsonl`);
+      fs.writeFileSync(file, ndjson(rows.slice(0, firstTurns * 2)));
+      return { rows, file, grow: () => fs.appendFileSync(file, ndjson(rows.slice(firstTurns * 2))) };
+    };
+
+    await test.step('18. frozen 3.1.0 (the last release before append uploads): two Stops on a growing transcript re-send it whole on POST /api/v2/logs, never the append route, and the stored body is the whole file', async () => {
+      const legacy31 = copyFrozenHook(dirs, '3.1.0');
+      expect(legacy31.frozen.version).toBe('3.1.0');
+      const repo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:compat/${run}/v31.git` });
+      const home = makeFakeHome(dirs);
+      writeStandConfig(repo, appendProxy!.url, key.key, { sendLogsTimeoutMs: 15_000 });
+      const sid = `c31-${run}`;
+      const t = growingTranscript(sid, repo, home, 3, 2);
+      const stop = () => runScript(legacy31.toolDir, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: sid, cwd: repo }, { home, timeoutMs: 60_000 });
+
+      expectRunOk(await stop(), '3.1.0 first Stop');
+      await waitForQueueIdle(db, owner.id);
+      expect(await storedBody(db, sid, 'claude')).toEqual(t.rows.slice(0, 4));
+
+      t.grow();
+      const before = appendProxy!.calls.length;
+      expectRunOk(await stop(), '3.1.0 second Stop');
+      const second = appendProxy!.calls.slice(before).filter((c) => c.query.get('sessionId') === sid && c.query.get('type') === 'claude');
+      expect(second.map((c) => `${c.path} ${c.status}`), 'the grown transcript went whole through the full route').toEqual(['/api/v2/logs 201']);
+      expect(appendProxy!.calls.some((c) => c.path.endsWith('/append')), '3.1.0 never calls the append route').toBe(false);
+      expect(lastDone(readHookLog(repo, 'send-logs-hook.js')).failed).toBe(0);
+      await waitForQueueIdle(db, owner.id);
+      expect(await storedBody(db, sid, 'claude'), 'the body is the whole grown file').toEqual(t.rows);
+    });
+
+    await test.step('19. the current hook against the stand: the first Stop is a full upload, the second sends only the new lines to POST /api/v2/logs/append (startLine = the stored line count) and the stored body equals the file', async () => {
+      const hook = copyToolDir(dirs);
+      const repo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:compat/${run}/v33.git` });
+      const home = makeFakeHome(dirs);
+      writeStandConfig(repo, appendProxy!.url, key.key, { sendLogsTimeoutMs: 15_000 });
+      const sid = `c33-${run}`;
+      const t = growingTranscript(sid, repo, home, 3, 2);
+      const stop = () => runScript(hook, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: sid, cwd: repo }, { home, timeoutMs: 60_000 });
+      const callsOf = (from: number) => appendProxy!.calls.slice(from).filter((c) => c.query.get('sessionId') === sid && c.query.get('type') === 'claude');
+
+      const start = appendProxy!.calls.length;
+      expectRunOk(await stop(), 'first Stop');
+      expect(callsOf(start).map((c) => `${c.path} ${c.status}`), 'no append state yet: a full upload').toEqual(['/api/v2/logs 201']);
+      await waitForQueueIdle(db, owner.id);
+      expect(await storedBody(db, sid, 'claude')).toEqual(t.rows.slice(0, 4));
+
+      t.grow();
+      const before = appendProxy!.calls.length;
+      expectRunOk(await stop(), 'second Stop');
+      const second = callsOf(before);
+      expect(second.map((c) => `${c.path} ${c.status}`), 'only the delta, through the append route').toEqual(['/api/v2/logs/append 201']);
+      expect(second[0].query.get('startLine')).toBe('4');
+      const answer: unknown = JSON.parse(second[0].body);
+      expect(isRecord(answer) && Array.isArray(answer.warnings), second[0].body).toBe(true);
+      const log = readHookLog(repo, 'send-logs-hook.js');
+      expect(log.some((l) => l.includes(`claude/${sid}.jsonl: appended 2 lines from line 4: `)), log.join('\n')).toBe(true);
+      expect(lastDone(log).failed).toBe(0);
+      await waitForQueueIdle(db, owner.id);
+      expect(await storedBody(db, sid, 'claude'), 'the stored body equals the file').toEqual(t.rows);
+    });
   } finally {
     killUploaderOf(queueHome);
     await stopReceiver(shared);
@@ -904,6 +1012,7 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
     await stopReceiver(legacyShared);
     await proxy?.close();
     await lockProxy?.close();
+    await appendProxy?.close();
     dirs.cleanup();
   }
 });

@@ -35,8 +35,12 @@ From the repo root (see [overview.md](./overview.md) for the full command table)
 
 ```sh
 npm run test:e2e        # playwright test --project=core     (fast @core loop, < 3 min)
-npm run test:e2e:full   # playwright test --project=extended (all tests)
+npm run test:e2e:full   # playwright test --project=extended (every test NOT tagged @core)
 ```
+
+The two projects do not overlap: `extended` has `grepInvert: /@core/`, so the final verification,
+which runs both `e2e-fast` and `e2e-full`, covers each test exactly once. To run the whole suite by
+hand, run both commands.
 
 The suite does **not** start anything: it drives the dev backend on `:3000` (`npm run start:dev`
 from `server/`) through the Vite client on `:5173` (`bun run dev` from `client/`), and its DB helper

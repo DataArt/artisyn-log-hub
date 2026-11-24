@@ -85,12 +85,15 @@ export interface OkfSnapshotSpec {
  *    nothing, package 3's trail `hit`), else `bytes` long (default 100);
  *  - `bash`: the Bash tool with `command` as given (paths in it are the caller's business), its
  *    result `result` (default empty);
+ *  - `psRead`: the PowerShell tool reading a repo-relative file — `Get-Content '<absolute path>'`,
+ *    its result `result` (default 1000 chars);
  *  - `edit`: the Edit tool on a repo-relative file.
  */
 export type OkfAction =
   | { read: string; bytes?: number; result?: string; offset?: number; limit?: number }
   | { grep: string; bytes?: number; pattern?: string; result?: string }
   | { bash: string; result?: string }
+  | { psRead: string; result?: string }
   | { edit: string };
 
 export interface OkfSubAgentSpec {
@@ -294,7 +297,7 @@ export function agentTranscriptLines(o: AgentTranscriptOptions, steps: readonly 
   return lines;
 }
 
-/** The tool step of one OKF action (Read / Grep / Bash / Edit under `OKF_REPO_ROOT`). */
+/** The tool step of one OKF action (Read / Grep / Bash / PowerShell / Edit under `OKF_REPO_ROOT`). */
 function okfStep(action: OkfAction): AgentToolStep {
   if ('read' in action) {
     const input: Record<string, unknown> = { file_path: abs(action.read) };
@@ -311,6 +314,13 @@ function okfStep(action: OkfAction): AgentToolStep {
   }
   if ('bash' in action) {
     return { name: 'Bash', input: { command: action.bash }, result: action.result ?? '' };
+  }
+  if ('psRead' in action) {
+    return {
+      name: 'PowerShell',
+      input: { command: `Get-Content '${abs(action.psRead)}'` },
+      result: action.result ?? 'p'.repeat(1000),
+    };
   }
   return {
     name: 'Edit',

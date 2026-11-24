@@ -291,6 +291,16 @@ export const WORLD_V1_REFS: Readonly<Record<string, string | number>> = (() => {
 /** Value every serial sequence is set to after loading (the next generated id is 1001). */
 export const WORLD_V1_SEQUENCE_FLOOR = 1000;
 
+/**
+ * `logs.id` of every SESSIONS entry's own rows (artisyn when it has one, claude), filled while
+ * the statements are built. `resetWorldV1` pins each log's `body_rev` to its id, so a part's
+ * ETag (2026-11-23 session-logs-streaming DD-8/DD-12) is `"<id>"`.
+ */
+export const WORLD_V1_LOG_IDS: Record<
+  string,
+  { artisyn?: number; claude: number }
+> = {};
+
 // -------------------------------------------------------------------------------------------
 // Log bodies
 
@@ -1329,7 +1339,7 @@ function buildStatements(): WorldStatement[] {
   // chunk 13); every other session predates the snapshot feature and stays NULL.
   // agent_description / workflow_phase (sub-agent .meta.json labels): only s03 carries them.
   // okf_extract_version (2026-11-03 OKF value signals, DD-11): only the OKF tree s02 -> s03 was
-  // extracted by the current extractor (4, OKF v0.3 pointer resolution); every other session
+  // extracted by the current extractor (5, PowerShell calls); every other session
   // is "no OKF analysis yet".
   const S = WORLD_V1.sessions;
   out.push(
@@ -1370,7 +1380,7 @@ function buildStatements(): WorldStatement[] {
           WORLD_V1.okfSnapshotId,
           null,
           null,
-          4,
+          5,
         ],
         [
           S.s03.id,
@@ -1382,7 +1392,7 @@ function buildStatements(): WorldStatement[] {
           null,
           'contract-desc',
           'Implement',
-          4,
+          5,
         ],
         [
           S.s04.id,
@@ -1567,8 +1577,7 @@ function buildStatements(): WorldStatement[] {
   // Logs: artisyn + claude per session (ids 1..), each linked to its session's repository.
   const logRows: unknown[][] = [];
   const logRepoRows: unknown[][] = [];
-  const logIdBySession: Record<string, { artisyn?: number; claude: number }> =
-    {};
+  const logIdBySession = WORLD_V1_LOG_IDS;
   let logId = 0;
   for (const s of SESSIONS) {
     const pk = S[s.key].id;
@@ -4248,4 +4257,13 @@ export async function resetWorldV1(
         AND pg_get_serial_sequence(quote_ident(c.table_name), c.column_name) IS NOT NULL`,
     [schema, WORLD_V1_SEQUENCE_FLOOR],
   );
+  // 2026-11-23 session-logs-streaming DD-8: the `logs_body_guard` trigger draws `body_rev` from
+  // `logs_body_rev_seq` on every insert, and that sequence is owned by no column, so the
+  // floor above never resets it and the values drift from load to load. Pin each world log's
+  // revision to its id (an UPDATE that does not touch `body` does not fire the trigger), and
+  // move the sequence to the floor so a revision the API assigns later never repeats one.
+  await db.query(`UPDATE logs SET body_rev = id`);
+  await db.query(`SELECT setval('logs_body_rev_seq', $1)`, [
+    WORLD_V1_SEQUENCE_FLOOR,
+  ]);
 }

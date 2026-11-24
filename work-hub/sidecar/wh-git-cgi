@@ -1,0 +1,94 @@
+#!/bin/sh
+# CGI front of the Work Hub git proxy (http://wh-git/git/<remote id>.git):
+#   1. checks the capability sent as the Basic password against /run/wh/caps/<sha256>;
+#   2. on a ref advertisement (info/refs) syncs the bare mirror /srv/git/<remote id>.git from the
+#      real host;
+#   3. hands the request to `git http-backend` (pushes then go through the pre-receive hook).
+# Error transport: 401 text/plain for a missing/unknown capability and for "rejected by the host"
+# (git prints the body as `remote: <msg>`), an `ERR` pkt-line in a 200 advertisement for every
+# other connection-level error (git prints `fatal: remote error: <msg>`).
+set -u
+STATE=/run/wh
+export HOME=$STATE/home
+TAB=$(printf '\t')
+NL='
+'
+path=${PATH_INFO:-}
+query=${QUERY_STRING:-}
+
+# plain <status line> <message>
+plain() {
+  printf 'Status: %s\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-cache\r\n' "$1"
+  [ "${1%% *}" = 401 ] && printf 'WWW-Authenticate: Basic realm="Work Hub"\r\n'
+  printf '\r\n%s\n' "$2"
+  exit 0
+}
+
+# err_adv <message>: an ERR pkt-line inside a 200 ref advertisement. Outside a ref advertisement
+# there is no place for it, so a plain 403 carries the message instead.
+err_adv() {
+  case "$path" in
+    */info/refs) ;;
+    *) plain "403 Forbidden" "$1" ;;
+  esac
+  svc=${query#*service=}
+  svc=${svc%%&*}
+  case "$svc" in
+    git-upload-pack|git-receive-pack) ;;
+    *) svc=git-upload-pack ;;
+  esac
+  head="# service=$svc"
+  msg="ERR $1"
+  # pkt-line length = 4 + payload bytes (including the newline); count bytes, not characters.
+  hl=$(printf '%s\n' "$head" | wc -c)
+  ml=$(printf '%s\n' "$msg" | wc -c)
+  printf 'Content-Type: application/x-%s-advertisement\r\nCache-Control: no-cache\r\n\r\n' "$svc"
+  printf '%04x%s\n0000' $((hl + 4)) "$head"
+  printf '%04x%s\n' $((ml + 4)) "$msg"
+  exit 0
+}
+
+case "$path" in
+  *"$NL"*) plain "404 Not Found" "Work Hub: unknown remote" ;;
+esac
+rid=$(printf '%s' "$path" | sed -n 's#^/\([0-9a-f-]\{36\}\)\.git/.*#\1#p')
+{ [ -n "$rid" ] && [ -f "$STATE/remotes/$rid" ]; } || plain "404 Not Found" "Work Hub: unknown remote"
+
+# Capability: Basic password, checked by its sha256.
+auth=${HTTP_AUTHORIZATION:-}
+case "$auth" in
+  "Basic "*) ;;
+  *) plain "401 Unauthorized" "Work Hub: unknown or revoked capability" ;;
+esac
+cap=$(printf '%s' "${auth#Basic }" | base64 -d 2>/dev/null | sed '1s/^[^:]*://')
+[ -n "$cap" ] || plain "401 Unauthorized" "Work Hub: unknown or revoked capability"
+h=$(printf '%s' "$cap" | sha256sum | cut -d' ' -f1)
+[ -f "$STATE/caps/$h" ] || plain "401 Unauthorized" "Work Hub: unknown or revoked capability"
+
+# Remote record (D4): one tab-separated line, read as data and never sourced.
+r_id='' r_conn='' r_name='' r_up='' r_block='' r_only=''
+IFS="$TAB" read -r r_id r_conn r_name r_up r_block r_only < "$STATE/remotes/$rid" || true
+[ "$r_id" = "$rid" ] || plain "404 Not Found" "Work Hub: unknown remote"
+
+grep -qx "$rid" "$STATE/caps/$h" \
+  || err_adv "Work Hub: this workspace has no grant for the connection of this remote"
+{ [ "$r_conn" != "-" ] && [ -d "$STATE/conns/$r_conn" ]; } \
+  || err_adv "Work Hub connection $r_name was deleted — rebind the remote in workspace settings"
+
+case "$path" in
+  */info/refs)
+    if ! out=$(/usr/local/bin/wh-git-ctl sync "$rid" 2>&1); then
+      case "$out" in
+        *"Host key verification failed"*|*"REMOTE HOST IDENTIFICATION HAS CHANGED"*)
+          err_adv "Work Hub connection $r_name: the host key of the git host changed — check it and re-pin it in Settings" ;;
+        *"Permission denied"*|*" 401"*|*" 403"*|*"Authentication failed"*|*"could not read Username"*)
+          plain "401 Unauthorized" "Work Hub connection $r_name was rejected by the host — update its credential in Settings" ;;
+        *)
+          last=$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d' | tail -n 1)
+          err_adv "Work Hub connection $r_name: ${last:-the sync with the git host failed}" ;;
+      esac
+    fi ;;
+esac
+
+export GIT_PROJECT_ROOT=/srv/git GIT_HTTP_EXPORT_ALL=1 REMOTE_USER=wh WH_REMOTE_ID=$rid
+exec git http-backend

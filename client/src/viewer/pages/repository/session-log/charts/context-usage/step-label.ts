@@ -15,6 +15,7 @@ export function fullToolDetail(
     case 'MultiEdit':
       return s(input.file_path);
     case 'Bash':
+    case 'PowerShell':
       return s(input.command);
     case 'Glob':
     case 'Grep': {

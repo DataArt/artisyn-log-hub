@@ -1,0 +1,110 @@
+[
+  {
+    "id": "IS-01",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 1, "userId": 7, "statsEditSha256": "ed01"},
+      "incoming": {"logType": "claude", "bodySha256": "aa11", "userId": 7, "treeEditSha256": "ed01"}
+    },
+    "expected": "skip",
+    "note": "Transcript, everything equal: same hash, version 1 = INGEST_VERSION, same user, same edit sha."
+  },
+  {
+    "id": "IS-02",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 1, "userId": 7, "statsEditSha256": ""},
+      "incoming": {"logType": "claude-subagent", "bodySha256": "aa11", "userId": 7, "treeEditSha256": ""}
+    },
+    "expected": "skip",
+    "note": "Sub-agent transcript in a tree with no edit records: '' equals ''."
+  },
+  {
+    "id": "IS-03",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 1, "userId": 7, "statsEditSha256": null},
+      "incoming": {"logType": "tool-calls", "bodySha256": "aa11", "userId": 7, "treeEditSha256": "ed02"}
+    },
+    "expected": "skip",
+    "note": "tool-calls ignores the edit sha: its stored NULL and the tree's ed02 differ, still skip."
+  },
+  {
+    "id": "IS-04",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 1, "userId": 7, "statsEditSha256": "ed01"},
+      "incoming": {"logType": "claude", "bodySha256": "bb22", "userId": 7, "treeEditSha256": "ed01"}
+    },
+    "expected": "process",
+    "note": "Body hash differs."
+  },
+  {
+    "id": "IS-05",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 0, "userId": 7, "statsEditSha256": "ed01"},
+      "incoming": {"logType": "claude", "bodySha256": "aa11", "userId": 7, "treeEditSha256": "ed01"}
+    },
+    "expected": "process",
+    "note": "Stored by an older INGEST_VERSION (0 is not 1)."
+  },
+  {
+    "id": "IS-06",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": null, "userId": 7, "statsEditSha256": "ed01"},
+      "incoming": {"logType": "claude", "bodySha256": "aa11", "userId": 7, "treeEditSha256": "ed01"}
+    },
+    "expected": "process",
+    "note": "No stored version (legacy row) never matches."
+  },
+  {
+    "id": "IS-07",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 1, "userId": 7, "statsEditSha256": "ed01"},
+      "incoming": {"logType": "claude", "bodySha256": "aa11", "userId": 8, "treeEditSha256": "ed01"}
+    },
+    "expected": "process",
+    "note": "Different user."
+  },
+  {
+    "id": "IS-08",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 1, "userId": 7, "statsEditSha256": "ed01"},
+      "incoming": {"logType": "claude", "bodySha256": "aa11", "userId": 7, "treeEditSha256": "ed02"}
+    },
+    "expected": "process",
+    "note": "Transcript whose tree edit records changed since its stats were extracted."
+  },
+  {
+    "id": "IS-09",
+    "input": {
+      "stored": {"bodySha256": null, "ingestVersion": 1, "userId": 7, "statsEditSha256": "ed01"},
+      "incoming": {"logType": "claude", "bodySha256": "aa11", "userId": 7, "treeEditSha256": "ed01"}
+    },
+    "expected": "process",
+    "note": "Stored hash cleared (a writer that does not know the hash rewrote the body)."
+  },
+  {
+    "id": "IS-10",
+    "input": {
+      "stored": null,
+      "incoming": {"logType": "claude", "bodySha256": "aa11", "userId": 7, "treeEditSha256": ""}
+    },
+    "expected": "process",
+    "note": "No stored row: a first upload."
+  },
+  {
+    "id": "IS-11",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 1, "userId": 7, "statsEditSha256": null},
+      "incoming": {"logType": "artisyn", "bodySha256": "aa11", "userId": 7, "treeEditSha256": ""}
+    },
+    "expected": "process",
+    "note": "artisyn is never skipped (hook status, OTEL status, harness, links heal from it)."
+  },
+  {
+    "id": "IS-12",
+    "input": {
+      "stored": {"bodySha256": "aa11", "ingestVersion": 1, "userId": 7, "statsEditSha256": null},
+      "incoming": {"logType": "claude-otel", "bodySha256": "aa11", "userId": 7, "treeEditSha256": ""}
+    },
+    "expected": "process",
+    "note": "claude-otel is chunk-shaped, never skipped."
+  }
+]

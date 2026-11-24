@@ -37,12 +37,14 @@ import {
   toLocalRepoIdentity,
 } from '../logs/local-repo-identity';
 import { normalizeRepoUrl } from '../logs/repo-url-normalizer';
+import { clearSessionTombstones } from '../sessions/session-tombstone.service';
 import {
   findPersonalRepoConfig,
   seedTeamRepoConfig,
 } from '../logs/team-repo-config';
 import { UsersService } from '../users/users.service';
 import { TeamRepoRecomputeService } from './team-repo-recompute.service';
+import { PartCacheService } from '../logs/part-cache/part-cache.service';
 
 const TEAM_CREATION_DEFAULT_CONFIG: RepoConfigJson = {
   fileCategories: [{ name: 'docs', patterns: ['\\.md$'] }],
@@ -57,6 +59,7 @@ export class TeamsService {
     private readonly usersService: UsersService,
     private readonly teamRepoRecompute: TeamRepoRecomputeService,
     private readonly configService: ConfigService,
+    private readonly partCache: PartCacheService,
   ) {}
 
   async createTeam(ownerId: number, name: string) {
@@ -603,7 +606,11 @@ export class TeamsService {
         return; // Another team still uses this URL — leave repositories and logs intact
       }
 
-      // 4. No other team references the URL — delete logs and repositories
+      // 4. No other team references the URL — delete logs and repositories.
+      // Fresh start (DD-29 of 2026-11-23-session-logs-streaming): the repository's deleted
+      // sessions and their tombstones go too.
+      await clearSessionTombstones(tx, { repositoryUrl: repoUrl });
+
       const repoRows = await tx
         .select({ id: schema.repositories.id })
         .from(schema.repositories)
@@ -637,6 +644,7 @@ export class TeamsService {
 
           // 4c. Delete logs (cascades log_repositories and log_contexts)
           await tx.delete(schema.logs).where(inArray(schema.logs.id, logIds));
+          this.partCache.removeLogFolders(logIds);
 
           // 4d. Delete orphaned sessions (those with no remaining logs)
           if (sessionIds.length > 0) {

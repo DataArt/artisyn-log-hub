@@ -14,28 +14,44 @@ import {
   deletedSessionLog,
   logContexts,
   logs,
+  logsOtel,
   otelAgentTotals,
+  otelApiCalls,
   otelCalls,
   otelCostBuckets,
   otelReclassQueue,
   otelSessionState,
   otelSessionTotals,
   otelSpans,
+  sessionAttribution,
+  sessionAttributionRuns,
   sessionCallTokens,
+  sessionCauseStats,
+  sessionChangedPaths,
   sessionCosts,
   sessionFileStats,
+  sessionHarnessUsage,
   sessionOkfAccess,
   sessionOkfEvent,
   sessionOkfPointer,
+  sessionPromptWatermark,
+  sessionRequestIds,
   sessionStats,
+  sessionToolStats,
   sessionToolUsage,
   sessions,
+  turnEndAdvisorRuns,
   userFavoriteSessions,
 } from '../database/schema/index';
 import { deleteOrphanHarnessSnapshots } from '../logs/harness-snapshot';
 import { deleteOrphanOkfSnapshots } from '../logs/okf/okf-snapshot';
-import { getDescendantSessionIds } from '../logs/session-tree.sql';
+import {
+  getDescendantSessionIds,
+  lockSessionTreeForIngest,
+  topAncestorIdsSql,
+} from '../logs/session-tree.sql';
 import { UploadQueueService } from '../logs/upload-queue.service';
+import { PartCacheService } from '../logs/part-cache/part-cache.service';
 
 type AuditRow = {
   sessionPk: number;
@@ -80,6 +96,7 @@ export class SessionsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly uploadQueueService: UploadQueueService,
+    private readonly partCache: PartCacheService,
   ) {}
 
   async deleteSession(
@@ -121,75 +138,155 @@ export class SessionsService {
       );
     }
 
-    // Step 4: Find all descendant sessions (any nesting depth, not just direct
-    // children) — `parent_session_id` may now point at an intermediate agent rather
-    // than always this root session, so a one-level match would leave orphaned
-    // grandchild/great-grandchild rows behind.
-    const descendantsMap = await getDescendantSessionIds(this.db, [parentId]);
-    const allDescendantIds = descendantsMap.get(parentId) ?? [];
-    const childRows =
-      allDescendantIds.length === 0
-        ? []
-        : await this.db
-            .select({ id: sessions.id })
-            .from(sessions)
-            .where(
-              and(
-                inArray(sessions.id, allDescendantIds),
-                eq(sessions.deleted, false),
-              ),
-            );
+    // Step 4: Mark the tree deleted, write its audit rows and purge its data, in one
+    // transaction.
+    const allIds = await this.db.transaction(async (tx) => {
+      // DD-27 of 2026-11-23-session-logs-streaming: the tree's ingest lock first, so no upload
+      // of this tree is mid-transaction while it is marked deleted — every ingest path checks
+      // the tombstone under the same lock, and sees it once this commits.
+      await lockSessionTreeForIngest(tx, sessionIdStr, undefined);
 
-    // Step 5: Collect all IDs to purge
-    const allIds = [parentId, ...childRows.map((c) => c.id)];
-
-    // Step 5b: Capture audit data for each session before purging
-    const auditRows = await this.captureAuditRows(allIds);
-
-    // Step 6: Purge all data inside a transaction
-    await this.db.transaction(async (tx) => {
-      // a0. Write audit log before purging
-      await tx.insert(deletedSessionLog).values(
-        auditRows.map((r) => ({
-          sessionId: r.sessionIdStr,
-          sessionPk: r.sessionPk,
-          ownerUserId: ownerUserId ?? null,
-          deletedByUserId: requesterId,
-          startTime: r.startTime,
-          endTime: r.endTime,
-          workTimeMs: r.workTimeMs,
-          totalCost: r.totalCost,
-        })),
-      );
-
-      await this.purgeSessionChildData(tx, allIds);
-
-      // Step 8: Soft-delete the session rows
-      await tx
-        .update(sessions)
-        .set({ deleted: true })
-        .where(inArray(sessions.id, allIds));
+      const ids = await this.markSessionTreeDeleted(tx, parentId, requesterId);
+      await this.purgeSessionChildData(tx, ids);
+      return ids;
     });
 
     this.logger.log(
-      `Session ${sessionIdStr} and ${childRows.length} child(ren) soft-deleted by user ${requesterId}`,
+      `Session ${sessionIdStr} and ${allIds.length - 1} child(ren) soft-deleted by user ${requesterId}`,
     );
   }
 
   /**
+   * Marks a session and its live descendants deleted (DD-28 of 2026-11-23-session-logs-streaming)
+   * inside the caller's transaction, which should hold the tree's ingest lock. Writes one
+   * `deleted_session_log` row per session with the tree owner (`owner_user_id`) and the tree's
+   * repository URL (`repository_url`, DD-29) — written BEFORE the data is purged, since the
+   * audit figures and both columns are read from it. Returns the pks marked, root first; empty
+   * when the root is already deleted. Does NOT purge the child data: callers pass the pks to
+   * {@link purgeSessionChildData}.
+   *
+   * Descendants are walked at any depth (`parent_session_id` may point at an intermediate
+   * agent). `deletedByUserId` is null for the automated cleanup.
+   */
+  async markSessionTreeDeleted(
+    tx: DrizzleDb,
+    rootPk: number,
+    deletedByUserId: number | null,
+  ): Promise<number[]> {
+    const [root] = await tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(and(eq(sessions.id, rootPk), eq(sessions.deleted, false)))
+      .limit(1);
+    if (!root) return [];
+
+    const descendantIds =
+      (await getDescendantSessionIds(tx, [rootPk])).get(rootPk) ?? [];
+    const allIds = [rootPk, ...descendantIds.filter((id) => id !== rootPk)];
+
+    const { ownerUserId, repositoryUrl } = await this.resolveTreeOwnerAndRepo(
+      tx,
+      rootPk,
+    );
+    const auditRows = await this.captureAuditRows(tx, allIds);
+
+    if (auditRows.length > 0) {
+      await tx
+        .insert(deletedSessionLog)
+        .values(
+          auditRows.map((r) => ({
+            sessionId: r.sessionIdStr,
+            sessionPk: r.sessionPk,
+            ownerUserId,
+            deletedByUserId,
+            startTime: r.startTime,
+            endTime: r.endTime,
+            workTimeMs: r.workTimeMs,
+            totalCost: r.totalCost,
+            repositoryUrl,
+          })),
+        )
+        .onConflictDoNothing({ target: deletedSessionLog.sessionPk });
+    }
+
+    await tx
+      .update(sessions)
+      .set({ deleted: true })
+      .where(inArray(sessions.id, allIds));
+    return allIds;
+  }
+
+  /**
+   * The owner and repository URL a deleted tree's audit rows carry (DD-29 of
+   * 2026-11-23-session-logs-streaming), read before its data is purged.
+   *
+   * - Owner: the `user_id` of the root's `artisyn` log, else of any of its logs (a bare
+   *   sub-agent session has no artisyn log), else of its `logs_otel` rows, else its OTEL state
+   *   row's (a realtime-only session).
+   * - Repository URL: `repositories.repo_url` of the lowest `repo_id` linked to the root's
+   *   `artisyn` log. A sub-agent root has none, so it falls back to its top ancestor's, then to
+   *   the URL on its parent's `deleted_session_log` row (a sub-agent caught by the cleanup after
+   *   its parent was deleted and purged). NULL when none of them has a repository.
+   */
+  private async resolveTreeOwnerAndRepo(
+    db: DrizzleDb,
+    rootPk: number,
+  ): Promise<{ ownerUserId: number | null; repositoryUrl: string | null }> {
+    const rootArray = sql`${`{${rootPk}}`}::bigint[]`;
+    const res = await db.execute(sql`
+      WITH RECURSIVE ${topAncestorIdsSql(rootArray)},
+      repo_of AS (
+        SELECT l.session_id, r.repo_url, lr.repo_id
+        FROM logs l
+        JOIN log_repositories lr ON lr.log_id = l.id
+        JOIN repositories r ON r.id = lr.repo_id
+        WHERE l.log_type = 'artisyn'
+      )
+      SELECT
+        COALESCE(
+          (SELECT l.user_id FROM logs l WHERE l.session_id = ${rootPk}
+            ORDER BY CASE WHEN l.log_type = 'artisyn' THEN 0 ELSE 1 END, l.id LIMIT 1),
+          (SELECT o.user_id FROM logs_otel o WHERE o.session_id = ${rootPk}
+            ORDER BY o.id LIMIT 1),
+          (SELECT st.user_id FROM otel_session_state st WHERE st.session_id = ${rootPk})
+        ) AS owner_user_id,
+        COALESCE(
+          (SELECT ro.repo_url FROM repo_of ro WHERE ro.session_id = ${rootPk}
+            ORDER BY ro.repo_id LIMIT 1),
+          (SELECT ro.repo_url FROM repo_of ro
+            JOIN top_ancestors t ON t.top_id = ro.session_id
+            ORDER BY ro.repo_id LIMIT 1),
+          (SELECT d.repository_url FROM sessions s
+            JOIN deleted_session_log d ON d.session_id = s.parent_session_id
+            WHERE s.id = ${rootPk} AND d.repository_url IS NOT NULL
+            ORDER BY d.id LIMIT 1)
+        ) AS repository_url
+    `);
+    const row = (
+      res.rows as unknown as {
+        owner_user_id: number | string | null;
+        repository_url: string | null;
+      }[]
+    )[0];
+    return {
+      ownerUserId:
+        row?.owner_user_id == null ? null : Number(row.owner_user_id),
+      repositoryUrl: row?.repository_url ?? null,
+    };
+  }
+
+  /**
    * Deletes all child data (session_stats, session_call_tokens, session_costs,
-   * user_favorite_sessions, session_file_stats, session_okf_access, session_tool_usage, logs, and
-   * orphaned contexts) for
-   * the given session ids. The two cost tables would cascade on a hard delete of
-   * the `sessions` row, but a soft delete keeps that row, so they are purged here.
+   * user_favorite_sessions, session_file_stats, session_okf_access, session_tool_usage, logs,
+   * orphaned contexts and the DD-28 survivor tables) for the given session ids. Every
+   * `sessions`-keyed table would cascade on a hard delete of the `sessions` row, but a soft
+   * delete keeps that row, so they are purged here.
    * Does NOT touch the `sessions` rows themselves or write audit log rows —
    * callers decide the final disposition (soft-delete vs. hard-delete) and
    * whether/how to record an audit trail.
    */
-  private async purgeSessionChildData(
-    tx: DrizzleDb,
-    ids: number[],
-  ): Promise<void> {
+  async purgeSessionChildData(tx: DrizzleDb, ids: number[]): Promise<void> {
+    if (ids.length === 0) return;
     // 0. OTEL facts (DD-25). The state row goes first: every OTEL writer locks it FOR UPDATE
     // before its deleted check (DD-2), so this waits for a running writer, and a later writer
     // finds no row (or `deleted = true`) and writes nothing. All seven tables would cascade on a
@@ -211,6 +308,36 @@ export class SessionsService {
     await tx
       .delete(otelReclassQueue)
       .where(inArray(otelReclassQueue.sessionId, ids));
+
+    // 0b. The DD-28 survivors (2026-11-23-session-logs-streaming): tables that used to outlive a
+    // soft delete. All cascade on a hard delete; `upload_queue_measurements` is kept on purpose
+    // (an ingest-performance record, not session data).
+    await tx.delete(logsOtel).where(inArray(logsOtel.sessionId, ids));
+    await tx.delete(otelApiCalls).where(inArray(otelApiCalls.sessionId, ids));
+    await tx
+      .delete(sessionRequestIds)
+      .where(inArray(sessionRequestIds.sessionId, ids));
+    await tx
+      .delete(sessionToolStats)
+      .where(inArray(sessionToolStats.sessionId, ids));
+    await tx
+      .delete(sessionHarnessUsage)
+      .where(inArray(sessionHarnessUsage.sessionId, ids));
+    await tx
+      .delete(sessionChangedPaths)
+      .where(inArray(sessionChangedPaths.sessionId, ids));
+    await tx
+      .delete(sessionCauseStats)
+      .where(inArray(sessionCauseStats.sessionId, ids));
+    await tx
+      .delete(sessionAttribution)
+      .where(inArray(sessionAttribution.sessionId, ids));
+    await tx
+      .delete(sessionAttributionRuns)
+      .where(inArray(sessionAttributionRuns.sessionId, ids));
+    await tx
+      .delete(sessionPromptWatermark)
+      .where(inArray(sessionPromptWatermark.sessionId, ids));
 
     // a. Delete session_stats
     await tx.delete(sessionStats).where(inArray(sessionStats.sessionId, ids));
@@ -250,7 +377,12 @@ export class SessionsService {
       .where(inArray(sessionToolUsage.sessionId, ids));
 
     // d. Delete logs (cascades log_repositories and log_contexts automatically)
-    await tx.delete(logs).where(inArray(logs.sessionId, ids));
+    //    Their on-disk part-cache folders go too (fire-and-forget, never throws).
+    const deletedLogRows = await tx
+      .delete(logs)
+      .where(inArray(logs.sessionId, ids))
+      .returning({ id: logs.id });
+    this.partCache.removeLogFolders(deletedLogRows.map((row) => row.id));
 
     // e. Delete orphan contexts (contexts not referenced by any log_contexts row)
     const remainingContextIds = tx
@@ -270,10 +402,19 @@ export class SessionsService {
       .from(sessions)
       .where(inArray(sessions.id, ids));
 
+    const sessionIdStrings = sessionIdRows.map((row) => row.sessionId);
     await this.uploadQueueService.deleteQueueRowsForSessionIds(
       tx,
-      sessionIdRows.map((row) => row.sessionId),
+      sessionIdStrings,
     );
+
+    // f2. turn_end_advisor_runs is keyed by the session_id string with no FK (DD-28), so it
+    // never cascades — not even on a hard delete.
+    if (sessionIdStrings.length > 0) {
+      await tx
+        .delete(turnEndAdvisorRuns)
+        .where(inArray(turnEndAdvisorRuns.sessionId, sessionIdStrings));
+    }
 
     // g. Clear the harness (DD-11) and OKF snapshot references on these sessions — must run
     // before h, since h's orphan test is "no session references this snapshot id any more".
@@ -311,54 +452,66 @@ export class SessionsService {
    * purged. Resolves each session's own `session_id` string from the `sessions`
    * table when it has no `artisyn` log row to source it from.
    */
-  private async captureAuditRows(ids: number[]): Promise<AuditRow[]> {
+  private async captureAuditRows(
+    db: DrizzleDb,
+    ids: number[],
+  ): Promise<AuditRow[]> {
     // The cost each session shows on every live surface — the complete computed cost of
     // its tree (own + sub-agents + utility calls; null when any part is unpriced), captured
     // here before the purge deletes the rows it is computed from.
-    const treeCosts = await loadTreeCostRows(this.db, ids);
-    return Promise.all(
-      ids.map(async (sid) => {
-        const [logRow] = await this.db
-          .select({
-            startTime: logs.startTime,
-            endTime: logs.endTime,
-            sessionId: sessions.sessionId,
-          })
-          .from(logs)
-          .innerJoin(sessions, eq(sessions.id, logs.sessionId))
-          .where(and(eq(logs.sessionId, sid), eq(logs.logType, 'artisyn')))
-          .limit(1);
+    const treeCosts = await loadTreeCostRows(db, ids);
+    // Sequential: `db` may be a transaction, whose single connection runs one query at a time.
+    const out: AuditRow[] = [];
+    for (const sid of ids) {
+      out.push(await this.captureAuditRow(db, sid, treeCosts));
+    }
+    return out;
+  }
 
-        let sessionIdStr = logRow?.sessionId;
-        if (!sessionIdStr) {
-          const [sessionRow] = await this.db
-            .select({ sessionId: sessions.sessionId })
-            .from(sessions)
-            .where(eq(sessions.id, sid))
-            .limit(1);
-          sessionIdStr = sessionRow?.sessionId ?? String(sid);
-        }
+  private async captureAuditRow(
+    db: DrizzleDb,
+    sid: number,
+    treeCosts: Awaited<ReturnType<typeof loadTreeCostRows>>,
+  ): Promise<AuditRow> {
+    const [logRow] = await db
+      .select({
+        startTime: logs.startTime,
+        endTime: logs.endTime,
+        sessionId: sessions.sessionId,
+      })
+      .from(logs)
+      .innerJoin(sessions, eq(sessions.id, logs.sessionId))
+      .where(and(eq(logs.sessionId, sid), eq(logs.logType, 'artisyn')))
+      .limit(1);
 
-        const [statsRow] = await this.db
-          .select({ workTimeMs: sessionStats.workTimeMs })
-          .from(sessionStats)
-          .where(eq(sessionStats.sessionId, sid))
-          .limit(1);
+    let sessionIdStr = logRow?.sessionId;
+    if (!sessionIdStr) {
+      const [sessionRow] = await db
+        .select({ sessionId: sessions.sessionId })
+        .from(sessions)
+        .where(eq(sessions.id, sid))
+        .limit(1);
+      sessionIdStr = sessionRow?.sessionId ?? String(sid);
+    }
 
-        const resolvedCost = readTreeCost(treeCosts.get(sid)).total;
-        const totalCost: string | null =
-          resolvedCost != null ? resolvedCost.toFixed(8) : null;
+    const [statsRow] = await db
+      .select({ workTimeMs: sessionStats.workTimeMs })
+      .from(sessionStats)
+      .where(eq(sessionStats.sessionId, sid))
+      .limit(1);
 
-        return {
-          sessionPk: sid,
-          sessionIdStr,
-          startTime: logRow?.startTime ?? null,
-          endTime: logRow?.endTime ?? null,
-          workTimeMs: statsRow?.workTimeMs ?? null,
-          totalCost,
-        };
-      }),
-    );
+    const resolvedCost = readTreeCost(treeCosts.get(sid)).total;
+    const totalCost: string | null =
+      resolvedCost != null ? resolvedCost.toFixed(8) : null;
+
+    return {
+      sessionPk: sid,
+      sessionIdStr,
+      startTime: logRow?.startTime ?? null,
+      endTime: logRow?.endTime ?? null,
+      workTimeMs: statsRow?.workTimeMs ?? null,
+      totalCost,
+    };
   }
 
   /**
@@ -441,7 +594,15 @@ export class SessionsService {
 
     for (const { id: rootId } of [...eligibleRoots, ...otelOnlyRoots]) {
       try {
-        const descendantsMap = await getDescendantSessionIds(this.db, [rootId]);
+        // includeDeleted: the hard delete removes every row of the family, the already
+        // soft-deleted descendants (and anything under them) included.
+        const descendantsMap = await getDescendantSessionIds(
+          this.db,
+          [rootId],
+          {
+            includeDeleted: true,
+          },
+        );
         const allDescendantIds = descendantsMap.get(rootId) ?? [];
 
         // Only descendants not already individually soft-deleted get their
@@ -469,7 +630,12 @@ export class SessionsService {
           (id) => !activeIds.includes(id),
         );
 
-        const auditRows = await this.captureAuditRows(activeIds);
+        const auditRows = await this.captureAuditRows(this.db, activeIds);
+        // DD-29 of 2026-11-23-session-logs-streaming: owner and repository URL, read before the
+        // purge removes the logs they come from, so account and repository deletion can clear
+        // these tombstones later.
+        const { ownerUserId, repositoryUrl } =
+          await this.resolveTreeOwnerAndRepo(this.db, rootId);
 
         const rootClaimed = await this.db.transaction(async (tx) => {
           const claimed = auditRows.length
@@ -479,12 +645,13 @@ export class SessionsService {
                   auditRows.map((r) => ({
                     sessionId: r.sessionIdStr,
                     sessionPk: r.sessionPk,
-                    ownerUserId: null,
+                    ownerUserId,
                     deletedByUserId: null,
                     startTime: r.startTime,
                     endTime: r.endTime,
                     workTimeMs: r.workTimeMs,
                     totalCost: r.totalCost,
+                    repositoryUrl,
                   })),
                 )
                 .onConflictDoNothing({

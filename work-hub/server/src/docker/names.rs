@@ -9,6 +9,9 @@
 //! | built devcontainer image | `wh-img-<workspace uuid>:1` |
 //! | checkpoint image | `wh-ckpt-<workspace uuid>:<seq>` |
 //! | helper container | `wh-helper-<random uuid>` |
+//! | git proxy sidecar | `wh-gitproxy-<instance>` |
+//! | git proxy internal network | `wh-net-<instance>` |
+//! | git proxy mirror volume | `wh-gitcache-<instance>` |
 
 use std::collections::HashMap;
 
@@ -40,6 +43,8 @@ pub enum Role {
     Helper,
     Checkpoint,
     Built,
+    /// The git proxy sidecar, its internal network and its mirror volume.
+    GitProxy,
 }
 
 impl Role {
@@ -50,6 +55,7 @@ impl Role {
             Role::Helper => "helper",
             Role::Checkpoint => "checkpoint",
             Role::Built => "built",
+            Role::GitProxy => "git-proxy",
         }
     }
 }
@@ -107,6 +113,22 @@ pub fn checkpoint_image(workspace: Uuid, seq: i32) -> String {
 /// `wh-helper-<random uuid>`.
 pub fn helper_container() -> String {
     format!("wh-helper-{}", Uuid::new_v4())
+}
+
+/// The git proxy sidecar of one instance, `wh-gitproxy-<instance>`.
+pub fn git_proxy_container(instance: &str) -> String {
+    format!("wh-gitproxy-{instance}")
+}
+
+/// The internal network that joins the git proxy sidecar and the workspace / workstream
+/// containers of one instance, `wh-net-<instance>`.
+pub fn git_network(instance: &str) -> String {
+    format!("wh-net-{instance}")
+}
+
+/// The sidecar's mirror volume (mounted at `/srv/git`), `wh-gitcache-<instance>`.
+pub fn git_cache_volume(instance: &str) -> String {
+    format!("wh-gitcache-{instance}")
 }
 
 /// Builds the label set of one object.

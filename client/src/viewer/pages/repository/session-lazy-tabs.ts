@@ -52,7 +52,7 @@ export const SessionBashTab = lazy(() =>
   loadTabs().then((m) => ({ default: m.SessionBashTab })),
 );
 
-// The Session Map polls its own `/logs/delta` route and builds its own model.
+// The Session Map builds its own model from the session's log parts.
 export const SessionMapTab = lazy(() =>
   loadTabs().then((m) => ({ default: m.SessionMapTab })),
 );

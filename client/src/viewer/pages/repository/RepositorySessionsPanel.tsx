@@ -1,12 +1,12 @@
 import { useRef } from 'react';
 import { X } from 'lucide-react';
-import type { UseQueryResult } from '@tanstack/react-query';
 import type {
   OtelReasonKey,
   RepositorySession,
 } from '../../../models/repositories';
 import type { ModelPricingMap } from '../../../models/pricing';
-import type { SessionLogsData } from '../../api';
+import type { SessionLogsQueryView } from './session-parts/useSessionLogParts';
+import type { SessionPartsValue } from './session-parts/SessionPartsContext';
 import { useDraggableWidth } from '../../hooks/useDraggableWidth';
 import {
   SessionListPanel,
@@ -15,6 +15,7 @@ import {
 import { SessionDetailPane } from './SessionDetailPane';
 import { SessionNotFoundState } from './SessionNotFoundState';
 import type { ParsedSession } from './session-log/types';
+import type { SubagentMetaMap } from './session-log/log-parser';
 import type { RepoConfig } from '../../../models/repositories';
 
 import type { SessionTab } from './useRepositoryViewState';
@@ -60,10 +61,14 @@ export interface RepositorySessionsPanelProps {
   onDeleteConfirm: () => void;
   onDeleteCancel: () => void;
   deleteLoading: boolean;
-  logsQuery: UseQueryResult<SessionLogsData>;
+  logsQuery: SessionLogsQueryView;
   parsedLogs: ParsedSession | null;
   subagentLogsMap: Map<string, Record<string, unknown>[]>;
   agentParentMap: Map<string, string | null>;
+  /** Every manifest sub-agent's `.meta.json` labels, loaded or not. */
+  subagentMeta: SubagentMetaMap;
+  /** Bare ids of every sub-agent in the manifest, loaded or not (DD-31). */
+  knownAgentIds: ReadonlySet<string>;
   pricing: ModelPricingMap | null | undefined;
   repoConfig: RepoConfig | null;
   topN: number | null;
@@ -74,6 +79,10 @@ export interface RepositorySessionsPanelProps {
   isBranchOpen: (key: string, index: number) => boolean;
   onToggleBranch: (key: string, index: number) => void;
   isReloadingUpdatedSession: boolean;
+  /** On-demand loading of the selected session's log parts (DD-30a). */
+  sessionParts: SessionPartsValue;
+  /** The parts manifest's `derivedLagging` flag (DD-14). */
+  derivedLagging: boolean;
   /** `tool_use` id of a Tools/MCP "Open in session" link (`tu` param, DD-19). */
   targetToolUseId?: string | null;
   onTargetToolUseConsumed?: () => void;
@@ -111,6 +120,8 @@ export function RepositorySessionsPanel({
   parsedLogs,
   subagentLogsMap,
   agentParentMap,
+  subagentMeta,
+  knownAgentIds,
   pricing,
   repoConfig,
   topN,
@@ -121,6 +132,8 @@ export function RepositorySessionsPanel({
   isBranchOpen,
   onToggleBranch,
   isReloadingUpdatedSession,
+  sessionParts,
+  derivedLagging,
   targetToolUseId,
   onTargetToolUseConsumed,
 }: RepositorySessionsPanelProps) {
@@ -215,6 +228,8 @@ export function RepositorySessionsPanel({
             parsedLogs={parsedLogs}
             subagentLogsMap={subagentLogsMap}
             agentParentMap={agentParentMap}
+            subagentMeta={subagentMeta}
+            knownAgentIds={knownAgentIds}
             pricing={pricing}
             repoConfig={repoConfig}
             topN={topN}
@@ -222,6 +237,8 @@ export function RepositorySessionsPanel({
             repoUrl={repoUrl}
             sessionCost={sessionCost}
             isReloadingUpdatedSession={isReloadingUpdatedSession}
+            sessionParts={sessionParts}
+            derivedLagging={derivedLagging}
             targetToolUseId={targetToolUseId}
             onTargetToolUseConsumed={onTargetToolUseConsumed}
           />

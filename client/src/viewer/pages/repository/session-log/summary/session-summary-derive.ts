@@ -19,6 +19,7 @@ import {
   computeWorkflowCostPerToken,
   getPromptText,
   stripSystemBlocks,
+  type SubagentStatEntry,
 } from '../log-parser';
 import { isSystemOnlyTurn } from '../PromptTurnList';
 import { computeCost, truncate } from '../../../../lib/format';
@@ -199,6 +200,7 @@ function computePromptCosts(
   subagentLogsMap: Map<string, Record<string, unknown>[]> | undefined,
   agentParentMap: Map<string, string | null> | undefined,
   costPerToken: number | null,
+  subagentStats: Record<string, SubagentStatEntry> | undefined,
 ): PromptCostRow[] {
   const entry = model != null ? pricing?.[model] : undefined;
   return turns.map((turn) => {
@@ -216,6 +218,7 @@ function computePromptCosts(
           subagentLogsMap,
           agentParentMap,
           pricing,
+          subagentStats,
         ) ?? 0;
       cost = mainCost + directAgentCost + turnWorkflowCost(turn, costPerToken);
     }
@@ -247,6 +250,11 @@ export function computeSessionSummaryDerived(input: {
   mainLogs: Record<string, unknown>[] | null;
   subagentLogsMap?: Map<string, Record<string, unknown>[]> | undefined;
   agentParentMap?: Map<string, string | null> | undefined;
+  /**
+   * `session_stats` totals per sub-agent (`/logs` `subagentStats`): prices a direct agent whose
+   * log part is not loaded (impl-plan DD-32).
+   */
+  subagentStats?: Record<string, SubagentStatEntry> | undefined;
   /** Server-computed sub-agent cost (`costBreakdown.subagentCost`, D2.3) — same field
    * `SessionLogView.tsx` uses to derive its own accurate workflow cost rate. */
   sessionSubagentCost?: number | null;
@@ -266,6 +274,7 @@ export function computeSessionSummaryDerived(input: {
     mainLogs,
     subagentLogsMap,
     agentParentMap,
+    subagentStats,
     sessionSubagentCost,
     changeSurface,
   } = input;
@@ -344,6 +353,7 @@ export function computeSessionSummaryDerived(input: {
     sessionSubagentCost,
     subagentLogsMap,
     agentParentMap,
+    subagentStats,
   );
   // Pass-through, not a derivation: every figure below is the server's, and a
   // never-computed (or absent) aggregate collapses to nulls rather than zeros.
@@ -357,6 +367,7 @@ export function computeSessionSummaryDerived(input: {
     subagentLogsMap,
     agentParentMap,
     costPerToken,
+    subagentStats,
   );
 
   return {

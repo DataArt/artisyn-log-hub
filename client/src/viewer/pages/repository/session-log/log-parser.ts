@@ -157,9 +157,12 @@ function summarizeToolCall(
       const p = s(input.file_path);
       return p.length > 60 ? '…' + p.slice(-57) : p;
     }
-    case 'Bash': {
-      const cmd = s(input.command).split('\n')[0];
-      return cmd.length > 50 ? cmd.slice(0, 50) + '…' : cmd;
+    case 'Bash':
+    case 'PowerShell': {
+      // Description first (the model's own one-line label), else the first command line.
+      const desc = s(input.description).trim();
+      const line = desc !== '' ? desc : s(input.command).split('\n')[0];
+      return line.length > 50 ? line.slice(0, 50) + '…' : line;
     }
     case 'Glob':
       return s(input.pattern);
@@ -314,11 +317,17 @@ function isTurnBoundaryUserEvent(
 function isAgentUsagePricedElsewhere(
   agentId: string,
   workflowAgentIds: Set<string>,
-  subagentLogs: Map<string, Record<string, unknown>[]> | undefined,
+  pricedAgentIds: PricedAgentIds | undefined,
 ): boolean {
   if (workflowAgentIds.has(agentId)) return false;
-  return !!subagentLogs?.has(agentId);
+  return !!pricedAgentIds?.has(agentId);
 }
+
+/**
+ * The agent ids priced from their own transcript: the manifest's known sub-agent ids when given
+ * (stable while parts load), else the loaded `subagentLogs` keys.
+ */
+type PricedAgentIds = Pick<ReadonlySet<string>, 'has'>;
 
 /**
  * Splits one `usage` object's cache-creation tokens into the 5m / 1h TTL buckets.
@@ -442,7 +451,7 @@ function sumTokenBreakdown(
   events: TelemetryEvent[],
   uuidSet: Set<string>,
   workflowAgentIds: Set<string>,
-  subagentLogs: Map<string, Record<string, unknown>[]> | undefined,
+  subagentLogs: PricedAgentIds | undefined,
 ): TokenBreakdown | null {
   let contributingCount = 0;
   let input = 0;
@@ -973,23 +982,7 @@ function buildSubAgentTree(
     // Fallback: Workflow agents don't embed usage in toolUseResult; use session_stats.
     if (!tokens && subagentStats) {
       const stats = subagentStats[`agent-${agentId}`];
-      if (stats) {
-        tokens = {
-          input: stats.inputTokens,
-          output: stats.outputTokens,
-          cacheRead: stats.cacheReadTokens,
-          cacheWrite: stats.cacheWriteTokens,
-          // session_stats carries no TTL split here, so all of it goes to the 5m
-          // bucket — keeps cacheWrite5m + cacheWrite1h === cacheWrite.
-          cacheWrite5m: stats.cacheWriteTokens,
-          cacheWrite1h: 0,
-          // Web-search / fast-mode figures come straight from session_stats; a server that predates them
-          // (or a fixture that omits them) simply contributes no surcharge / search cost.
-          webSearchRequests: stats.webSearchRequests ?? 0,
-          inputFast: stats.inputTokensFast ?? 0,
-          outputFast: stats.outputTokensFast ?? 0,
-        };
-      }
+      if (stats) tokens = statsToTokenBreakdown(stats);
     }
     if (completion?.toolUseResult?.totalDurationMs !== undefined) {
       durationMs = completion.toolUseResult.totalDurationMs;
@@ -1264,21 +1257,7 @@ export function buildAgentNodesForIds(
       : undefined;
     if (!tokens && subagentStats) {
       const fallback = subagentStats[`agent-${agentId}`];
-      if (fallback) {
-        tokens = {
-          input: fallback.inputTokens,
-          output: fallback.outputTokens,
-          cacheRead: fallback.cacheReadTokens,
-          cacheWrite: fallback.cacheWriteTokens,
-          // No TTL split in session_stats here — all to the 5m bucket (see above).
-          cacheWrite5m: fallback.cacheWriteTokens,
-          cacheWrite1h: 0,
-          // Web-search / fast-mode figures from session_stats; absent -> no surcharge / no search cost.
-          webSearchRequests: fallback.webSearchRequests ?? 0,
-          inputFast: fallback.inputTokensFast ?? 0,
-          outputFast: fallback.outputTokensFast ?? 0,
-        };
-      }
+      if (fallback) tokens = statsToTokenBreakdown(fallback);
     }
 
     // Aggregate tool calls + files touched across the agent's own full transcript (all its own
@@ -1605,9 +1584,10 @@ export function computeTurnDirectAgentCost(
   subagentLogsMap: Map<string, Record<string, unknown>[]> | undefined,
   agentParentMap: Map<string, string | null> | undefined,
   pricing: ModelPricingMap | undefined,
+  subagentStats?: Record<string, SubagentStatEntry>,
 ): number | null {
-  if (!turn.agentActivations.length || !subagentLogsMap || !pricing)
-    return null;
+  if (!turn.agentActivations.length || !pricing) return null;
+  if (!subagentLogsMap && !subagentStats) return null;
   let total = 0;
   const counted = new Set<string>();
   for (const activation of turn.agentActivations) {
@@ -1619,17 +1599,26 @@ export function computeTurnDirectAgentCost(
             agentParentMap,
           )
         : []),
-      ...collectDescendantAgentIds(activation.agentId, subagentLogsMap),
+      ...(subagentLogsMap
+        ? collectDescendantAgentIds(activation.agentId, subagentLogsMap)
+        : []),
       ...collectSubtreeAgentIdsFrom(turn.subAgents, activation.agentId),
     ]);
     for (const id of ids) {
       if (counted.has(id)) continue; // don't double-count an id shared across activations
       counted.add(id);
-      const subLogs = subagentLogsMap.get(id);
-      if (!subLogs) continue;
-      const { model, tokens } = extractSubagentStats(subLogs);
-      const entry = model ? pricing[model] : undefined;
-      if (entry) total += computeCost(tokens, entry);
+      const subLogs = subagentLogsMap?.get(id);
+      if (subLogs) {
+        const { model, tokens } = extractSubagentStats(subLogs);
+        const entry = model ? pricing[model] : undefined;
+        if (entry) total += computeCost(tokens, entry);
+        continue;
+      }
+      // Part not loaded (DD-32): price the agent from its session_stats totals.
+      const stats = subagentStats?.[`agent-${id}`] ?? subagentStats?.[id];
+      const entry = stats?.model ? pricing[stats.model] : undefined;
+      if (stats && entry)
+        total += computeCost(statsToTokenBreakdown(stats), entry);
     }
   }
   return total > 0 ? total : null;
@@ -1656,6 +1645,7 @@ export function computeWorkflowCostPerToken(
   sessionSubagentCost: number | null | undefined,
   subagentLogsMap: Map<string, Record<string, unknown>[]> | undefined,
   agentParentMap: Map<string, string | null> | undefined,
+  subagentStats?: Record<string, SubagentStatEntry>,
 ): number | null {
   const model = parsedLogs.summary.model;
   if (!model || !pricing?.[model]) return null;
@@ -1674,6 +1664,7 @@ export function computeWorkflowCostPerToken(
           subagentLogsMap,
           agentParentMap,
           pricing,
+          subagentStats,
         ) ?? 0),
       0,
     );
@@ -1698,10 +1689,18 @@ export function computeWorkflowCostPerToken(
 // ---------------------------------------------------------------------------
 
 export interface SubagentStatEntry {
+  /** The sub-agent's model (`session_stats`); prices an agent whose part is not loaded. */
+  model?: string | null;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /**
+   * TTL split of `cacheWriteTokens`; absent from servers before
+   * 2026-11-23-session-logs-streaming (see `statsToTokenBreakdown`).
+   */
+  cacheWrite5mTokens?: number;
+  cacheWrite1hTokens?: number;
   /**
    * Web-search / fast-mode cost inputs, optional here even though the current server always sends them
    * (`SubagentStats` in `viewer/api.ts`): the folds below treat an absent value as 0, so a
@@ -1713,6 +1712,28 @@ export interface SubagentStatEntry {
   outputTokensFast?: number;
   /** Server-chosen OTEL cost of this sub-agent (FR-6); see `SubagentStats.otelCostUsd`. */
   otelCostUsd?: number | null;
+}
+
+/**
+ * A sub-agent's `session_stats` totals as a `TokenBreakdown` (impl-plan DD-32). The TTL split
+ * comes from the entry when the server sends it; an older server sends none, so the whole
+ * cache write goes to the 5m bucket (`cacheWrite5m + cacheWrite1h === cacheWrite` either way).
+ * Web-search / fast-mode figures absent from an older server count as 0.
+ */
+export function statsToTokenBreakdown(
+  entry: SubagentStatEntry,
+): TokenBreakdown {
+  return {
+    input: entry.inputTokens,
+    output: entry.outputTokens,
+    cacheRead: entry.cacheReadTokens,
+    cacheWrite: entry.cacheWriteTokens,
+    cacheWrite5m: entry.cacheWrite5mTokens ?? entry.cacheWriteTokens,
+    cacheWrite1h: entry.cacheWrite1hTokens ?? 0,
+    webSearchRequests: entry.webSearchRequests ?? 0,
+    inputFast: entry.inputTokensFast ?? 0,
+    outputFast: entry.outputTokensFast ?? 0,
+  };
 }
 
 /**
@@ -1765,6 +1786,12 @@ export function parseSessionLogs(
      * sub-agent nodes this parse builds. Absent = no labels (old server, or a sub-agent's own log).
      */
     subagentMeta?: SubagentMetaMap;
+    /**
+     * Bare agent ids of every sub-agent part the manifest lists, loaded or not (impl-plan DD-31).
+     * When given, it decides which agents are priced from their own transcript, so root totals do
+     * not shift as sub-agent parts arrive. Absent = decided from `subagentLogs`.
+     */
+    knownSubagentIds?: ReadonlySet<string>;
   },
 ): ParsedSession {
   const isSubagent = options?.isSubagent ?? false;
@@ -1774,6 +1801,8 @@ export function parseSessionLogs(
   const subagentMeta = options?.subagentMeta;
   const workflowsOption = options?.workflows;
   const subagentLogsOption = options?.subagentLogs;
+  const pricedAgentIds: PricedAgentIds | undefined =
+    options?.knownSubagentIds ?? subagentLogsOption;
   const pricingOption = options?.pricing;
   const harnessSnapshot = options?.harnessSnapshot ?? null;
 
@@ -2075,7 +2104,7 @@ export function parseSessionLogs(
       events,
       uuidSet,
       workflowAgentIds,
-      subagentLogsOption,
+      pricedAgentIds,
     );
 
     // Tokens — this turn's OWN assistant events only (no sub-agent / workflow folds).
@@ -2112,18 +2141,16 @@ export function parseSessionLogs(
         // session_stats carries no per-call data, so the turn can no longer be priced per
         // call over a complete list — drop it and fall back to the aggregate path.
         delete tokenBreakdown.calls;
-        tokenBreakdown.input += stats.inputTokens;
-        tokenBreakdown.output += stats.outputTokens;
-        tokenBreakdown.cacheRead += stats.cacheReadTokens;
-        tokenBreakdown.cacheWrite += stats.cacheWriteTokens;
-        // session_stats has no TTL split at this level, so the whole cache-write
-        // figure lands in the 5m bucket — preserving the
-        // cacheWrite5m + cacheWrite1h === cacheWrite invariant.
-        tokenBreakdown.cacheWrite5m += stats.cacheWriteTokens;
-        // Web-search / fast-mode figures from session_stats; absent -> no surcharge / no search cost.
-        tokenBreakdown.webSearchRequests += stats.webSearchRequests ?? 0;
-        tokenBreakdown.inputFast += stats.inputTokensFast ?? 0;
-        tokenBreakdown.outputFast += stats.outputTokensFast ?? 0;
+        const add = statsToTokenBreakdown(stats);
+        tokenBreakdown.input += add.input;
+        tokenBreakdown.output += add.output;
+        tokenBreakdown.cacheRead += add.cacheRead;
+        tokenBreakdown.cacheWrite += add.cacheWrite;
+        tokenBreakdown.cacheWrite5m += add.cacheWrite5m;
+        tokenBreakdown.cacheWrite1h += add.cacheWrite1h;
+        tokenBreakdown.webSearchRequests += add.webSearchRequests;
+        tokenBreakdown.inputFast += add.inputFast;
+        tokenBreakdown.outputFast += add.outputFast;
       }
     }
 
@@ -2475,7 +2502,7 @@ export function parseSessionLogs(
         isAgentUsagePricedElsewhere(
           ue.toolUseResult.agentId,
           workflowAgentIds,
-          subagentLogsOption,
+          pricedAgentIds,
         )
       )
         continue;

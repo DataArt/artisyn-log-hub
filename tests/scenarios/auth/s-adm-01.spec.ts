@@ -87,7 +87,7 @@ async function addTier(page: Page, n: number, tier: typeof UI_TIER): Promise<voi
 }
 
 test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @mode-c', async ({ api, db, users, page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(210_000);
   const runId = randomBytes(4).toString('hex');
   const admin = await users.user('admin', { label: 'adm1' });
   const regular = await users.user('user', { label: 'adm1-regular' });
@@ -236,6 +236,29 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
     } finally {
       await db.query('DELETE FROM log_hub_release_check WHERE id = 1');
     }
+  });
+
+  await test.step('4c. API + UI: /admin/system carries partCache (enabled, TTL 14 days, a sweep state soon after boot); the System Info tab shows the Part cache card', async () => {
+    // The stand sweeps every second (tests/scenarios/modes.ts), so lastSweep fills within seconds.
+    const partCache = async () => {
+      const res = await admin.api.get('/api/v1/admin/system');
+      expect(res.status(), 'GET /admin/system').toBe(200);
+      return ((await res.json()) as { partCache: { enabled: boolean; ttlDays: number; lastSweep: unknown } }).partCache;
+    };
+    const first = await partCache();
+    expect(first.enabled).toBe(true);
+    expect(first.ttlDays).toBe(14);
+    await expect.poll(async () => (await partCache()).lastSweep !== null, { message: 'lastSweep set', timeout: 10_000 }).toBe(true);
+
+    await page.goto('/#/admin');
+    await page.reload();
+    await expect(tab(page, 'system-info')).toHaveAttribute('data-state', 'active');
+    const card = page.getByTestId('part-cache-card');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card.getByTestId('part-cache-status')).toHaveText('Enabled');
+    await expect(card.getByTestId('part-cache-size')).toHaveText(/ of .* · \d+ files/);
+    await expect(card.getByTestId('part-cache-requests')).toHaveText(/\d+ hits · \d+ misses \(hit rate .+\) · \d+ files written/);
+    await expect(card).toContainText('Size as of');
   });
 
   await test.step('5. UI: all 9 tabs activate; no NaN / undefined / null on screen, no page errors', async () => {

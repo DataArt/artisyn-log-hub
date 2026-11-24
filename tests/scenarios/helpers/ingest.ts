@@ -7,6 +7,7 @@
  * gzip with or without `Content-Encoding`, chunks) and read the stored result through the `db`
  * fixture, whose search_path is the stand schema.
  */
+import { gzipSync } from 'zlib';
 import type { APIRequestContext, APIResponse } from '@playwright/test';
 import type { Pool } from 'pg';
 
@@ -36,6 +37,48 @@ export function postLogs(
       ...headers,
     },
     data: body,
+  });
+}
+
+export interface AppendUpload {
+  /** `X-API-Key`; null sends none. */
+  key: string | null;
+  sessionId: string;
+  type: string;
+  /** 0-based record index the delta starts at; omitted = no `startLine` param (a 400 case). */
+  startLine?: number | string;
+  /** The delta: NDJSON text of the new lines. */
+  body: string | Buffer;
+  /** Gzip the body and send `Content-Encoding: gzip`, as the hook does for a big delta. */
+  gzip?: boolean;
+  /** sha256 hex of the (uncompressed) delta body. */
+  contentSha256?: string;
+  /** Extra query params (`uploadFeedback`, …). */
+  params?: LogParams;
+}
+
+/**
+ * `POST /api/v2/logs/append` (2026-11-24-traffic-optimization): stages a delta of a `claude` /
+ * `claude-subagent` log that continues the stored log at record `startLine`. The worker applies
+ * it as stored body + delta, or fails the row as `upload-full` when the stored log does not
+ * have exactly `startLine` records.
+ */
+export function postLogsAppend(
+  api: APIRequestContext,
+  { key, sessionId, type, startLine, body, gzip = false, contentSha256, params = {} }: AppendUpload,
+): Promise<APIResponse> {
+  const query: LogParams = { sessionId, type, ...params };
+  if (startLine !== undefined) query.startLine = startLine;
+  if (contentSha256 !== undefined) query.contentSha256 = contentSha256;
+  const raw = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
+  return api.post('/api/v2/logs/append', {
+    params: query,
+    headers: {
+      'Content-Type': 'application/x-ndjson',
+      ...(key ? { 'X-API-Key': key } : {}),
+      ...(gzip ? { 'Content-Encoding': 'gzip' } : {}),
+    },
+    data: gzip ? gzipSync(raw) : raw,
   });
 }
 
@@ -72,6 +115,46 @@ export async function storedBody(db: Pool, sessionId: string, logType: string): 
     [sessionId, logType],
   );
   return rows[0]?.body ?? null;
+}
+
+/**
+ * Holds the ingest lock of the session tree rooted at `rootSessionId` until the returned
+ * function is called: the same transaction-scoped advisory lock `lockSessionTreeForIngest`
+ * (`server/src/logs/session-tree.sql.ts`) takes, on a connection of its own. While it is held,
+ * every ingest of that tree (the queue's `checkUnchanged` / `upsert`) and the re-extract drain
+ * block on it — a scenario uses that to keep work queued deterministically. The release commits
+ * the transaction and returns the connection; call it in a `finally`.
+ */
+export async function holdSessionTreeLock(db: Pool, rootSessionId: string): Promise<() => Promise<void>> {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('session-tree:' || $1::varchar, 0))", [
+      rootSessionId,
+    ]);
+  } catch (err) {
+    client.release();
+    throw err;
+  }
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    try {
+      await client.query('COMMIT');
+    } finally {
+      client.release();
+    }
+  };
+}
+
+/** Outcomes of the session's upload-queue measurements (`success`, `skipped`, `superseded`, …), oldest first. */
+export async function measurementOutcomes(db: Pool, sessionId: string): Promise<string[]> {
+  const { rows } = await db.query<{ outcome: string }>(
+    'SELECT outcome FROM upload_queue_measurements WHERE session_id = $1 ORDER BY id',
+    [sessionId],
+  );
+  return rows.map((r) => r.outcome);
 }
 
 /**

@@ -20,7 +20,9 @@ function getHookVersion() {
   return _hookVersionCache;
 }
 
-const MAX_LOG_SIZE = 100 * 1024; // 100 KB
+// 1 MB: at 100 KB an active day rotated `hook.log` away within ~5 hours, before a stuck upload
+// could be looked into.
+const MAX_LOG_SIZE = 1024 * 1024; // 1 MB
 const MAX_LOG_FILES = 3;         // hook.log + hook.log.1 + hook.log.2
 
 function rotateLog(logPath) {

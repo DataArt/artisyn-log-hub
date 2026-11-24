@@ -39,14 +39,17 @@ const SNIPPET_CHARS = 120;
  *
  * @param {Buffer} body raw NDJSON bytes as read from disk
  * @returns {{ body: Buffer, dropped: Array<{ lineNo: number, bytes: number, reason: string,
- *   snippet: string }>, lines: number }} `body` is the sanitized payload to upload (possibly
- *   empty, if every line was malformed — the caller decides what to do with that); `lines` is the
- *   number of lines scanned, for the "dropped 1 of 4213" style log message.
+ *   snippet: string }>, lines: number, records: number }} `body` is the sanitized payload to
+ *   upload (possibly empty, if every line was malformed — the caller decides what to do with
+ *   that); `lines` is the number of lines scanned, for the "dropped 1 of 4213" style log message;
+ *   `records` is the number of non-blank lines kept, which equals what the server's stored
+ *   `jsonb_array_length` grows by (the append path's line counter).
  */
 function sanitizeNdjson(body) {
   const dropped = [];
   const kept = [];
   let lineNo = 0;
+  let records = 0;
   let offset = 0;
 
   while (offset < body.length) {
@@ -73,6 +76,7 @@ function sanitizeNdjson(body) {
 
     if (reason === null) {
       kept.push(body.subarray(offset, next));
+      records++;
     } else {
       dropped.push({
         lineNo,
@@ -87,15 +91,15 @@ function sanitizeNdjson(body) {
     offset = next;
   }
 
-  if (dropped.length === 0) return { body, dropped, lines: lineNo };
-  return { body: Buffer.concat(kept), dropped, lines: lineNo };
+  if (dropped.length === 0) return { body, dropped, lines: lineNo, records };
+  return { body: Buffer.concat(kept), dropped, lines: lineNo, records };
 }
 
 /**
  * Render `sanitizeNdjson()`'s `dropped` list as `hook.log` lines.
  *
  * One summary line plus one detail line per dropped record, capped so a wholesale-corrupt file
- * cannot flood a 100 KB rotating log with thousands of entries.
+ * cannot flood a 1 MB rotating log with thousands of entries.
  *
  * @param {string} manifestKey the `namespace/file` label the upload logs everywhere else
  * @param {{ dropped: Array<{ lineNo: number, bytes: number, reason: string, snippet: string }>,

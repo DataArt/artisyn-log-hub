@@ -130,6 +130,14 @@ The plan MUST have an `## Implementation Chunks` section.
 If it does not, stop and tell the user: "impl-plan.md for $ARGUMENTS has no Implementation Chunks section. Run `/adlc-lh:plan-deep $ARGUMENTS` to (re)generate the plan." 
 Do NOT derive chunks yourself.
 
+Build the `chunks` array from that section, one entry per `### Chunk N — <name>` heading, in order:
+
+- `name` — the text after `### Chunk N — `.
+- `items` — only that chunk's checkbox lines (`- [ ]` or `- [x]`), each without the checkbox prefix, text
+  otherwise verbatim.
+- A chunk's other lines — its one-line goal and its `Where:` line, when the plan has them — are NOT items:
+  leave them out. The chunk agent reads them from the plan file itself.
+
 ### 3 — Run the implementation workflow
 
 Call the `Workflow` tool:

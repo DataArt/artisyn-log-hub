@@ -12,8 +12,10 @@ reviewer: none
 
 ## Purpose
 
-The Session Map tab polls `GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta`
-every few seconds while a session is live. Each poll must return only the transcript lines the
+The Session Map tab of releases before 2026-11-24 polls
+`GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta` every few seconds while a
+session is live (the current tab reads the log parts instead, see
+[session-map-state](session-map-state.md); the route stays for a cached older SPA). Each poll must return only the transcript lines the
 client does not hold yet, and a poll where nothing moved must not read any `logs.body`. When a
 log was rewritten instead of appended to, the client must reload instead of silently showing a
 broken transcript. These rules decide what the client holds (the cursor), which log rows have
@@ -130,5 +132,6 @@ Rows (23): [`docs/algorithm-examples/session-logs-delta.json`](../../algorithm-e
 ## Where the result is visible
 
 API `GET …/sessions/:sessionId/logs/delta`: `cursor`, `reload`, `rootArtisynLines`,
-`rootClaudeLines`, `subagentAppends`, `newSubagents`. On screen: the Session Map tab grows
-without a reload while the session is live, and reloads its data after `reload: true`.
+`rootClaudeLines`, `subagentAppends`, `newSubagents`. On screen (an older SPA only): the
+Session Map tab grows without a reload while the session is live, and reloads its data after
+`reload: true`.

@@ -1,3 +1,4 @@
+import { shellOfTool } from '@loghub/bash-view';
 import type { FileCategory, ServiceTierTokens } from '../database/schema/index';
 import type { RawChangedPath } from './change-surface/change-surface.types';
 import type { SessionCallTokens } from './cost.sql';
@@ -31,8 +32,61 @@ import {
   isBackgroundCandidate,
   matchBackgroundAckInContent,
 } from './background-mcp';
+import { extractWorkflows, type WorkflowRun } from './workflow-extractor';
 
 export type { FileCategory };
+
+/**
+ * Commit / PR counts of one `tool_use` block (impl-plan DD-15 / DD-19 of
+ * 2026-11-22-bash-tab-powershell): 0/0 unless the tool is a shell (`Bash` / `PowerShell`) and
+ * its `input.command` is a string; otherwise {@link countCommits} / {@link countPullRequests}
+ * with that tool's shell.
+ */
+export function shellInvocationsOf(
+  name: string,
+  input: Record<string, unknown> | null,
+): { commits: number; prs: number } {
+  const shell = shellOfTool(name);
+  if (shell === null || input === null) return { commits: 0, prs: 0 };
+  const command = input['command'];
+  if (typeof command !== 'string') return { commits: 0, prs: 0 };
+  return {
+    commits: countCommits(command, shell),
+    prs: countPullRequests(command, shell),
+  };
+}
+
+/**
+ * Commit / PR totals of one node's transcript lines, with the same filter as the extractor's
+ * `commitCount` / `prCount` (DD-19): only `assistant` lines, `isSidechain === true` lines
+ * skipped unless `isSubagentLog`, every `tool_use` block of `message.content` counted (no
+ * dedupe). Used by the shell-figures backfill so it agrees with ingest.
+ */
+export function countShellInvocations(
+  lines: readonly object[],
+  isSubagentLog: boolean,
+): { commits: number; prs: number } {
+  let commits = 0;
+  let prs = 0;
+  for (const line of lines) {
+    const rec = line as AnyRecord;
+    if (rec['type'] !== 'assistant') continue;
+    if (!isSubagentLog && rec['isSidechain'] === true) continue;
+    const message = asRecord(rec['message']);
+    const content = asArray(message?.['content']);
+    if (content === null) continue;
+    for (const block of content) {
+      const b = asRecord(block);
+      if (b === null || b['type'] !== 'tool_use') continue;
+      const name = asString(b['name']);
+      if (name === null) continue;
+      const counts = shellInvocationsOf(name, asRecord(b['input']));
+      commits += counts.commits;
+      prs += counts.prs;
+    }
+  }
+  return { commits, prs };
+}
 
 export const DEFAULT_FILE_CATEGORIES: FileCategory[] = [
   { name: 'knowledgebase', patterns: ['docs/knowledgebase/.*'] },
@@ -297,6 +351,12 @@ export interface ClaudeStats {
    * session's flags.
    */
   listFlags: SessionListFlags | null;
+  /**
+   * Workflow runs of the transcript (`extractWorkflows`), stored in `session_stats.workflows`
+   * with `workflows_version` (impl-plan DD-6 of 2026-11-23-session-logs-streaming) so readers
+   * never parse the body. `null` for sub-agent logs, which never write the column.
+   */
+  workflows: WorkflowRun[] | null;
 }
 
 /** A `tool_use` block awaiting its matching `tool_result`, collected during the walk. */
@@ -1035,12 +1095,10 @@ export function extractClaudeStats(
               );
             }
 
-            if (name === 'Bash' && input !== null) {
-              const command = asString(input['command']);
-              if (command !== null) {
-                commitCount += countCommits(command);
-                prCount += countPullRequests(command);
-              }
+            if (name !== null) {
+              const shellCounts = shellInvocationsOf(name, input);
+              commitCount += shellCounts.commits;
+              prCount += shellCounts.prs;
             }
           }
         }
@@ -1359,6 +1417,7 @@ export function extractClaudeStats(
     requestIds: [...requestIds],
     callTokens,
     listFlags: isSubagentLog ? null : computeSessionListFlags(lines),
+    workflows: isSubagentLog ? null : extractWorkflows(lines),
   };
 }
 

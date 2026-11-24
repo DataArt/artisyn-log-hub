@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { ChevronRight, Loader2 } from 'lucide-react';
 import type { WorkflowRun } from '../../../../models/workflows';
 import type { ModelPricingMap } from '../../../../models/pricing';
-import { formatWorkflowDuration } from './log-parser';
+import { formatWorkflowDuration, stripAgentPrefix } from './log-parser';
+import { useSessionParts } from '../session-parts/SessionPartsContext';
 import type { SubAgentNode as SubAgentNodeType } from './types';
 import { WorkflowAgentsTable } from './WorkflowAgentsTable';
 import {
@@ -71,6 +72,24 @@ export function WorkflowNode({
   subagentLogsMap,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const { requestAgent } = useSessionParts();
+  const [requested, setRequested] = useState(false);
+  const [loadingAgents, setLoadingAgents] = useState(false);
+
+  // The run's agent parts load on first open (impl-plan DD-13): the Agents table lists only
+  // agents whose log is in hand.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next && !requested && workflow.agentSessionIds.length > 0) {
+      setRequested(true);
+      setLoadingAgents(true);
+      void Promise.all(
+        workflow.agentSessionIds.map((id) =>
+          requestAgent(stripAgentPrefix(id), true),
+        ),
+      ).finally(() => setLoadingAgents(false));
+    }
+  };
   const [showMore, setShowMore] = useState(false);
   const [findingsOpen, setFindingsOpen] = useState(false);
 
@@ -90,7 +109,7 @@ export function WorkflowNode({
   const hasAgents = agentNodes.length > 0;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground">
         <ChevronRight
           className={cn(
@@ -177,6 +196,12 @@ export function WorkflowNode({
           {/* Agents */}
           {/* Agents: shown directly once the workflow is open — no extra collapsible level;
               each row opens its agent in a modal. */}
+          {loadingAgents && !hasAgents && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              Loading agent logs…
+            </p>
+          )}
           {hasAgents && (
             <div>
               <div className="text-xs text-muted-foreground">

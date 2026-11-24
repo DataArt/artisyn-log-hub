@@ -4,10 +4,14 @@
 // parks the worker (setup/global-setup.ts), so the row is observed exactly as the request left
 // it. What the worker then writes (sessions, logs, stats) is proven by the ingest scenarios
 // (tests/scenarios/ingest/*) and the golden sessions (tests/golden/*).
+import { createHash } from 'node:crypto';
 import type { ContractFamily } from '../types';
 
 const NDJSON =
   '{"type":"user","sessionId":"w1-new-upload","message":{"role":"user","content":"hello"}}\n';
+
+/** sha256 hex of NDJSON as the hook declares it (2026-11-23 session-logs-streaming DD-24). */
+const NDJSON_SHA256 = createHash('sha256').update(NDJSON, 'utf8').digest('hex');
 
 /** One hook `otel-status` line (2026-10-30 otel-shared-receiver, DD-16). */
 function otelStatusLine(
@@ -524,6 +528,126 @@ export const f15Ingest: ContractFamily = {
       noDb: true,
     },
     {
+      // 2026-11-23 session-logs-streaming DD-27/DD-25: s05 was deleted (sessions.deleted and its
+      // deleted_session_log row), so its owner's upload is answered `complete: true` with
+      // nothing staged; with `uploadFeedback=1` the answer says `sessionDeleted: true` and
+      // carries `failedUploads` (none: the owner's one failed row is no server failure).
+      id: 'F15-upload-deleted-session-feedback',
+      route: 'POST /api/v2/logs',
+      actor: 'ownerKey',
+      query: {
+        sessionId: '@s05.sessionId',
+        type: 'claude',
+        uploadFeedback: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: {
+          complete: true,
+          sessionDeleted: true,
+          failedUploads: [],
+        },
+      },
+      noDb: true,
+    },
+    {
+      // Without `uploadFeedback=1` (every hook before 3.2.0) the same answer carries neither
+      // new field — the response stays what an old hook already parses.
+      id: 'F15-upload-deleted-session-no-feedback',
+      route: 'POST /api/v2/logs',
+      actor: 'ownerKey',
+      query: { sessionId: '@s05.sessionId', type: 'claude' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: {
+          complete: true,
+          sessionDeleted: undefined,
+          failedUploads: undefined,
+        },
+      },
+      noDb: true,
+    },
+    {
+      // A sub-agent of a deleted root is refused through its parent (DD-27's upward walk).
+      id: 'F15-upload-deleted-parent',
+      route: 'POST /api/v2/logs',
+      actor: 'ownerKey',
+      query: {
+        sessionId: 'agent-w1-late-child',
+        type: 'claude-subagent',
+        parentSessionId: '@s05.sessionId',
+        uploadFeedback: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { complete: true, sessionDeleted: true },
+      },
+      noDb: true,
+    },
+    {
+      // DD-24: a well-formed `contentSha256` (64 lowercase hex) is stored on the queue row; the
+      // worker later compares it with the staged body.
+      id: 'F15-upload-content-sha256',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-sha',
+        type: 'claude',
+        contentSha256: NDJSON_SHA256,
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201, bodyMatches: { warnings: [] } },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-sha'`,
+              check: [
+                `status = 'pending'`,
+                `content_sha256 = '${NDJSON_SHA256}'`,
+                'failure_delivered = false',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // Anything else (here upper-case hex) is ignored, never a 400: the row is staged without it.
+      id: 'F15-upload-content-sha256-malformed',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-sha-bad',
+        type: 'claude',
+        contentSha256: NDJSON_SHA256.toUpperCase(),
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201 },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-sha-bad'`,
+              check: [`status = 'pending'`, 'content_sha256 IS NULL'],
+            },
+          ],
+        },
+      },
+    },
+    {
       id: 'F15-upload-no-session-id',
       route: 'POST /api/v2/logs',
       actor: 'authorKey',
@@ -555,6 +679,139 @@ export const f15Ingest: ContractFamily = {
       route: 'POST /api/v2/logs',
       actor: 'anon',
       query: { sessionId: 'w1-new-upload', type: 'claude' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 401 },
+    },
+    // --- POST /api/v2/logs/append (2026-11-24-traffic-optimization DD-1): the delta of a
+    // claude / claude-subagent log from 0-based line `startLine`. The contract is the same
+    // enqueue as `POST /api/v2/logs`, plus `start_line` on the row; whether the delta fits the
+    // stored log is decided later by the (parked) worker — @S-INGEST-02 / @S-INGEST-04.
+    {
+      id: 'F15-append',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-append',
+        type: 'claude',
+        startLine: '3',
+        contentSha256: NDJSON_SHA256,
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201, bodyMatches: { warnings: [] } },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-append'`,
+              check: [
+                `status = 'pending'`,
+                `log_type = 'claude'`,
+                'user_id = @author.id',
+                'start_line = 3',
+                `size_bytes = ${Buffer.byteLength(NDJSON)}`,
+                `content_sha256 = '${NDJSON_SHA256}'`,
+                'upload_id IS NULL',
+                'error_message IS NULL',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // Same foreign-session answer as `POST /api/v2/logs`: a warning, nothing staged.
+      id: 'F15-append-foreign-session',
+      route: 'POST /api/v2/logs/append',
+      actor: 'memberKey',
+      query: { sessionId: '@s01.sessionId', type: 'claude', startLine: '0' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201 },
+      noDb: true,
+    },
+    {
+      // Same deleted-session answer as `POST /api/v2/logs` (DD-27/DD-25).
+      id: 'F15-append-deleted-session',
+      route: 'POST /api/v2/logs/append',
+      actor: 'ownerKey',
+      query: {
+        sessionId: '@s05.sessionId',
+        type: 'claude',
+        startLine: '0',
+        uploadFeedback: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: {
+          complete: true,
+          sessionDeleted: true,
+          failedUploads: [],
+        },
+      },
+      noDb: true,
+    },
+    {
+      id: 'F15-append-missing-start-line',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-append', type: 'claude' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 400,
+        bodyMatches: { message: 'Missing startLine query parameter' },
+      },
+    },
+    {
+      id: 'F15-append-bad-start-line',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-append', type: 'claude', startLine: '-1' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 400,
+        bodyMatches: { message: 'startLine must be a non-negative integer' },
+      },
+    },
+    {
+      id: 'F15-append-non-claude-type',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-append', type: 'artisyn', startLine: '0' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 400,
+        bodyMatches: {
+          message:
+            'Append is supported only for claude and claude-subagent logs',
+        },
+      },
+    },
+    {
+      id: 'F15-append-empty-body',
+      route: 'POST /api/v2/logs/append',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-append', type: 'claude', startLine: '0' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: '   ',
+      expect: {
+        status: 400,
+        bodyMatches: { message: 'Request body must not be empty' },
+      },
+    },
+    {
+      id: 'F15-append-no-key',
+      route: 'POST /api/v2/logs/append',
+      actor: 'anon',
+      query: { sessionId: 'w1-new-append', type: 'claude', startLine: '0' },
       headers: { 'Content-Type': 'application/x-ndjson' },
       body: NDJSON,
       expect: { status: 401 },

@@ -10,6 +10,11 @@ import { readBuildInfo } from '../common/build-info';
 import { computeInstanceCount } from '../common/instance-count';
 import { workerStatsReporter } from '../cluster/worker-stats-reporter';
 import { PG_POOL } from '../database/database.constants';
+import {
+  partCacheCounters,
+  sumPartCacheCounters,
+} from '../logs/part-cache/part-cache-counters';
+import { PartCacheService } from '../logs/part-cache/part-cache.service';
 import { requestMetricsTracker } from './request-metrics.middleware';
 import { SupervisorInfo, SystemInfoResponse } from './system-info.types';
 
@@ -27,7 +32,10 @@ export class SystemInfoService implements OnModuleDestroy {
 
   private buildInfoCache: BuildInfo | null = null;
 
-  constructor(@Inject(PG_POOL) private readonly pool: Pool) {
+  constructor(
+    @Inject(PG_POOL) private readonly pool: Pool,
+    private readonly partCache: PartCacheService,
+  ) {
     this.eventLoopHistogram.enable();
     // Registered once at service construction, never per request: the
     // reporter's `message` listener is what caches the primary's snapshot so
@@ -37,12 +45,20 @@ export class SystemInfoService implements OnModuleDestroy {
   }
 
   async getSystemInfo(): Promise<SystemInfoResponse> {
-    const [db, dbSpace] = await Promise.all([
+    const supervisor = this.getSupervisorInfo();
+    const instanceEnv = process.env.NODE_APP_INSTANCE;
+    const partCacheCountersView = sumPartCacheCounters(
+      supervisor,
+      partCacheCounters.snapshot(),
+      instanceEnv === undefined || instanceEnv === ''
+        ? null
+        : Number(instanceEnv),
+    );
+    const [db, dbSpace, partCache] = await Promise.all([
       this.getDbInfo(),
       this.getDbSpace(),
+      this.partCache.getAdminView(partCacheCountersView),
     ]);
-
-    const supervisor = this.getSupervisorInfo();
     const cpusVisible = os.availableParallelism();
 
     return {
@@ -72,6 +88,7 @@ export class SystemInfoService implements OnModuleDestroy {
       },
       disk: this.getDiskUsage(),
       supervisor,
+      partCache,
     };
   }
 

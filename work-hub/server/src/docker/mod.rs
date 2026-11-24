@@ -1,5 +1,6 @@
 //! Docker Engine API layer (D5, D6, D10). Everything Work Hub does with Docker goes through
-//! these modules: names and labels, containers, execs, the archive endpoint, volumes and images.
+//! these modules: names and labels, containers, execs, the archive endpoint, volumes, networks
+//! and images.
 //!
 //! Errors are [`DockerError`]; a connection failure becomes [`DockerError::Unavailable`], which
 //! maps to `docker_unavailable` (503) when it reaches the HTTP layer.
@@ -9,6 +10,7 @@ pub mod containers;
 pub mod exec;
 pub mod images;
 pub mod names;
+pub mod networks;
 pub mod volumes;
 
 use std::time::Duration;

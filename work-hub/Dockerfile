@@ -20,6 +20,8 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY server/ ./server/
 COPY image/ ./image/
+# The git proxy sidecar's build context, embedded into the binary like image/.
+COPY sidecar/ ./sidecar/
 COPY --from=web /src/web/dist ./web/dist
 # rust-embed includes web/dist and image/ into the binary at compile time (release build).
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

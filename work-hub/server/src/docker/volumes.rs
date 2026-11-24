@@ -36,6 +36,32 @@ pub async fn create(
     Ok(())
 }
 
+/// Creates a plain local named volume (Docker-managed data, no bind device) with these labels
+/// when no volume with the name exists; an existing one is kept as is. It backs the git proxy's
+/// mirror volume `wh-gitcache-<instance>`.
+pub async fn ensure_named(
+    docker: &Docker,
+    name: &str,
+    labels: HashMap<String, String>,
+) -> DockerResult<()> {
+    match docker.inspect_volume(name).await {
+        Ok(_) => return Ok(()),
+        Err(e) => match DockerError::from(e) {
+            DockerError::NotFound(_) => {}
+            other => return Err(other),
+        },
+    }
+    docker
+        .create_volume(VolumeCreateRequest {
+            name: Some(name.to_string()),
+            driver: Some("local".into()),
+            labels: Some(labels),
+            ..Default::default()
+        })
+        .await?;
+    Ok(())
+}
+
 /// Removes a volume. Missing is fine. A volume still used by a container is
 /// [`DockerError::Conflict`]: remove the container first.
 pub async fn remove(docker: &Docker, name: &str) -> DockerResult<()> {

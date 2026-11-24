@@ -12,6 +12,7 @@ import { LOG_INGEST_ROUTES } from '../common/body-limits';
 import { throwMiddlewareErrors } from '../common/middleware-errors';
 import { getLogsBodyLimit } from '../common/logs-body-limit';
 import { MailModule } from '../mail/mail.module';
+import { SessionsModule } from '../sessions/sessions.module';
 import { TeamsModule } from '../teams/teams.module';
 import { ActiveSessionsService } from './analytics/active-sessions.service';
 import { ClaudeVersionUsageService } from './analytics/claude-version-usage.service';
@@ -37,6 +38,7 @@ import { HookStateService } from './hook-state.service';
 import { LogsController } from './logs.controller';
 import { LogsV2Controller } from './logs-v2.controller';
 import { LogsService } from './logs.service';
+import { LogBodyGzService } from './log-body-gz.service';
 import { ModelPricingController } from './model-pricing.controller';
 import { OkfFactsController } from './okf/okf-facts.controller';
 import { OkfFactsService } from './okf/okf-facts.service';
@@ -64,12 +66,18 @@ import { ReportsController } from './reports/reports.controller';
 import { SessionAttributionModule } from './session-attribution/session-attribution.module';
 import { SessionCostRecomputeService } from './session-cost/session-cost-recompute.service';
 import { SessionLogsDeltaService } from './session-logs-delta.service';
+import { SessionLogsStreamService } from './session-logs-stream.service';
+import { SessionLogPartsService } from './session-log-parts.service';
+import { SessionReextractService } from './session-reextract.service';
 import { ToolMonitorConfigService } from './tool-monitoring/tool-monitor-config.service';
 import { ToolMonitoringHookController } from './tool-monitoring/tool-monitoring-hook.controller';
 import { ToolMonitoringController } from './tool-monitoring/tool-monitoring.controller';
 import { ToolUsageRebuildService } from './tool-monitoring/tool-usage-rebuild.service';
+import { LogStreamLimiter } from './streaming/log-stream-limiter';
+import { ShellFiguresBackfillService } from './okf/shell-figures-backfill.service';
 import { UploadQueueSchedulerService } from './upload-queue-scheduler.service';
 import { UploadQueueService } from './upload-queue.service';
+import { WorkflowsBackfillService } from './workflows-backfill.service';
 
 @Module({
   imports: [
@@ -86,6 +94,9 @@ import { UploadQueueService } from './upload-queue.service';
     // forwardRef()s back to this module for RepositoriesService, so both sides use
     // forwardRef() to break the cycle — same shape Nest expects for any circular module pair.
     forwardRef(() => SessionAttributionModule),
+    // SessionTombstoneService (DD-27 of 2026-11-23-session-logs-streaming) for the ingest
+    // paths. SessionsModule imports this module back for UploadQueueService, hence forwardRef.
+    forwardRef(() => SessionsModule),
   ],
   controllers: [
     LogsController,
@@ -155,6 +166,9 @@ import { UploadQueueService } from './upload-queue.service';
     // Background drain that rebuilds stale session_tool_usage trees (DD-7); LogsService nudges
     // it after each ingest commit.
     ToolUsageRebuildService,
+    // Re-extracts commit / PR counts and OKF accesses of nodes with PowerShell calls stored
+    // under an older OKF extractor (DD-19 of 2026-11-22-bash-tab-powershell).
+    ShellFiguresBackfillService,
     // OTEL tabs: synchronous realtime ingest behind OtelRealtimeController (DD-17).
     OtelRealtimeService,
     // OTEL tabs: background drain projecting logs_otel chunks into the OTEL facts, draining the
@@ -166,6 +180,24 @@ import { UploadQueueService } from './upload-queue.service';
     OtelLiveReader,
     // Session Map: incremental session logs behind GET …/logs/delta (session-map DD-7).
     SessionLogsDeltaService,
+    // Per-worker FIFO limit on concurrent session-log body streams (2026-11-23
+    // session-logs-streaming DD-3).
+    LogStreamLimiter,
+    // Streams legacy /logs and /logs/delta one log row at a time (2026-11-23
+    // session-logs-streaming DD-1, DD-4, DD-7).
+    SessionLogsStreamService,
+    // The session-log parts API: manifest and one part's (pre-compressed) body (2026-11-23
+    // session-logs-streaming DD-11, DD-12, DD-14).
+    SessionLogPartsService,
+    // Fills session_stats.workflows of sessions stored before migration 0096 (2026-11-23
+    // session-logs-streaming DD-6), governed by RebuildGovernor.
+    WorkflowsBackfillService,
+    // Builds logs.body_gz, the gzip copy served by the parts API, after each body write and for
+    // rows stored before migration 0096 (2026-11-23 session-logs-streaming DD-10), governed.
+    LogBodyGzService,
+    // Re-extracts a tree's transcript stats after its artisyn edit records changed (2026-11-23
+    // session-logs-streaming DD-22); LogsService nudges it after the ingest commit. Governed.
+    SessionReextractService,
     // Budgets: scope access (DD-2), CRUD + event log, the caller-independent spend read model
     // shared by Spend / report / burn / job, the notices, and the threshold job (DD-14).
     BudgetAccessService,

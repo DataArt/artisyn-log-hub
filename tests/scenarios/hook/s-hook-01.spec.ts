@@ -26,6 +26,13 @@
 //     SessionEnd ×4, upload lock ×4, hook-status, one-line-per-run logging ×4 (≈ 35)
 //   - hook/.claude/telemetry_tool/__tests__/manifest-bounded.test.js (5)
 //
+// Steps 6b–6e (2026-11-23-session-logs-streaming, hook 3.2.0, DD-24/25/26): `.claude-logs.sent.v2`
+// is written next to the old manifest with the read size, the pre-read mtime and the upload-params
+// hash; a same-bytes mtime change and a late `.meta.json` re-send the file; a `failedUploads` entry
+// in the hub's answer drops that key from both manifests, so the next Stop re-sends it. Step 7's
+// SessionEnd records the session's own transcript in both manifests — at the size already there,
+// so the old manifest's bytes stay the same.
+//
 // Step 16 (2026-10-30 OTEL tabs, AC-13, old-server half): the 2.29.0 OTEL receiver against a Log
 // Hub that predates `POST /api/v2/otel-realtime` (the fake hub answers it 404). One realtime
 // batch is tried, the 404 switches the channel off (`rt-disable` in receiver.log) and nothing more
@@ -52,10 +59,21 @@
 // `hook-status` (`uploadQueue.failedJobs`, the `upload-jobs-failed` recommendation) and cleared by
 // that run. With a stale heartbeat a `Stop` takes over a stuck job (DD-11).
 //
+// Steps 20–27 (2026-11-24 traffic optimization, hook 3.3.0): append uploads. A grown `claude` /
+// `claude-subagent` log whose append state (`appendBytes` / `appendLines` / `appendSha256` in
+// `.claude-logs.sent.v2`) still matches sends only its new complete lines to
+// `POST /api/v2/logs/append?startLine=<n>` (FR-1/2/3, blank and torn prefix lines, a loopback
+// delta never gzipped); every fallback trigger ends in a full upload of the whole file (FR-6);
+// a 404 / 413 from the append route writes `append-off.json` and the next Stop is full; artisyn,
+// tool-calls and a sub-agent with new `.meta.json` params stay on the full route (FR-10). Since
+// 3.3.0 an unchanged transcript re-read by a scan (step 6c), a SessionEnd (step 7) or a job
+// (step 10b) finds nothing to append and sends no request for it.
+//
 // Steps 12–15 cover the ARTISYN_PROJECT_ROOT override (git-context.js / project-root-override.js):
 // in a linked worktree it makes the worktree the project root, and it is ignored when unset or
 // when it does not contain the cwd.
 import { spawnSync } from 'child_process';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
@@ -92,11 +110,25 @@ import {
   type ReceiverProcess,
   type FakeLogHub,
   type FakeRequest,
+  type FakeReply,
 } from '../helpers/hook-process';
 import { callLines, otelTurn, spanLines } from '../fixtures/otel/otel-lines';
 
 const API_KEY = 'k-test-123456';
 const HARNESS_TYPES = ['harness-snapshot-ref', 'harness-snapshot'];
+
+/** One `.claude-logs.sent.v2` entry (DD-26). */
+interface V2Entry {
+  size: number;
+  mtimeMs: number;
+  paramsSha256: string;
+  fp?: string;
+}
+
+/** DD-26 `paramsSha256`: sha256 of the JSON list [type, sessionId, parent, workflowRunId, description, phase]. */
+function paramsHash(list: string[]): string {
+  return createHash('sha256').update(JSON.stringify(list), 'utf8').digest('hex');
+}
 
 function line(obj: object): string {
   return `${JSON.stringify(obj)}\n`;
@@ -112,10 +144,11 @@ function bodyTypes(req: FakeRequest): string[] {
 }
 
 test('@S-HOOK-01 a Stop run uploads the right files in the right order and never twice @mode-a', async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const dirs = tempDirs();
   let hub: FakeLogHub | undefined;
   let oldHub: FakeLogHub | undefined;
+  let appendHub: FakeLogHub | undefined;
   let receiver: ReceiverProcess | undefined;
   let sharedReceiver: ReceiverProcess | undefined;
   let snapshotId = '';
@@ -326,11 +359,89 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude/old']);
     });
 
-    await test.step('7. SessionEnd for cur → only its artisyn and claude files; manifest untouched; lock released', async () => {
+    // Steps 6b–6e (2026-11-23-session-logs-streaming, DD-25/DD-26): the v2 manifest next to the old one.
+    const v2Path = path.join(telemetry, '.claude-logs.sent.v2');
+    const readV2 = () => (JSON.parse(fs.readFileSync(v2Path, 'utf8')) as { version: number; entries: Record<string, V2Entry> });
+    const oldTranscript = path.join(project, 'old.jsonl');
+
+    await test.step('6b. the v2 manifest holds every key of the old one with the same size, the pre-read mtime and the params hash; every upload asks for feedback and carries the body hash', async () => {
+      const v1 = readManifest(telemetry);
+      const v2 = readV2();
+      expect(v2.version).toBe(2);
+      expect(Object.keys(v2.entries).sort()).toEqual([...v1.keys()].sort());
+      for (const [k, size] of v1) expect(v2.entries[k].size, k).toBe(size);
+      // Hook 3.3.0: a claude log also carries its append state — here the whole file (step 6
+      // appended its second line), so bytes = size, lines = 2 and the hash of every byte.
+      const oldBytes = fs.readFileSync(oldTranscript);
+      expect(v2.entries['claude/old.jsonl']).toEqual({
+        size: fs.statSync(oldTranscript).size,
+        mtimeMs: fs.statSync(oldTranscript).mtimeMs,
+        paramsSha256: paramsHash(['claude', 'old', '', '', '', '']),
+        appendBytes: oldBytes.length,
+        appendLines: 2,
+        appendSha256: createHash('sha256').update(oldBytes).digest('hex'),
+      });
+      for (const e of Object.values(v2.entries)) expect(e.paramsSha256).toMatch(/^[0-9a-f]{64}$/);
+      // The last run's requests (step 6): DD-25 / DD-24 query params.
+      expect(hub!.requests.find((r) => r.sessionId === 'old')?.query.get('contentSha256')).toMatch(/^[0-9a-f]{64}$/);
+      for (const r of hub!.requests) {
+        expect(r.query.get('uploadFeedback'), `${r.type}/${r.sessionId}`).toBe('1');
+        const declared = r.query.get('contentSha256');
+        if (declared !== null) expect(declared, `${r.type}/${r.sessionId}`).toBe(createHash('sha256').update(bodyText(r), 'utf8').digest('hex'));
+      }
+    });
+
+    await test.step('6c. only the mtime of the old transcript changes (same bytes) → the file is read again, but its append state finds no new line, so nothing is sent; the new mtime is recorded, then skipped', async () => {
+      const later = new Date(Date.now() + 60_000);
+      fs.utimesSync(oldTranscript, later, later);
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      // Hook 3.3.0 (Design Decision 20, step 4): `none` — no request, the entry gets the new mtime.
+      expect(hub!.uploads()).toEqual(['artisyn/cur']);
+      expect(readV2().entries['claude/old.jsonl'].mtimeMs).toBe(fs.statSync(oldTranscript).mtimeMs);
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads()).toEqual(['artisyn/cur']);
+    });
+
+    await test.step('6d. a .meta.json written after the sub-agent was sent changes its upload params → sent again with the label', async () => {
+      fs.writeFileSync(path.join(agents, 'agent-b2.meta.json'), JSON.stringify({ description: 'late label' }));
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude-subagent/agent-b2']);
+      const b2 = hub!.requests.find((r) => r.sessionId === 'agent-b2')!;
+      expect(b2.query.get('agentDescription')).toBe('late label');
+      expect(b2.query.get('parentSessionId')).toBe('cur');
+    });
+
+    await test.step('6e. the hub reports a failed upload (`failedUploads`) → its entry leaves both manifests and the next Stop sends it again', async () => {
+      hub!.respond((req) =>
+        req.type === 'artisyn' && req.sessionId === 'cur'
+          ? { status: 201, body: JSON.stringify({ warnings: [], failedUploads: [{ sessionId: 'old', type: 'claude' }] }) }
+          : { status: 201, body: JSON.stringify({ warnings: [] }) },
+      );
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads()).toEqual(['artisyn/cur']);
+      expect(readManifest(telemetry).has('claude/old.jsonl'), readHookLog(repo, 'send-logs-hook.js').slice(-12).join('\n')).toBe(false);
+      expect(readV2().entries['claude/old.jsonl']).toBeUndefined();
+      expect(readManifest(telemetry).has('artisyn/old.jsonl'), 'only the reported type is forgotten').toBe(true);
+      expect(readHookLog(repo, 'send-logs-hook.js').some((l) => l.includes('server reported failed uploads — will re-send: claude/old.jsonl'))).toBe(true);
+
+      hub!.respond(() => ({ status: 201, body: JSON.stringify({ warnings: [] }) }));
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude/old']);
+      expect(readManifest(telemetry).get('claude/old.jsonl')).toBe(fs.statSync(oldTranscript).size);
+      expect(readV2().entries['claude/old.jsonl']?.size).toBe(fs.statSync(oldTranscript).size);
+    });
+
+    await test.step('7. SessionEnd for cur → only its artisyn file (its unchanged transcript has nothing to append); manifest untouched; lock released', async () => {
       const manifestBefore = fs.readFileSync(path.join(telemetry, '.claude-logs.sent'), 'utf8');
       hub!.requests.length = 0;
       expect((await run('SessionEnd')).code).toBe(0);
-      expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude/cur']);
+      // Hook 3.3.0: the own transcript goes through the append path, which finds no new line.
+      expect(hub!.uploads().sort()).toEqual(['artisyn/cur']);
       expect(fs.readFileSync(path.join(telemetry, '.claude-logs.sent'), 'utf8')).toBe(manifestBefore);
       expect(fs.existsSync(path.join(telemetry, '.upload.lock'))).toBe(false);
     });
@@ -434,7 +545,7 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(normalizePath(String(job.uploader))).toBe(normalizePath(path.join(toolDir, 'send-logs-hook.js')));
     });
 
-    await test.step('10b. send-logs-hook.js --run-job <job> (what the receiver spawns): uploads cur artisyn and claude, exits 0, deletes the job and its claim; a copy of the same job run again uploads the same files', async () => {
+    await test.step('10b. send-logs-hook.js --run-job <job> (what the receiver spawns): uploads cur artisyn (the unchanged transcript appends nothing), exits 0, deletes the job and its claim; a copy of the same job run again uploads the same files', async () => {
       const jobPath = path.join(queueDir, handOffJob);
       const copy = fs.readFileSync(jobPath);
       const jobCwd = dirs.make('run-job-cwd');
@@ -444,7 +555,7 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
         hub!.requests.length = 0;
         const res = await runJob();
         expect(res.code, `${attempt}: ${res.stderr}`).toBe(0);
-        expect(hub!.uploads().sort(), attempt).toEqual(['artisyn/cur', 'claude/cur']);
+        expect(hub!.uploads().sort(), attempt).toEqual(['artisyn/cur']);
         expect(hub!.requests.every((r) => r.headers['x-api-key'] === API_KEY), 'the key comes from the repo config').toBe(true);
         expect(fs.existsSync(jobPath), `${attempt}: job deleted`).toBe(false);
         expect(fs.existsSync(`${jobPath}.claim`), `${attempt}: claim deleted`).toBe(false);
@@ -457,13 +568,15 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
 
     await test.step('11. hook.log: an activate line per run and a closing line with the counters', async () => {
       const lines = readHookLog(repo, 'send-logs-hook.js');
-      // Hook runs above: steps 1, 5, 5b (×2), 6, 7, 8, 9 (×2), 10 (×3) = 12; the two --run-job runs
-      // of step 10b log «run-job start», not an event line.
-      expect(lines.filter((l) => /\[activate\] (Stop|SessionEnd) event received/.test(l))).toHaveLength(12);
-      expect(lines.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 total=\d+ target=http:\/\/127\.0\.0\.1:\d+/.test(l)).length).toBe(7);
+      // Hook runs above: steps 1, 5, 5b (×2), 6, 6c (×2), 6d, 6e (×2), 7, 8, 9 (×2), 10 (×3) = 17;
+      // the two --run-job runs of step 10b log «run-job start», not an event line. A closing
+      // `done:` line comes from every full Stop scan: 1, 5, 5b ×2, 6, 6c ×2, 6d, 6e ×2, 8, 9 = 12.
+      expect(lines.filter((l) => /\[activate\] (Stop|SessionEnd) event received/.test(l))).toHaveLength(17);
+      expect(lines.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 total=\d+ target=http:\/\/127\.0\.0\.1:\d+/.test(l)).length).toBe(12);
       expect(lines.some((l) => /claude\/cur\.jsonl: uploaded \d+ KB uncompressed in 1 request$/.test(l))).toBe(true);
       // Step 7's in-process SessionEnd and step 10b's two job runs; step 10's SessionEnds flush nothing.
-      expect(lines.filter((l) => /session-end flush done: uploaded=2 failed=0 total=2/.test(l))).toHaveLength(3);
+      // The transcript is one of the two files but has nothing to append (hook 3.3.0), so uploaded=1.
+      expect(lines.filter((l) => /session-end flush done: uploaded=1 failed=0 total=2/.test(l))).toHaveLength(3);
     });
 
     // Steps 11b–11d (2026-11-18 receiver upload queue, phase 2): `stop` jobs, coalescing, `failed/`
@@ -806,10 +919,307 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       ]);
       expect(readHookLog(shRepo, 'send-logs-hook.js').some((l) => /session-end flush done: uploaded=\d+ failed=0/.test(l))).toBe(true);
     });
+
+    // Steps 20–27 (2026-11-24 traffic optimization, hook 3.3.0, Design Decisions 14–21): append
+    // uploads of `claude` / `claude-subagent` logs. A repo, a home and a fake hub of their own, so
+    // every request below is one these steps caused.
+    /** A hub that also speaks the chunk protocol: `complete` on the last chunk, as the server answers. */
+    const okReply = (req: FakeRequest): FakeReply => {
+      const chunk = req.query.get('chunkIndex');
+      if (chunk === null) return { status: 201, body: JSON.stringify({ warnings: [] }) };
+      const last = Number(chunk) === Number(req.query.get('totalChunks')) - 1;
+      return { status: 201, body: JSON.stringify(last ? { complete: true, warnings: [] } : { complete: false }) };
+    };
+    appendHub = await startFakeLogHub(okReply);
+    const apRepo = makeFakeGitRepo(dirs, { remote: 'git@git.arrakis.test:scn/hook01/append.git' });
+    const apHome = makeFakeHome(dirs);
+    const apTelemetry = telemetryDir(apRepo);
+    const apProject = claudeProjectDir(apHome, apRepo);
+    const APPEND_PATH = '/api/v2/logs/append';
+    /** One Stop of `sid`; hook.log and the hub's request list then hold only this Stop's lines and requests. */
+    const apStop = async (sid: string) => {
+      appendHub!.requests.length = 0;
+      fs.rmSync(path.join(workDir(apRepo), 'hook.log'), { force: true });
+      const res = await runHook(toolDir, { hook_event_name: 'Stop', session_id: sid, cwd: apRepo }, { home: apHome });
+      expect(res.code, res.stderr).toBe(0);
+    };
+    const apLog = () => readHookLog(apRepo, 'send-logs-hook.js');
+    const transcriptOf = (sid: string) => path.join(apProject, `${sid}.jsonl`);
+    const claudeReqs = (sid: string, type = 'claude') => appendHub!.requests.filter((r) => r.type === type && r.sessionId === sid);
+    const appendReqs = (sid: string, type = 'claude') => claudeReqs(sid, type).filter((r) => r.path === APPEND_PATH);
+    const v2Of = (key: string) => {
+      const parsed = JSON.parse(fs.readFileSync(path.join(apTelemetry, '.claude-logs.sent.v2'), 'utf8')) as { entries: Record<string, V2Entry & { appendBytes?: number; appendLines?: number; appendSha256?: string }> };
+      return parsed.entries[key];
+    };
+    /** The records the server keeps of an NDJSON text: non-blank lines that parse. */
+    const records = (text: string): Array<Record<string, unknown>> =>
+      text.split('\n').flatMap((l) => {
+        if (l.trim() === '') return [];
+        try {
+          const v: unknown = JSON.parse(l);
+          return isRecord(v) ? [v] : [];
+        } catch {
+          return [];
+        }
+      });
+    /** This Stop sent `sid`'s whole file on the full route (one request or its chunks). */
+    const expectFullUpload = (sid: string) => {
+      const full = claudeReqs(sid).filter((r) => r.path === '/api/v2/logs');
+      expect(full.length, `a full upload of ${sid}: ${appendHub!.requests.map((r) => `${r.path} ${r.type}/${r.sessionId}`).join(', ')}`).toBeGreaterThan(0);
+      expect(records(full.map(bodyText).join('')), `${sid}: the whole file`).toEqual(records(fs.readFileSync(transcriptOf(sid), 'utf8')));
+    };
+    /** The one append request of `sid` this Stop made: its start line and exact body. */
+    const expectOneAppend = (sid: string, startLine: number, body: string, type = 'claude') => {
+      const reqs = appendReqs(sid, type);
+      expect(reqs, `one append of ${sid}`).toHaveLength(1);
+      expect(claudeReqs(sid, type).filter((r) => r.path !== APPEND_PATH), 'no full upload next to it').toEqual([]);
+      const req = reqs[0];
+      expect(req.query.get('startLine')).toBe(String(startLine));
+      expect(req.headers['content-encoding'], 'a loopback hub never gets gzip').toBeUndefined();
+      expect(req.body.toString('utf8')).toBe(body);
+      expect(req.body.length).toBe(Buffer.byteLength(body));
+      expect(req.query.get('contentSha256')).toBe(createHash('sha256').update(body, 'utf8').digest('hex'));
+      expect(req.query.get('uploadFeedback')).toBe('1');
+      expect(req.headers['x-api-key']).toBe(API_KEY);
+      return req;
+    };
+    /** The `appended …` hook.log line of this key with its exact byte count. */
+    const appendedLine = (key: string, recordsSent: number, startLine: number, bytes: number) =>
+      `${key}: appended ${recordsSent} lines from line ${startLine}: ${bytes} B uncompressed`;
+
+    const BIG = 'append-5mb';
+    const bigLine = (i: number) => line({ type: 'user', sessionId: BIG, i, pad: 'x'.repeat(1000) });
+
+    await test.step('20. setup and FR-1 baseline: a 5 MB transcript goes out whole (chunked, full route) and leaves an append state covering every byte and line', async () => {
+      writeConfig(apRepo, {
+        base: { ...QUIET_HOOK_CONFIG, serverUrl: appendHub!.url, sendLogsTimeoutMs: 5000 },
+        local: { apiKey: API_KEY },
+      });
+      const rows: string[] = [];
+      for (let i = 0; i < 5000; i += 1) rows.push(bigLine(i));
+      fs.writeFileSync(transcriptOf(BIG), rows.join(''));
+      const size = fs.statSync(transcriptOf(BIG)).size;
+      expect(size).toBeGreaterThan(5 * 1024 * 1024);
+      await apStop(BIG);
+      expect(appendHub!.requests.every((r) => r.path === '/api/v2/logs'), 'no append state yet: the full route only').toBe(true);
+      expect(claudeReqs(BIG).length, 'over CHUNK_SIZE_BYTES: chunks').toBeGreaterThan(1);
+      expectFullUpload(BIG);
+      expect(apLog().some((l) => l.includes(`claude/${BIG}.jsonl: append not used`)), 'no fallback line for a first upload (no-state)').toBe(false);
+      const entry = v2Of(`claude/${BIG}.jsonl`);
+      expect(entry).toMatchObject({ size, appendBytes: size, appendLines: 5000 });
+      expect(entry.appendSha256).toBe(createHash('sha256').update(fs.readFileSync(transcriptOf(BIG))).digest('hex'));
+    });
+
+    await test.step('21. FR-1/FR-2: 20 lines added to the 5 MB transcript → one request to /api/v2/logs/append carrying only them (startLine 5000); hook.log byte count = the delta, not the file', async () => {
+      const added = Array.from({ length: 20 }, (_, k) => bigLine(5000 + k)).join('');
+      fs.appendFileSync(transcriptOf(BIG), added);
+      await apStop(BIG);
+      expect(appendHub!.requests, 'the append is the only request of this Stop').toHaveLength(1);
+      expectOneAppend(BIG, 5000, added);
+      const deltaBytes = Buffer.byteLength(added);
+      expect(deltaBytes).toBeLessThan(fs.statSync(transcriptOf(BIG)).size / 100);
+      const log = apLog();
+      expect(log.some((l) => l.endsWith(appendedLine(`claude/${BIG}.jsonl`, 20, 5000, deltaBytes))), log.slice(-6).join('\n')).toBe(true);
+      expect(v2Of(`claude/${BIG}.jsonl`)).toMatchObject({ appendBytes: fs.statSync(transcriptOf(BIG)).size, appendLines: 5020 });
+    });
+
+    await test.step('21b. FR-3: a last line without its newline is held back — the next Stop sends it once complete', async () => {
+      const complete = Array.from({ length: 3 }, (_, k) => bigLine(5020 + k)).join('');
+      const partial = `{"type":"user","sessionId":"${BIG}","i":5023,`;
+      fs.appendFileSync(transcriptOf(BIG), complete + partial);
+      await apStop(BIG);
+      expectOneAppend(BIG, 5020, complete);
+      expect(apLog().some((l) => l.endsWith(appendedLine(`claude/${BIG}.jsonl`, 3, 5020, Buffer.byteLength(complete))))).toBe(true);
+
+      const rest = '"pad":"late"}\n';
+      fs.appendFileSync(transcriptOf(BIG), rest);
+      await apStop(BIG);
+      expectOneAppend(BIG, 5023, partial + rest);
+      expect(v2Of(`claude/${BIG}.jsonl`)).toMatchObject({ appendBytes: fs.statSync(transcriptOf(BIG)).size, appendLines: 5024 });
+    });
+
+    await test.step('22. FR-1: growth that holds no record (blank lines only) sends nothing; the state still moves past the new bytes', async () => {
+      fs.appendFileSync(transcriptOf(BIG), '\n   \n');
+      await apStop(BIG);
+      expect(appendHub!.requests, 'no log request at all').toEqual([]);
+      expect(v2Of(`claude/${BIG}.jsonl`)).toMatchObject({ appendBytes: fs.statSync(transcriptOf(BIG)).size, appendLines: 5024 });
+    });
+
+    const BT = 'blank-torn';
+    const btLine = (n: number, pad = '') => line({ type: 'assistant', sessionId: BT, n, ...(pad ? { pad } : {}) });
+
+    await test.step('23. FR-4: a blank and a torn line in the uploaded prefix still give the append path (startLine counts records only); FR-9a: a 20,000-byte delta to the loopback hub goes uncompressed', async () => {
+      fs.writeFileSync(transcriptOf(BT), [btLine(0), btLine(1), btLine(2), '\n', '{"type":"user","torn":\n', btLine(3), btLine(4)].join(''));
+      await apStop(BT);
+      expectFullUpload(BT);
+      expect(records(bodyText(claudeReqs(BT)[0])), 'the torn line is dropped, five records go').toHaveLength(5);
+      expect(v2Of(`claude/${BT}.jsonl`)).toMatchObject({ appendBytes: fs.statSync(transcriptOf(BT)).size, appendLines: 5 });
+
+      const two = btLine(5) + btLine(6);
+      fs.appendFileSync(transcriptOf(BT), two);
+      await apStop(BT);
+      expectOneAppend(BT, 5, two);
+
+      // One record of exactly 20,000 bytes with its newline: above APPEND_GZIP_MIN_BYTES, but loopback.
+      const base = btLine(7, 'P');
+      const big = btLine(7, 'P'.repeat(1 + 20_000 - Buffer.byteLength(base)));
+      expect(Buffer.byteLength(big)).toBe(20_000);
+      fs.appendFileSync(transcriptOf(BT), big);
+      await apStop(BT);
+      expectOneAppend(BT, 7, big);
+      expect(apLog().some((l) => l.endsWith(appendedLine(`claude/${BT}.jsonl`, 1, 7, 20_000))), apLog().slice(-4).join('\n')).toBe(true);
+    });
+
+    // Step 24: FR-6, one Stop per fallback trigger on a small transcript. Each ends in a full upload
+    // of the whole file, which leaves a fresh append state for the next trigger.
+    const FB = 'fallback-01';
+    let fbN = 0;
+    const growFb = (n = 1) => {
+      for (let k = 0; k < n; k += 1) fs.appendFileSync(transcriptOf(FB), line({ type: 'user', sessionId: FB, n: fbN++ }));
+    };
+    const fbKey = `claude/${FB}.jsonl`;
+    /** One Stop of FB that must take the full upload for `reason` after `appendAttempts` append requests. */
+    const fallbackStop = async (reason: string | null, appendAttempts: number) => {
+      await apStop(FB);
+      expect(appendReqs(FB), `${reason}: append attempts`).toHaveLength(appendAttempts);
+      expectFullUpload(FB);
+      const newLines = apLog();
+      const fallbackLines = newLines.filter((l) => l.includes(`${fbKey}: append not used (`));
+      if (reason === null) expect(fallbackLines).toEqual([]);
+      else expect(fallbackLines.map((l) => l.slice(l.indexOf(fbKey))), newLines.join('\n')).toEqual([`${fbKey}: append not used (${reason}) — full upload`]);
+      const size = fs.statSync(transcriptOf(FB)).size;
+      expect(v2Of(fbKey), `${reason}: a fresh append state after the full upload`).toMatchObject({ size, appendBytes: size, appendLines: records(fs.readFileSync(transcriptOf(FB), 'utf8')).length });
+      return newLines;
+    };
+
+    await test.step('24. FR-6: every fallback trigger (no state, shorter file, edited line, failedUploads entry, 5xx, timeout, over-budget tail, pending chunked upload) ends in a full upload of the whole file', async () => {
+      // No state: the first upload of the file.
+      growFb(5);
+      await fallbackStop(null, 0);
+
+      // A shorter file (rewritten with fewer lines).
+      const firstThree = fs.readFileSync(transcriptOf(FB), 'utf8').split('\n').slice(0, 3).join('\n') + '\n';
+      fs.writeFileSync(transcriptOf(FB), firstThree);
+      await fallbackStop('shorter', 0);
+
+      // An edited, already uploaded line of the same length: the prefix hash changed.
+      fs.writeFileSync(transcriptOf(FB), fs.readFileSync(transcriptOf(FB), 'utf8').replace('"n":0', '"n":9'));
+      await fallbackStop('hash-changed', 0);
+
+      // The append answer names this very file in failedUploads (Design Decision 19).
+      growFb();
+      appendHub!.respond((req) =>
+        req.path === APPEND_PATH
+          ? { status: 201, body: JSON.stringify({ warnings: [], failedUploads: [{ sessionId: FB, type: 'claude' }] }) }
+          : okReply(req),
+      );
+      const fed = await fallbackStop('failed-feedback', 1);
+      expect(fed.some((l) => l.includes(`${fbKey}: appended 1 lines from line `)), 'the append itself went through first').toBe(true);
+
+      // A 5xx from the append route.
+      growFb();
+      appendHub!.respond((req) => (req.path === APPEND_PATH ? { status: 500, body: '{"message":"boom"}' } : okReply(req)));
+      await fallbackStop('http-500', 1);
+
+      // A timeout (sendLogsTimeoutMs = 5000).
+      growFb();
+      appendHub!.respond((req) => (req.path === APPEND_PATH ? 'hang' : okReply(req)));
+      await fallbackStop('timeout', 1);
+      appendHub!.respond(okReply);
+
+      // A tail over APPEND_MAX_PLAIN_BYTES (512,000): never sent to the append route.
+      for (let k = 0; k < 2; k += 1) fs.appendFileSync(transcriptOf(FB), line({ type: 'user', sessionId: FB, n: fbN++, pad: 'y'.repeat(300_000) }));
+      await fallbackStop('over-budget', 0);
+
+      // A pending chunked upload of the file in `.claude-logs.pending`.
+      growFb();
+      const pending = path.join(apTelemetry, '.claude-logs.pending');
+      fs.writeFileSync(pending, JSON.stringify({
+        version: 2,
+        entries: { [fbKey]: { uploadId: 'pending-upload-1', totalSize: 10, totalChunks: 1, nextChunkIndex: 0, slices: [{ s: 0, e: 10, enc: 'identity' }] } },
+      }));
+      try {
+        await fallbackStop('pending-chunked', 0);
+      } finally {
+        fs.rmSync(pending, { force: true });
+      }
+
+      // With nothing wrong any more, the next growth appends again.
+      growFb();
+      await apStop(FB);
+      expect(appendReqs(FB)).toHaveLength(1);
+      expect(claudeReqs(FB).filter((r) => r.path !== APPEND_PATH)).toEqual([]);
+    });
+
+    const SCOPE = 'scope-0001';
+    const scopeAgents = subagentsDir(apHome, apRepo, SCOPE);
+    const scopeCalls = path.join(workDir(apRepo), 'tool-wrap', SCOPE, 'calls');
+    const writeCall = (id: string) => {
+      fs.mkdirSync(scopeCalls, { recursive: true });
+      fs.writeFileSync(path.join(scopeCalls, `${id}.jsonl`), line({ type: 'start', startedAtMs: Date.now(), tool: 'terraform', capture: 'meta' }));
+    };
+    const routesOf = (type: string, sid: string) => claudeReqs(sid, type).map((r) => r.path);
+
+    await test.step('25. FR-10: artisyn, tool-calls and a sub-agent whose .meta.json changed stay on /api/v2/logs; the claude transcript appends, and the sub-agent appends again (with its label) once its params are stable', async () => {
+      fs.writeFileSync(transcriptOf(SCOPE), line({ type: 'user', sessionId: SCOPE, n: 0 }) + line({ type: 'assistant', sessionId: SCOPE, n: 1 }));
+      fs.writeFileSync(path.join(apTelemetry, `${SCOPE}.jsonl`), line({ event: 'prompt_start', session_id: SCOPE, prompt: 'scope' }));
+      fs.writeFileSync(path.join(scopeAgents, 'agent-m1.jsonl'), line({ type: 'user', agent: 'm1' }));
+      writeCall(`${Date.now()}-1-aaaa`);
+      await apStop(SCOPE);
+      expect(appendHub!.requests.filter((r) => r.path === APPEND_PATH), 'first upload of everything: full route').toEqual([]);
+      expect(routesOf('tool-calls', SCOPE), 'the tool-calls upload').toEqual(['/api/v2/logs']);
+
+      fs.appendFileSync(transcriptOf(SCOPE), line({ type: 'assistant', sessionId: SCOPE, n: 2 }));
+      fs.appendFileSync(path.join(apTelemetry, `${SCOPE}.jsonl`), line({ event: 'prompt_start', session_id: SCOPE, prompt: 'again' }));
+      fs.appendFileSync(path.join(scopeAgents, 'agent-m1.jsonl'), line({ type: 'assistant', agent: 'm1' }));
+      fs.writeFileSync(path.join(scopeAgents, 'agent-m1.meta.json'), JSON.stringify({ description: 'late label' }));
+      writeCall(`${Date.now()}-1-bbbb`);
+      await apStop(SCOPE);
+      expect(routesOf('claude', SCOPE)).toEqual([APPEND_PATH]);
+      expect(routesOf('artisyn', SCOPE)).toEqual(['/api/v2/logs']);
+      expect(routesOf('tool-calls', SCOPE)).toEqual(['/api/v2/logs']);
+      expect(routesOf('claude-subagent', 'agent-m1'), 'new upload params from .meta.json: a full upload').toEqual(['/api/v2/logs']);
+      expect(claudeReqs('agent-m1', 'claude-subagent')[0].query.get('agentDescription')).toBe('late label');
+      expect(records(bodyText(claudeReqs('agent-m1', 'claude-subagent')[0]))).toHaveLength(2);
+
+      const third = line({ type: 'assistant', agent: 'm1', n: 3 });
+      fs.appendFileSync(path.join(scopeAgents, 'agent-m1.jsonl'), third);
+      await apStop(SCOPE);
+      const sub = expectOneAppend('agent-m1', 2, third, 'claude-subagent');
+      expect(sub.query.get('agentDescription'), 'the append carries the same labels').toBe('late label');
+      expect(sub.query.get('parentSessionId')).toBe(SCOPE);
+      expect(routesOf('artisyn', SCOPE), 'the current session artisyn file still goes whole').toEqual(['/api/v2/logs']);
+    });
+
+    const appendOffFile = path.join(apTelemetry, 'append-off.json');
+    const readAppendOff = (): Record<string, number> => JSON.parse(fs.readFileSync(appendOffFile, 'utf8')) as Record<string, number>;
+
+    for (const status of [404, 413]) {
+      await test.step(`${status === 404 ? '26' : '27'}. FR-6: the hub answers ${status} on /api/v2/logs/append (an old server) → a full upload, append-off.json turns the route off for 1 h for this server, and the next Stop is full without trying it`, async () => {
+        fs.rmSync(appendOffFile, { force: true });
+        growFb();
+        appendHub!.respond((req) => (req.path === APPEND_PATH ? { status, body: '{"message":"Cannot POST /api/v2/logs/append"}' } : okReply(req)));
+        const t0 = Date.now();
+        await fallbackStop('route-missing', 1);
+        // Written by append-upload.js, so it is not among the send-logs-hook.js lines.
+        const lines = readHookLog(apRepo);
+        const origin = new URL(appendHub!.url).origin;
+        expect(lines.filter((l) => l.includes(`append route not available on ${origin} (HTTP ${status}) — append uploads off for 1 h`)), lines.join('\n')).toHaveLength(1);
+        const off = readAppendOff();
+        expect(Object.keys(off)).toEqual([appendHub!.url.replace(/\/+$/, '')]);
+        expect(off[appendHub!.url.replace(/\/+$/, '')]).toBeGreaterThanOrEqual(t0 + 3_600_000);
+
+        appendHub!.respond(okReply);
+        growFb();
+        await fallbackStop('append-off', 0);
+      });
+    }
+    fs.rmSync(appendOffFile, { force: true });
   } finally {
     await stopReceiver(sharedReceiver);
     await stopReceiver(receiver);
     await oldHub?.close();
+    await appendHub?.close();
     await hub?.close();
     dirs.cleanup();
   }

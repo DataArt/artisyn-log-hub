@@ -210,6 +210,7 @@ interface CallResult {
   status: number;
   body: Json;
   text: string;
+  headers: Record<string, string | string[] | undefined>;
 }
 
 async function callRoute(
@@ -263,7 +264,34 @@ async function callRoute(
     typeof raw === 'string' && c.expect.bodyText !== undefined
       ? raw
       : (res.text ?? '');
-  return { status: res.status, body: raw, text };
+  const headers: Record<string, string | string[] | undefined> = res.headers;
+  return { status: res.status, body: raw, text, headers };
+}
+
+/**
+ * `expect.headers`: names are case-insensitive (Node lower-cases them); a string must be
+ * contained in the header value (case-insensitive), `null` means the header must be absent.
+ */
+function checkHeaders(
+  expected: Record<string, string | null>,
+  actual: Record<string, string | string[] | undefined>,
+  failures: string[],
+): void {
+  for (const [name, want] of Object.entries(expected)) {
+    const raw = actual[name.toLowerCase()];
+    const value = Array.isArray(raw) ? raw.join(', ') : raw;
+    if (want === null) {
+      if (value !== undefined)
+        failures.push(`header ${name}: ${show(value)}, expected absent`);
+    } else if (
+      value === undefined ||
+      !value.toLowerCase().includes(want.toLowerCase())
+    ) {
+      failures.push(
+        `header ${name}: ${show(value ?? null)}, expected to contain ${show(want)}`,
+      );
+    }
+  }
 }
 
 /** Polls `settle.until` (a boolean SQL expression) until it holds (05 §2.2 "waitFor"). */
@@ -839,6 +867,7 @@ export async function runCase(
         `body text ${show(res.text.slice(0, 300))}, expected ${show(c.expect.bodyText.slice(0, 300))}`,
       );
     }
+    if (c.expect.headers) checkHeaders(c.expect.headers, res.headers, failures);
     if (c.expect.bodyMatches) {
       const actual = (res.body ?? {}) as Row;
       for (const [k, v] of Object.entries(

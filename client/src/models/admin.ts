@@ -241,4 +241,72 @@ export interface SystemInfo {
     clustered: boolean;
     processes: SystemInfoWorkerProcess[];
   };
+  /** Session-part disk cache: config plus the last sweep's state file and this worker's counters. */
+  partCache: SystemInfoPartCache;
+}
+
+/** One file-count / byte-total pair removed from the part cache. */
+export interface SystemInfoPartCacheRemoved {
+  files: number;
+  bytes: number;
+}
+
+/** State file written by the last part-cache sweep (TTL timer or over-cap trigger). */
+export interface SystemInfoPartCacheSweep {
+  /** ISO end time of the pass. */
+  at: string;
+  durationMs: number;
+  trigger: 'timer' | 'cap';
+  /** Total `*.json.gz` bytes after the pass. */
+  sizeBytes: number;
+  fileCount: number;
+  /** ISO of the oldest last-read time left, `null` when the cache is empty. */
+  oldestReadAt: string | null;
+  removedTtl: SystemInfoPartCacheRemoved;
+  removedCap: SystemInfoPartCacheRemoved;
+  removedTempFiles: number;
+  /** Message of a pass-level failure, else `null`. */
+  error: string | null;
+}
+
+/** Live read-only scan of the part cache folder. */
+export interface SystemInfoPartCacheCurrent {
+  /** ISO time the scan finished. */
+  scannedAt: string;
+  sizeBytes: number;
+  fileCount: number;
+  /** ISO of the oldest last-read time, `null` when the cache is empty. */
+  oldestReadAt: string | null;
+  /** Message of a scan failure, else `null`. */
+  error: string | null;
+}
+
+/** Part cache request counters summed over the cluster workers that have reported. */
+export interface SystemInfoPartCacheCounters {
+  /** Cacheable parts served from a cache file. */
+  hits: number;
+  /** Cacheable parts served from the database. */
+  misses: number;
+  /** Cache files written. */
+  fills: number;
+  /** Worker processes the sum covers. */
+  workers: number;
+}
+
+/** `partCache` field of `GET /api/v1/admin/system`. */
+export interface SystemInfoPartCache {
+  enabled: boolean;
+  /** Resolved absolute cache folder on the server. */
+  dir: string;
+  maxBytes: number;
+  ttlDays: number;
+  sweepIntervalMs: number;
+  /** Live scan of the folder (reused for a few seconds); `null` when disabled, absent from an older server. */
+  current?: SystemInfoPartCacheCurrent | null;
+  /** Hit / miss / fill since each worker's start, summed over the cluster; absent from an older server. */
+  counters?: SystemInfoPartCacheCounters;
+  /** `null` when no sweep has run yet, the state file is unreadable, or the cache is disabled. */
+  lastSweep: SystemInfoPartCacheSweep | null;
+  /** Removed together with deleted sessions / repos / accounts by the answering worker since its start. */
+  removedByDataDeletion: SystemInfoPartCacheRemoved;
 }

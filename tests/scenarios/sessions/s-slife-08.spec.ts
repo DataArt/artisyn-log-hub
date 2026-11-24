@@ -30,6 +30,11 @@
 // 31 days old (purged) and one 29 days old (kept); and a realtime batch for the soft-deleted SOFT
 // is answered `ignored: 'deleted'` and writes nothing.
 //
+// Step 6b (2026-11-23-session-logs-streaming, DD-27): the retention purge leaves a
+// `deleted_session_log` row per purged session — the tombstone a later upload of the same id
+// meets. The hook's re-upload of OLD and its child is answered 201 (`sessionDeleted: true`) and
+// re-creates nothing.
+//
 // Code facts that differ from the design text:
 //   - `GET /api/v1/sessions/retention-days` answers `{ retentionDays: 30 }`, not `{ days: 30 }`.
 //
@@ -41,7 +46,7 @@ import { randomBytes, randomUUID } from 'crypto';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { insertRow } from '../helpers/db-seed';
-import { ownRepoId, uploadPromptSession, uploadSubagent, type PromptSession } from '../helpers/prompt-session';
+import { ownRepoId, promptSessionBodies, uploadPromptSession, uploadSubagent, type PromptSession } from '../helpers/prompt-session';
 import { skipNewUserNudge } from '../helpers/teams';
 import { shiftSessionTree } from '../helpers/time-shift';
 import { apiRequestLine, callLines, otelTurn, spanLines } from '../fixtures/otel/otel-lines';
@@ -226,6 +231,24 @@ test('@S-SLIFE-08 retention removes an old session tree and leaves young, empty 
     for (const sid of [OLD.sessionId, child, grandchild, OLD2.sessionId]) expect(await audit(sid), sid).toHaveLength(1);
     expect(await sessionRow(YOUNG.sessionId)).toMatchObject({ deleted: false });
     expect(await sessionRow(EMPTY)).toMatchObject({ deleted: false });
+  });
+
+  await test.step('6b. DD-27: the hook re-uploads the purged OLD and its child → 201 with nothing staged; the sessions are not re-created', async () => {
+    const key = await createApiKey(owner.api);
+    const res = await api.post('/api/v2/logs', {
+      params: { sessionId: OLD.sessionId, type: 'claude', uploadFeedback: '1' },
+      headers: { 'Content-Type': 'application/x-ndjson', 'X-API-Key': key.key },
+      data: promptSessionBodies(OLD).claude,
+    });
+    expect(res.status()).toBe(201);
+    expect(await res.json()).toMatchObject({ complete: true, sessionDeleted: true });
+    await uploadPromptSession(api, key.key, OLD, queue);
+    await uploadSubagent(api, key.key, { sessionId: child, parentSessionId: OLD.sessionId, prompt: `child again ${run}` }, queue);
+    for (const sid of [OLD.sessionId, child]) {
+      expect(await sessionRow(sid), sid).toBeUndefined();
+      expect(await logsStatus(sid), sid).toBe(404);
+    }
+    expect(await listed()).toEqual([YOUNG.sessionId]);
   });
 
   await test.step('7. UI (OWNER): repo A lists YOUNG only and the header says «Sessions: 1»', async () => {

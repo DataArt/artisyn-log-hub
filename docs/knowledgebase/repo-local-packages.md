@@ -7,7 +7,7 @@ tags:
   - client
   - build
   - pricing
-generated: { by: "human:denistsyplakov", at: "2026-10-28T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
 ---
 
 # Repo-Local Packages (`packages/`)
@@ -19,7 +19,7 @@ their `.ts` sources directly.
 | Package | Contents | Details |
 |---|---|---|
 | `@loghub/pricing` (`packages/pricing/`) | The LLM cost formula (`src/cost.ts`: `computeCostBreakdown`, `pickCallRates`, `FAST_MODE_MULTIPLIER`, …) and pricing-tier validation (`src/tiers.ts`: `validatePricingTiers`, `normalizeTiers`, `MAX_*`, `PricingTier`, …) | [packages/pricing/README.md](../../packages/pricing/README.md), [algorithms/cost-formula.md](algorithms/cost-formula.md) |
-| `@loghub/bash-view` (`packages/bash-view/`) | Bash command analysis and display shared by the client Bash view and the server OKF access extraction: `analyzeBash` (changes / reads / runs, `readAccess` kinds), `buildBashView`, `formatBash`, `highlightBash`, `toRepoRelative`, and the structural parser types of `src/syntax.ts` (`BashParser`, `BashSyntaxNode`, `BashSyntaxTree`, `withTree`). Each side brings its own `tree-sitter-bash` loader: client `client/src/viewer/lib/bash-view/bash-parser.ts` + `browser-parser.ts`, server `server/src/logs/okf/server-bash-parser.ts` | [packages/bash-view/README.md](../../packages/bash-view/README.md), [algorithms/bash-command-view.md](algorithms/bash-command-view.md), [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md) |
+| `@loghub/bash-view` (`packages/bash-view/`) | Shell (Bash **and PowerShell**) command analysis and display shared by the client Shell view and the server OKF access extraction (the package name predates PowerShell and is kept). Bash: `analyzeBash` (changes / reads / runs / deleted, `readAccess` kinds), `analyzeWords`, `buildBashView`, `formatBash`, `highlightBash` / `highlightWith`. PowerShell (`ps-*.ts`): `analyzePowerShell`, `buildPowerShellView`, `formatPowerShell`, `highlightPowerShell`, `stripLhWrap`. Dispatch (`shell.ts`): `ShellKind`, `shellOfTool`, `ShellParsers`, `buildShellView`, `analyzeShellCommand`. Also `toRepoRelative` and the grammar-agnostic structural parser types of `src/syntax.ts` (`BashParser` = `ShellParser`, `BashSyntaxNode` = `ShellSyntaxNode`, `BashSyntaxTree`, `withTree`). Each side brings its own loaders, one per grammar: client `client/src/viewer/lib/bash-view/bash-parser.ts` (`loadTreeSitterParser`) + `browser-parser.ts` / `powershell-browser-parser.ts`; server `server/src/logs/okf/server-bash-parser.ts` / `server-powershell-parser.ts` (shared runtime init `server-wasm-runtime.ts`, both via `server-shell-parsers.ts`) | [packages/bash-view/README.md](../../packages/bash-view/README.md), [algorithms/bash-command-view.md](algorithms/bash-command-view.md), [algorithms/powershell-command-view.md](algorithms/powershell-command-view.md), [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md) |
 | `@loghub/tool-monitor` (`packages/tool-monitor/`) | CLI tool monitoring rules: `TOOL_DENYLIST` (name + role), `validateToolName`, `normalizeToolName`, `denylistRole` and the constants `TOOL_NAME_MAX`, `CAPTURE_LIMIT_BYTES`, `STDIN_CAPTURE_LIMIT_BYTES`, `MAX_MONITORED_TOOLS`. The hook's plain-JS copy is `hook/.claude/telemetry_tool/tool-wrap-names.js` | [packages/tool-monitor/README.md](../../packages/tool-monitor/README.md), [algorithms/tool-monitor-name-validation.md](algorithms/tool-monitor-name-validation.md) |
 | `@loghub/recommendations` (`packages/recommendations/`) | The curated startup-context recommendations catalog: `CATALOG` (entry ids `startup.*`, stable, never reused), `CATALOG_VERSION`, `matchRecommendations(facts)` and the contract types `StartupFacts`, `CatalogEntry`, `RecommendationRow`. **Client only for now** (alias, no server `file:` dependency) — the System context anatomy tab's Recommendations modal; planned to be shared with the server by `2026-11-02-session-antipatterns` (ids `session.*`) | [packages/recommendations/README.md](../../packages/recommendations/README.md), [algorithms/startup-recommendations.md](algorithms/startup-recommendations.md), [sysctx-anatomy-tab.md](sysctx-anatomy-tab.md) |
 
@@ -105,7 +105,11 @@ The `client-build` and `server-build` stages of the root `Dockerfile` both `COPY
 3. Client: add the alias to `client/vite.config.ts` and `client/tsconfig.json` (`paths` and
    `include`). `server.fs.allow` already covers all of `packages/`.
 4. Docker: nothing to change — the whole `packages/` folder is copied. (A runtime the package
-   needs at run time — e.g. the `tree-sitter-bash` WASM files for `@loghub/bash-view` on the
-   server — is a dependency of the consuming side, shipped by that side: `scripts/copy-wasm.js`
-   copies them to `dist/wasm/`, and the Dockerfile and the scenario stand do the same.)
+   needs at run time — e.g. the tree-sitter WASM files for `@loghub/bash-view` on the server — is
+   a dependency of the consuming side, shipped by that side: `scripts/copy-wasm.js` copies them to
+   `dist/wasm/`, and the Dockerfile and the scenario stand do the same. For `@loghub/bash-view`
+   that list is `web-tree-sitter/web-tree-sitter.wasm`, `tree-sitter-bash/tree-sitter-bash.wasm`
+   and `tree-sitter-powershell/tree-sitter-powershell.wasm` (`tree-sitter-powershell` 0.26.6,
+   pinned exactly in both `client/package.json` and `server/package.json`; only its `.wasm` and
+   `queries/highlights.scm` are used). The client takes the same files as Vite assets.)
 5. Add a row to the table above.

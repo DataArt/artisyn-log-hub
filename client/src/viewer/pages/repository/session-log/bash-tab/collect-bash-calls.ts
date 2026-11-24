@@ -1,9 +1,11 @@
 /**
- * The Bash tab's call list (DD-17): every `Bash` call of the session tree — the main transcript,
- * then each sub-agent transcript — with its status, timing and result, numbered in time order.
+ * The Shell tab's call list (DD-17, DD-23): every shell call (`Bash` and `PowerShell`, see
+ * `shellOfTool`) of the session tree — the main transcript, then each sub-agent transcript — with
+ * its shell, status, timing and result, numbered in time order.
  *
  * Pure — no React, no DOM, no WASM (the tab bar counts these rows without loading the parser).
  */
+import { type ShellKind, shellOfTool } from '@loghub/bash-view';
 import {
   collectAgentTypes,
   collectSpawnedAgentTypes,
@@ -25,6 +27,8 @@ export type BashCallRow = ToolCallDetail & {
   agentId: string | null;
   /** `Agent · <type>`, else `Agent <first 8 chars>`; `null` for the main transcript. */
   agentLabel: string | null;
+  /** The shell of the call (`Bash` → `bash`, `PowerShell` → `powershell`). */
+  shell: ShellKind;
 };
 
 type RawLog = Record<string, unknown>[];
@@ -49,7 +53,7 @@ function bashCallsOf(raw: RawLog, isSubagentLog: boolean): ToolCallDetail[] {
   );
   // Same per-log attribution as Logs (DD-22), so the badges agree across tabs.
   attributePermissionEvents(extractPermissionEvents(events), calls);
-  return calls.filter((c) => c.name === 'Bash');
+  return calls.filter((c) => shellOfTool(c.name) !== null);
 }
 
 function compareStartedAt(a: ToolCallDetail, b: ToolCallDetail): number {
@@ -60,7 +64,7 @@ function compareStartedAt(a: ToolCallDetail, b: ToolCallDetail): number {
 }
 
 /**
- * Bash calls of the main transcript and every sub-agent transcript, deduped by id (fork
+ * Shell calls of the main transcript and every sub-agent transcript, deduped by id (fork
  * sub-agents repeat their parent's lines), stably sorted by `startedAt` (missing last) and
  * numbered after sorting.
  */
@@ -86,8 +90,10 @@ export function collectBashCalls(
   ) => {
     for (const call of calls) {
       if (!call.id || seen.has(call.id)) continue;
+      const shell = shellOfTool(call.name);
+      if (shell === null) continue;
       seen.add(call.id);
-      rows.push({ ...call, id: call.id, agentId, agentLabel });
+      rows.push({ ...call, id: call.id, agentId, agentLabel, shell });
     }
   };
 

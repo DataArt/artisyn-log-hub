@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Loader2 } from 'lucide-react';
 import type { AgentActivation, PromptTurn } from './types';
 import {
   formatCompact,
@@ -20,6 +20,7 @@ import { CostBreakdownTooltip } from '../../../components/CostBreakdownTooltip';
 import { cn } from '../../../lib/cn';
 import type { SubagentMetaMap } from './log-parser';
 import { agentDescriptionText } from './workflow-agent-rows';
+import { useSessionParts } from '../session-parts/SessionPartsContext';
 
 interface AgentActivationItemProps {
   activation: AgentActivation;
@@ -47,12 +48,30 @@ export function AgentActivationItem({
 }: AgentActivationItemProps) {
   const [open, setOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(false);
+  const { requestAgent } = useSessionParts();
+  const [requested, setRequested] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // The agent's log part loads on first open (with its descendants, which its nested
+  // activations render), and is parsed only while open.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next && !requested) {
+      setRequested(true);
+      setLoading(true);
+      void requestAgent(activation.agentId, true).finally(() =>
+        setLoading(false),
+      );
+    }
+  };
 
   const subLogs = subagentLogsMap?.get(activation.agentId);
   const parsedSubagent = useMemo(
-    () => (subLogs ? parseSessionLogs(subLogs, { isSubagent: true }) : null),
-    [subLogs],
+    () =>
+      open && subLogs ? parseSessionLogs(subLogs, { isSubagent: true }) : null,
+    [open, subLogs],
   );
+  const awaitingLog = loading && subLogs === undefined;
 
   const visibleTurns = useMemo(
     () =>
@@ -73,7 +92,7 @@ export function AgentActivationItem({
     `agent-${activation.agentId}`;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 py-1 text-left text-xs hover:text-foreground">
         <ChevronRight
           className={cn(
@@ -185,6 +204,13 @@ export function AgentActivationItem({
                 )
               )}
             </div>
+          )}
+
+          {awaitingLog && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              Loading agent log…
+            </p>
           )}
 
           {/* Sub-agent turns — rendered via renderSubTurn prop to avoid circular import */}

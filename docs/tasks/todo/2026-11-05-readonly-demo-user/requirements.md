@@ -76,3 +76,6 @@ enforcement). Exposing the instance and filling it with demo data are out of sco
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
+
+- **2026-11-24:** not implemented yet. PR #106 (merged) carried only this task draft — no code
+  change; the task stays open.

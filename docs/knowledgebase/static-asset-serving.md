@@ -1,13 +1,13 @@
 ---
 type: "Reference"
 title: "Static Asset Serving (precompression, negotiation, cache policy)"
-description: "How the built client SPA reaches the runtime and is served: the build-time brotli/gzip precompression step, the Accept-Encoding negotiation middleware, the /assets/ immutable cache policy, why dev is a no-op, and the rejected alternatives."
+description: "How the built client SPA reaches the runtime and is served: the build-time brotli/gzip precompression step, the Accept-Encoding negotiation middleware, the /assets/ immutable cache policy, why dev is a no-op, the rejected alternatives, and the runtime gzip of large /api JSON answers (res.json wrapper, not compression)."
 tags:
   - client
   - server
   - build
   - performance
-generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-24T20:00:00+04:00" }
 ---
 
 # Static Asset Serving
@@ -185,7 +185,25 @@ given compression and caching for free, but it adds a proxy hop that breaks five
 burning event-loop CPU in every cluster worker forever, and still get a worse ratio than an offline
 brotli pass. Precompression is strictly better for content-addressed output.
 
-**Compressing API responses** is a separate, still-open question — precompression cannot cover
-dynamic payloads, and a `compression` middleware scoped to `/api` reintroduces per-request CPU and
-interacts with the gzip request-body sniffing in `server/src/logs/gzip-sniff.middleware.ts`.
-Deliberately out of scope here.
+**Compressing API responses — decided (task `2026-11-24-traffic-optimization`, Part B).**
+Precompression cannot cover dynamic payloads, so large `/api` JSON answers (session OTEL can be
+~9 MB) are gzipped at runtime by `createJsonGzipMiddleware` (`server/src/common/json-gzip.ts`),
+registered in `AppModule.configure()` for every route right after the security headers (so the
+contract and e2e test apps get it too). It wraps `res.json`, not the response stream:
+
+- Only paths under `/api/` (taken from `req.originalUrl`, because `req.path` is mount-relative in
+  Nest middleware). Every such `res.json` answer gets `Vary: Accept-Encoding`.
+- Gzip only when the client accepts it (`acceptsGzip`, shared with the log parts in
+  `server/src/common/accept-encoding.ts`, honours `q=0`), the request is not `HEAD`, no
+  `Content-Encoding` is set yet and the JSON text is at least `API_GZIP_MIN_BYTES` (env, default
+  8192). Below the threshold the already-stringified text is sent as is.
+- The weak `ETag` is computed from the uncompressed text as Express would, and a fresh conditional
+  request still gets `304`. Compression is async `zlib.gzip` (thread pool, not `gzipSync`); a gzip
+  error sends the text uncompressed.
+- Streamed `@Res()` routes, the precompressed log parts, static files and downloads never call
+  `res.json`, so they are excluded by construction, and the request-body gzip sniffer is
+  unaffected (it works on requests, the wrapper on answers).
+
+Why not the `compression` package: version 1.8.2 answers `br` to browsers (no option to force
+gzip), and every streamed route would need an explicit filter. No new dependency was needed.
+Evidence: PoC [`docs/pocs/2026-11-24-1549-api-response-compression/`](../pocs/2026-11-24-1549-api-response-compression/README.md).

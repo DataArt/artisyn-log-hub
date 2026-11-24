@@ -13,6 +13,7 @@ import { loadTreeCostRows, readTreeCost } from '../session-tree-cost.sql';
 import { descendantSessionsCte } from '../session-tree.sql';
 import { num, sessionIdsArray } from '../analytics/scoped-sessions.sql';
 import { RepositoriesService } from '../repositories.service';
+import { isTombstoned } from '../../sessions/session-tombstone.service';
 import type { SessionOwnershipLookup } from '../session-attribution/session-attribution.service';
 
 /**
@@ -514,11 +515,15 @@ export class TurnEndCostAdvisorService {
    * this at all). No locking, no "latest run" bookkeeping beyond the row itself — overlapping
    * runs on rapid consecutive turns are permitted by design, and {@link getLatestResult}
    * is what resolves "the newest submitted result" by `started_at` at read time.
+   *
+   * A tombstoned session (deleted itself, under a deleted ancestor, or hard-purged; DD-27 of
+   * 2026-11-23-session-logs-streaming) records nothing — the caller's answer is unchanged.
    */
   async recordRun(
     input: RecordTurnEndAdvisorRunInput,
     userId: number,
   ): Promise<void> {
+    if (await isTombstoned(this.db, input.sessionId)) return;
     await this.db.insert(turnEndAdvisorRuns).values({
       sessionId: input.sessionId,
       // The API-key user who recorded the run; reads only count

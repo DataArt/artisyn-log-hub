@@ -99,6 +99,10 @@ const HOOK_JS_FILES = [
   'lifecycle-hook.js',
   'send-logs-hook.js',
   'upload-logs.js',
+  // Upload skip rule and the `.claude-logs.sent.v2` manifest (hook 3.2.0, DD-26).
+  'upload-skip.js',
+  // Append uploads of `claude` / `claude-subagent` logs (hook 3.3.0, traffic optimization).
+  'append-upload.js',
   'prompt-upload-hook.js',
   'session-files.js',
   'spawn-hidden.js',
@@ -273,6 +277,21 @@ function tarEntry(archivePath, data) {
   return Buffer.concat([header, dataBuffer, pad]);
 }
 
+// Writes only when the bytes differ, so an unchanged artifact keeps its mtime. The static dir is
+// rewritten by every `npm run start:dev` (server/package.json), and the scenario runner's DD C14
+// guard fails when files there change mid-run — a dev-server start in a parallel session must not
+// look like a change when the hook sources did not change. Returns true when it wrote.
+function writeFileIfChanged(file, data) {
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
+  try {
+    if (fs.readFileSync(file).equals(buf)) return false;
+  } catch {
+    // missing or unreadable — write it
+  }
+  fs.writeFileSync(file, buf);
+  return true;
+}
+
 function buildTarGz(entries) {
   const parts = entries.map(([archivePath, data]) => tarEntry(archivePath, data));
   // Two 512-byte zero blocks = end of archive
@@ -303,8 +322,8 @@ function packCliTarball() {
   entries.push(['package/package.json', pkgJson]);
 
   const gz = buildTarGz(entries);
-  fs.writeFileSync(CLI_TARBALL, gz);
-  console.log(`  Written: ${CLI_TARBALL}`);
+  const wrote = writeFileIfChanged(CLI_TARBALL, gz);
+  console.log(`  ${wrote ? 'Written' : 'Unchanged'}: ${CLI_TARBALL}`);
 }
 
 // Blanked `.artisyn/config/log-hub.json` template shipped in the plugin tree. Every other config
@@ -480,19 +499,15 @@ function packMarketplaceTarball() {
   }
 
   const gz = buildTarGz(entries);
-  fs.writeFileSync(HOOKS_TARBALL, gz);
-  console.log(`  Written: ${HOOKS_TARBALL}`);
+  const wrote = writeFileIfChanged(HOOKS_TARBALL, gz);
+  console.log(`  ${wrote ? 'Written' : 'Unchanged'}: ${HOOKS_TARBALL}`);
 
   return { version, pluginJson, scriptsVersionJson };
 }
 
 function writeVersionManifest() {
   const version = readHookVersion();
-  fs.writeFileSync(
-    path.join(STATIC_DIR, 'installer-version.json'),
-    JSON.stringify({ version }) + '\n',
-    'utf8',
-  );
+  writeFileIfChanged(path.join(STATIC_DIR, 'installer-version.json'), JSON.stringify({ version }) + '\n');
   console.log(`  Version: ${version}`);
 }
 

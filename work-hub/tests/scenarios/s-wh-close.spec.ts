@@ -1,14 +1,19 @@
 // @S-WH-05 — closing workstreams: unsaved files and a busy agent first, Bring into main (also with
 // a conflict), Already merged elsewhere, Close for now and Reopen, Discard; then the AC-7 reference
-// walk with buttons and plain chat messages only (AC-7, AC-24–AC-26).
+// walk with buttons and plain chat messages only (AC-7, AC-24–AC-26); then pushing through the git
+// proxy to the stand's fake git host: from the terminal, the default-branch policy and the push of
+// a close (FR-6–FR-8).
 import fs from 'node:fs';
 import type { Page } from '@playwright/test';
 import {
   containerState,
+  createPatConnection,
   dockerTry,
   EDITOR,
   expect,
+  FAKE_GIT_HTTP,
   fakeLoginInUi,
+  fakeRepoGit,
   gitMain,
   gitStream,
   gotoWorkspace,
@@ -26,6 +31,7 @@ import {
   workspaceWithFakeLogin,
   workstreamBranch,
   workstreamContainer,
+  type Workspace,
 } from './fixtures';
 
 test.describe.configure({ timeout: 1_800_000 });
@@ -284,6 +290,103 @@ test('@S-WH-05 @mode-a closing workstreams and the AC-7 walk', async ({ browser,
     await expect(treeRow(page, 'dashboard.html')).toBeVisible();
     await openFromTree(page, 'dashboard.html');
     await expect(page.locator(EDITOR)).toContainText('<h1>Q3 revenue</h1>');
+  });
+
+  // Steps 9–12: pushing through the git proxy to the stand's fake git host (FR-6–FR-8). The
+  // workspace is cloned from it, so `origin` exists and its default branch (main) is known.
+  const conn = await createPatConnection(api, 'Fake host');
+  const pushing = await api.expectStatus<Workspace>('POST', '/api/v1/workspaces', 201, {
+    name: 'Pushing',
+    source: { connectionId: conn.id, url: FAKE_GIT_HTTP, branch: null },
+  });
+  let pusher = report;
+  let pusherBranch = '';
+
+  await test.step('9. git push origin ws/<slug> from the workstream terminal (FR-6)', async () => {
+    await gotoWorkspace(page, pushing.id);
+    await expect(treeRow(page, 'README.md')).toBeVisible({ timeout: 60_000 });
+    pusher = await openWorkstreamInUi(page, api, pushing.id, 'Pusher');
+    pusherBranch = await workstreamBranch(stand, pusher.id);
+    expect(pusherBranch).toMatch(/^ws\//);
+    await say(page, 'make p.txt pushed', 'Wrote p.txt');
+    await say(page, 'commit p', 'Commit finished: exit 0');
+    await say(page, `run git push origin ${pusherBranch}`, 'Run finished: exit 0', 120_000);
+    expect(fakeRepoGit(stand, 'app', `rev-parse refs/heads/${pusherBranch}`)).toBe(
+      gitStream(pusher.id, ['rev-parse', 'HEAD']).stdout.trim(),
+    );
+  });
+
+  await test.step('10. a plain push to main goes through; a force push to main is refused by the policy (FR-7)', async () => {
+    const plain = gitStream(pusher.id, ['push', 'origin', 'HEAD:main']);
+    expect(plain.status, plain.stderr).toBe(0);
+    const head = gitStream(pusher.id, ['rev-parse', 'HEAD']).stdout.trim();
+    expect(fakeRepoGit(stand, 'app', 'rev-parse refs/heads/main')).toBe(head);
+
+    const force = gitStream(pusher.id, ['push', '--force', 'origin', 'HEAD~1:main']);
+    expect(force.status).not.toBe(0);
+    expect(force.stderr).toContain('Work Hub push policy: force push to the default branch main is not allowed');
+    expect(fakeRepoGit(stand, 'app', 'rev-parse refs/heads/main')).toBe(head);
+  });
+
+  await test.step('11. Close for now with push: the branch reaches the host and "Pushed" is shown (FR-8)', async () => {
+    await say(page, 'make q.txt later', 'Wrote q.txt');
+    await say(page, 'commit q', 'Commit finished: exit 0');
+    expect(await startClose(page)).toBe('options');
+    await expect(page.getByTestId('close-push-connection')).toContainText('Fake host');
+    await expect(page.getByTestId('close-push')).not.toBeChecked();
+    // The label names the branch of the way to close in focus; "Already merged elsewhere" never pushes.
+    await page.getByTestId('close-merged-elsewhere').hover();
+    await expect(page.getByTestId('close-push')).toBeDisabled();
+    await page.getByTestId('close-for-now').hover();
+    await expect(page.getByTestId('close-push-option')).toContainText(`Push ${pusherBranch} to origin`);
+    await expect(page.getByTestId('close-push')).toBeEnabled();
+    await page.getByTestId('close-push').check();
+    await page.getByTestId('close-for-now').click();
+    const result = page.getByTestId('close-push-result');
+    await expect(result).toHaveAttribute('data-push-result', 'ok', { timeout: 120_000 });
+    await expect(result).toContainText(`✓ Pushed ${pusherBranch} to origin`);
+    await page.getByTestId('close-push-done').click();
+    await expect(dialog(page)).toHaveCount(0);
+    expect(fakeRepoGit(stand, 'app', `cat-file -p ${pusherBranch}:q.txt`)).toBe('later');
+    expect((await listWorkstreams(api, pushing.id)).find((s) => s.id === pusher.id)?.state).toBe('closed');
+  });
+
+  await test.step('12. only ws/* branches + Bring into main with push: "Push rejected", the workstream is closed (FR-7, FR-8)', async () => {
+    const [origin] = await api.expectStatus<{ id: string; name: string }[]>('GET', `/api/v1/workspaces/${pushing.id}/remotes`, 200);
+    expect(origin.name).toBe('origin');
+    await page.goto(`/#/w/${pushing.id}/settings`);
+    const card = page.getByTestId('remote-card').filter({ hasText: 'origin' });
+    await card.getByTestId('remote-policy-edit').click();
+    const policy = page.getByTestId('push-policy-dialog');
+    await policy.getByTestId('remote-policy-only-ws').check();
+    await policy.getByTestId('push-policy-save').click();
+    await expect(policy).toHaveCount(0);
+    await expect(card.getByTestId('remote-policy')).toContainText('only ws/* branches');
+
+    // Main catches up with the host first, so the push below is a fast-forward that only the
+    // policy refuses.
+    const pull = gitMain(pushing.id, ['pull', '--ff-only', 'origin', 'main']);
+    expect(pull.status, pull.stderr).toBe(0);
+    const hostMain = fakeRepoGit(stand, 'app', 'rev-parse refs/heads/main');
+    expect(mainHead(pushing.id)).toBe(hostMain);
+    await gotoWorkspace(page, pushing.id);
+    const rejected = await openWorkstreamInUi(page, api, pushing.id, 'Rejected');
+    await say(page, 'make r.txt rejected', 'Wrote r.txt');
+    await say(page, 'commit r', 'Commit finished: exit 0');
+    expect(await startClose(page)).toBe('options');
+    await page.getByTestId('close-push').check();
+    await page.getByTestId('close-bring-into-main').click();
+    const result = page.getByTestId('close-push-result');
+    await expect(result).toHaveAttribute('data-push-result', 'policy', { timeout: 120_000 });
+    await expect(result).toContainText('Push rejected');
+    await expect(result).toContainText('only ws/* branches may be pushed');
+    await expect(result).toContainText('The workstream is closed locally');
+    await page.getByTestId('close-push-done').click();
+    await expect(dialog(page)).toHaveCount(0);
+    expect((await listWorkstreams(api, pushing.id)).find((s) => s.id === rejected.id)?.state).toBe('closed');
+    // Main got the work locally, the host's main did not move.
+    expect(gitMain(pushing.id, ['show', 'main:r.txt']).stdout.trim()).toBe('rejected');
+    expect(fakeRepoGit(stand, 'app', 'rev-parse refs/heads/main')).toBe(hostMain);
   });
 
   expect(offOrigin).toEqual([]);

@@ -2,6 +2,7 @@
 //
 // Deleting a session soft-deletes the `sessions` row (and its children), drops every per-session
 // row and the session's logs, removes contexts only that session used, and writes one audit row.
+import { WORLD_V1 } from '../fixtures/world-v1.sql';
 import type { ContractFamily, WriteSpec } from '../types';
 
 /** The projected OTEL tables `purgeSessionChildData` empties for the deleted root. */
@@ -13,6 +14,23 @@ const OTEL_TABLES = [
   'otel_reclass_queue',
 ];
 
+/**
+ * The tables that used to outlive a soft delete and are purged since 2026-11-23
+ * session-logs-streaming (DD-28), keyed by `sessions.id`.
+ */
+const SURVIVOR_TABLES = [
+  'logs_otel',
+  'otel_api_calls',
+  'session_request_ids',
+  'session_tool_stats',
+  'session_harness_usage',
+  'session_changed_paths',
+  'session_cause_stats',
+  'session_attribution',
+  'session_attribution_runs',
+  'session_prompt_watermark',
+];
+
 /** Every table a session deletion may touch. */
 const SESSION_TABLES = [
   'sessions',
@@ -22,14 +40,10 @@ const SESSION_TABLES = [
   'contexts',
   'session_stats',
   'session_costs',
-  'session_request_ids',
-  'session_tool_stats',
-  'session_changed_paths',
   'session_file_stats',
-  'session_harness_usage',
-  'session_attribution',
-  'session_attribution_runs',
-  'session_prompt_watermark',
+  ...SURVIVOR_TABLES,
+  // DD-28: keyed by the `session_id` string (no foreign key), purged with the survivors.
+  'turn_end_advisor_runs',
   'user_favorite_sessions',
   'deleted_session_log',
   // DD-11 steps g/h: every purge unconditionally nulls the deleted session's
@@ -45,6 +59,8 @@ function deleteSession(
   pk: string,
   sessionId: string,
   actor: string,
+  /** `repositories.repo_url` of the session's repository (DD-29). */
+  repositoryUrl: string,
   /** `@ref` of the snapshot id this session was bound to, if the sweep should delete its row. */
   boundSnapshotRef?: string,
 ): WriteSpec {
@@ -109,21 +125,41 @@ function deleteSession(
           where: `session_id = ${pk}`,
           count: 'all' as const,
         })),
-        // KNOWN DISCREPANCY, pinned as the code behaves today (05 §F18 expects these emptied
-        // too): the soft-deleted `sessions` row keeps its session_request_ids,
-        // session_tool_stats, session_changed_paths (raw file paths), session_harness_usage,
-        // session_attribution (+ runs) and session_prompt_watermark rows. They are watched
-        // above, so they must stay exactly as they were. Reported with chunk 23.
+        // DD-28 (2026-11-23 session-logs-streaming): the former survivors are emptied too —
+        // what 05 §F18 always expected.
+        ...SURVIVOR_TABLES.map((table) => ({
+          table,
+          where: `session_id = ${pk}`,
+          count: 'all' as const,
+        })),
+        {
+          table: 'turn_end_advisor_runs',
+          where: `session_id = '${sessionId}'`,
+          count: 'all',
+        },
       ],
       inserted: [
         {
           table: 'deleted_session_log',
           where: `session_id = '${sessionId}'`,
-          check: [`session_pk = ${pk}`, `deleted_by_user_id = ${actor}`],
+          check: [
+            `session_pk = ${pk}`,
+            `deleted_by_user_id = ${actor}`,
+            `owner_user_id = ${actor}`,
+            `repository_url = '${repositoryUrl}'`,
+          ],
         },
       ],
     },
     keys: { session_file_stats: ['session_id', 'category_name'] },
+    // No survivor row of the session is left behind (DD-28), whatever the world seeds.
+    after: [
+      ...SURVIVOR_TABLES.map(
+        (table) =>
+          `NOT EXISTS (SELECT 1 FROM ${table} WHERE session_id = ${pk})`,
+      ),
+      `NOT EXISTS (SELECT 1 FROM turn_end_advisor_runs WHERE session_id = '${sessionId}')`,
+    ],
   };
 }
 
@@ -132,12 +168,20 @@ export const f18SessionDeleteRetention: ContractFamily = {
   name: 'session-delete-retention',
   cases: [
     {
+      // s01 seeds a row in most former survivor tables (request ids, tool stats, changed
+      // paths, harness usage, attribution + runs, prompt watermark): after the delete none of
+      // them holds a row of the session (DD-28, `after` in deleteSession).
       id: 'F18-delete',
       route: 'DELETE /api/v1/sessions/:sessionId',
       actor: 'owner',
       params: { sessionId: '@s01.sessionId' },
       expect: { status: 204 },
-      write: deleteSession('@s01.id', 'w1-s01-plain', '@owner.id'),
+      write: deleteSession(
+        '@s01.id',
+        'w1-s01-plain',
+        '@owner.id',
+        WORLD_V1.repos.R1.url,
+      ),
     },
     {
       // s04 is bound to a harness snapshot: deleting it also sweeps that snapshot row.
@@ -150,6 +194,7 @@ export const f18SessionDeleteRetention: ContractFamily = {
         '@s04.id',
         'w1-s04-favorite',
         '@owner.id',
+        WORLD_V1.repos.R1.url,
         '@harnessSnapshotId',
       ),
     },

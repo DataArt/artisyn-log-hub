@@ -934,6 +934,10 @@
     },
     "note": "Rule 5.9: git grep without paths searches the whole tree and reads nothing. grep -f takes its patterns from a file: the pattern is unknown (no pattern field) and no positional is the pattern, so docs/kb is a path."
   },
+  {"id":"BV-104","input":{"command":"rm a.txt b.txt; touch c.txt"},"expected":{"ok":true,"changes":["a.txt","b.txt","c.txt"],"deleted":["a.txt","b.txt"]},"note":"Rule 5.10: both positionals of rm are changes and deleted paths, in changes order; touch c.txt is a change but not deleted. The deleted paths stay in changes, so \"changes 3\"."},
+  {"id":"BV-105","input":{"command":"rmdir build/tmp; mkdir build/tmp"},"expected":{"ok":true,"changes":["build/tmp"],"deleted":["build/tmp"]},"note":"Rule 5.10: rmdir is a deleting command too; a path removed and then created again in the same command is listed once in changes and still listed as deleted."},
+  {"id":"BV-106","input":{"command":"for f in x.log y.log; do rm -f \"logs/$f\"; done"},"expected":{"ok":true,"changes":["logs/x.log","logs/y.log"],"deleted":["logs/x.log","logs/y.log"]},"note":"Rule 5.10 with rule 5.4: the loop body is walked once per literal word, so the rm inside the loop deletes logs/x.log and logs/y.log; -f is a flag."},
+  {"id":"BV-107","input":{"command":"rm -rf /work/acme-app/dist; cp a b","root":"/work/acme-app"},"expected":{"ok":true,"changes":["dist","b"],"reads":["a"],"deleted":["dist"]},"note":"Rule 5.10: deleted paths are made repo-relative like changes (rule 6.5): /work/acme-app/dist -> dist. cp writes b and reads a, neither is deleted."},
   {
     "id": "BH-01",
     "input": {"command": "for f in *.ts; do echo \"$f\"; done", "highlight": true},

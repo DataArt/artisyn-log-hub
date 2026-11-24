@@ -1,0 +1,55 @@
+#!/bin/sh
+# CGI front of the WH git proxy: capability check, mirror sync on ref advertisement, then
+# git http-backend over the per-remote bare mirror /srv/git/<remote id>.git.
+set -u
+STATE=/run/wh
+export HOME=$STATE/home
+
+# Error as an ERR pkt-line inside a 200 advertisement: git prints "fatal: remote error: <msg>".
+err_adv() {
+  svc=${QUERY_STRING#service=}
+  head="# service=$svc"
+  msg="ERR $1"
+  printf 'Content-Type: application/x-%s-advertisement\r\nCache-Control: no-cache\r\n\r\n' "$svc"
+  printf '%04x%s\n0000' $((${#head} + 5)) "$head"
+  printf '%04x%s\n' $((${#msg} + 5)) "$msg"
+  exit 0
+}
+plain() { # status message
+  printf 'Status: %s\r\nContent-Type: text/plain\r\n' "$1"
+  [ "${1%% *}" = 401 ] && printf 'WWW-Authenticate: Basic realm="Work Hub"\r\n'
+  printf '\r\n%s\n' "$2"
+  exit 0
+}
+
+path=${PATH_INFO:-}
+rid=$(printf '%s' "$path" | sed -n 's#^/\([a-z0-9-]*\)\.git/.*#\1#p')
+{ [ -n "$rid" ] && [ -f "$STATE/remotes/$rid" ]; } || plain "404 Not Found" "Work Hub: unknown remote"
+
+auth=${HTTP_AUTHORIZATION:-}
+case "$auth" in
+  "Basic "*) ;;
+  *) plain "401 Unauthorized" "Work Hub: a capability is required" ;;
+esac
+cap=$(printf '%s' "${auth#Basic }" | base64 -d 2>/dev/null | sed 's/^[^:]*://')
+h=$(printf '%s' "$cap" | sha256sum | cut -d' ' -f1)
+[ -f "$STATE/caps/$h" ] || plain "401 Unauthorized" "Work Hub: unknown or revoked capability"
+grep -qx "$rid" "$STATE/caps/$h" || err_adv "Work Hub: this workspace has no grant for this remote's connection"
+
+. "$STATE/remotes/$rid"   # CONN, CONN_NAME, UPSTREAM, ONLY_WS
+[ -d "$STATE/conns/$CONN" ] || err_adv "Work Hub connection $CONN_NAME was deleted - rebind the remote in workspace settings"
+
+case "$path" in
+  */info/refs)
+    if ! out=$(/usr/local/bin/wh-git-ctl sync "$rid" 2>&1); then
+      case "$out" in
+        *"Host key verification failed"*|*"REMOTE HOST IDENTIFICATION HAS CHANGED"*)
+          err_adv "Work Hub connection $CONN_NAME: the host key of the git host changed - check it and re-pin in Settings" ;;
+        *"Permission denied"*|*"401"*|*"Authentication failed"*|*"could not read Username"*)
+          err_adv "Work Hub connection $CONN_NAME was rejected by the host - update its credential in Settings" ;;
+        *) err_adv "Work Hub connection $CONN_NAME: $(printf '%s' "$out" | tail -n 1)" ;;
+      esac
+    fi ;;
+esac
+export GIT_PROJECT_ROOT=/srv/git GIT_HTTP_EXPORT_ALL=1 REMOTE_USER=wh WH_REMOTE_ID=$rid
+exec git http-backend

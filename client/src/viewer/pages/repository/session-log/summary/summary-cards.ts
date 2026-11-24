@@ -2,7 +2,7 @@
  * Summary hub cards (DD-20, FR-D1–D4): the "Where to look next" block under the executive band.
  *
  * Pure: every figure comes from values the session pane has already loaded and the band already
- * shows (the derive, the token breakdown, the change-surface aggregate, the Bash collector and
+ * shows (the derive, the token breakdown, the change-surface aggregate, the shell collector and
  * the Turn-End advisor result) — no request, no lazy tab chunk and no new formula. Titles and
  * descriptions come from the tab registry, so a card always names its tab the way the bar does.
  */
@@ -40,7 +40,7 @@ export interface SummaryCardsInput {
     | 'workflowCount'
     | 'delegationCostShare'
   >;
-  /** Bash calls of the session tree (`collectBashCalls`); `undefined` = not known yet. */
+  /** Shell commands (Bash and PowerShell) of the session tree (`collectBashCalls`); `undefined` = not known yet. */
   bashCount: number | undefined;
   /** The tree's change-surface aggregate; `null` = never computed or not fetched. */
   changeSurface: ChangeSurfaceAggregate | null;

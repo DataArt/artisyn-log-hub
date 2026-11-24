@@ -10,15 +10,11 @@ import {
   fetchRepositoryDetail,
   fetchRepositorySessions,
   fetchRepositorySummary,
-  fetchSessionLogs,
   setSessionFavorite,
 } from '../../api';
 import { SESSION_POLL_INTERVAL_MS } from '../../lib/settings';
-import {
-  buildAgentParentMap,
-  buildSubagentMeta,
-  parseSessionLogs,
-} from './session-log/log-parser';
+import { parseSessionLogs } from './session-log/log-parser';
+import { useSessionLogParts } from './session-parts/useSessionLogParts';
 import type { ViewMode } from './session-list/SessionListPanel';
 
 interface BranchSelectedSession {
@@ -35,12 +31,6 @@ interface UseRepositoryDataParams {
   branchSelectedSession: BranchSelectedSession | null;
   /** The sessions list `otelReason` filter (2026-10-30 otel-shared-receiver, DD-33). */
   otelReason?: OtelReasonKey | null;
-  /**
-   * True while a tab that keeps its own copy of the logs is open (the Session Map, session-map
-   * DD-11): the silent watermark refetch of `/logs` is held back, and leaving the tab catches up
-   * with one refetch.
-   */
-  suspendSilentLogsRefetch?: boolean;
 }
 
 export function useRepositoryData({
@@ -51,7 +41,6 @@ export function useRepositoryData({
   sessionId,
   branchSelectedSession,
   otelReason = null,
-  suspendSilentLogsRefetch = false,
 }: UseRepositoryDataParams) {
   const queryClient = useQueryClient();
 
@@ -156,10 +145,25 @@ export function useRepositoryData({
     enabled: !isInvalidId,
   });
 
-  const logsQuery = useQuery({
-    queryKey: ['session-logs', repoId, selectedSession?.sessionId, teamId],
-    queryFn: () => fetchSessionLogs(repoId, selectedSession!.sessionId, teamId),
-    enabled: selectedSession !== null,
+  // The manifest keeps the historic `['session-logs', …]` key, so the watermark below and every
+  // invalidator refetch only the manifest; changed parts that are loaded follow by revision.
+  const {
+    manifestQuery,
+    logsQuery,
+    logsData,
+    subagentLogsMap,
+    agentParentMap,
+    subagentMeta,
+    knownAgentIds,
+    requestAgent,
+    requestAll,
+    loaded: loadedParts,
+    total: totalParts,
+    allLoaded: allPartsLoaded,
+  } = useSessionLogParts({
+    repoId,
+    sessionId: selectedSession?.sessionId,
+    teamId,
   });
 
   // Sibling poll (same pattern as useNewSessionPoll.ts): a query key
@@ -207,9 +211,6 @@ export function useRepositoryData({
     prevSessionIdRef.current = currentSessionId;
 
     if (currentWatermark === null) return;
-    // The Map tab polls its own delta; the old watermark is kept so leaving the tab re-runs this
-    // effect (the flag is a dependency) and refetches once.
-    if (suspendSilentLogsRefetch) return;
     const seenEndTime = seenEndTimeRef.current.get(currentSessionId);
     // No prior fetch to compare against (first time viewing this session) — the normal
     // loading path already handles this, nothing to reconcile here.
@@ -220,14 +221,7 @@ export function useRepositoryData({
     void queryClient.invalidateQueries({
       queryKey: ['session-logs', repoId, currentSessionId, teamId],
     });
-  }, [
-    selectedSession,
-    currentWatermark,
-    queryClient,
-    repoId,
-    teamId,
-    suspendSilentLogsRefetch,
-  ]);
+  }, [selectedSession, currentWatermark, queryClient, repoId, teamId]);
 
   const reloadSelectedSessionLogs = useCallback(() => {
     if (!selectedSession) return;
@@ -255,16 +249,18 @@ export function useRepositoryData({
   }, [logsQuery.isFetching, selectedSession]);
 
   useEffect(() => {
-    if (suspendSilentLogsRefetch) return;
-    if (selectedSession && logsQuery.isSuccess && currentWatermark !== null) {
+    if (
+      selectedSession &&
+      manifestQuery.isSuccess &&
+      currentWatermark !== null
+    ) {
       seenEndTimeRef.current.set(selectedSession.sessionId, currentWatermark);
     }
   }, [
     selectedSession,
-    logsQuery.isSuccess,
-    logsQuery.dataUpdatedAt,
+    manifestQuery.isSuccess,
+    manifestQuery.dataUpdatedAt,
     currentWatermark,
-    suspendSilentLogsRefetch,
   ]);
 
   const isFavorite = selectedSession?.isFavorite ?? false;
@@ -319,43 +315,26 @@ export function useRepositoryData({
     },
   });
 
-  // Per-agent log files keyed by agentId (strip the `agent-` sessionId prefix),
-  // mirroring SessionLogView so the charts can read inner agent activity.
-  const subagentLogsMap = useMemo(() => {
-    const map = new Map<string, Record<string, unknown>[]>();
-    for (const sa of logsQuery.data?.subagents ?? []) {
-      const agentId = sa.sessionId.startsWith('agent-')
-        ? sa.sessionId.slice('agent-'.length)
-        : sa.sessionId;
-      map.set(agentId, sa.logs);
-    }
-    return map;
-  }, [logsQuery.data]);
-
-  // Authoritative agentId -> parentAgentId map (see SessionLogView.tsx for full rationale) —
-  // used by the Charts/Call Tree tabs to correctly discover nested sub-agents at any depth.
-  const agentParentMap = useMemo(
-    () => buildAgentParentMap(logsQuery.data?.subagents ?? []),
-    [logsQuery.data],
-  );
-
-  // Per-agent `.meta.json` labels (agent description, workflow phase) from the server.
-  const subagentMeta = useMemo(
-    () => buildSubagentMeta(logsQuery.data?.subagents ?? []),
-    [logsQuery.data],
-  );
-
+  // `subagentLogsMap` (loaded sub-agent bodies by bare agent id), `agentParentMap` and
+  // `subagentMeta` (every manifest sub-agent) come from `useSessionLogParts` above.
   const parsedLogs = useMemo(() => {
-    if (logsQuery.data?.main === undefined) return null;
-    return parseSessionLogs(logsQuery.data.main, {
+    if (logsData === undefined) return null;
+    return parseSessionLogs(logsData.main, {
       repoConfig: repoDetailQuery.data?.repoConfig ?? null,
-      subagentStats: logsQuery.data.subagentStats,
-      workflows: logsQuery.data.workflows,
+      subagentStats: logsData.subagentStats,
+      workflows: logsData.workflows,
       subagentLogs: subagentLogsMap,
-      harnessSnapshot: logsQuery.data.harnessSnapshot ?? null,
+      harnessSnapshot: logsData.harnessSnapshot ?? null,
       subagentMeta,
+      knownSubagentIds: knownAgentIds,
     });
-  }, [logsQuery.data, repoDetailQuery.data, subagentLogsMap, subagentMeta]);
+  }, [
+    logsData,
+    repoDetailQuery.data,
+    subagentLogsMap,
+    subagentMeta,
+    knownAgentIds,
+  ]);
 
   const handleRefresh = useCallback(() => {
     void queryClient.invalidateQueries({
@@ -384,13 +363,22 @@ export function useRepositoryData({
     summaryQuery,
     repoContextsQuery,
     repoDetailQuery,
+    /** The manifest plus loaded parts, in the legacy `SessionLogsData` shape. */
     logsQuery,
+    manifestQuery,
     isFavorite,
     favoriteMutation,
     parsedLogs,
     subagentLogsMap,
     agentParentMap,
+    subagentMeta,
+    knownAgentIds,
     handleRefresh,
     isReloadingUpdatedSession,
+    requestAgent,
+    requestAll,
+    loadedParts,
+    totalParts,
+    allPartsLoaded,
   };
 }

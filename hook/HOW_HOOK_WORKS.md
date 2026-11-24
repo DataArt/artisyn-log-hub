@@ -761,12 +761,12 @@ For `activate` events a `[hook v<version>]` suffix is appended when `version.jso
 2025-01-15T10:30:01.200Z [send-logs-hook.js] [abc123] [result] done: uploaded=2 skipped=1 failed=0 total=3
 ```
 
-`hook.log` rotates at 100 KB; up to 3 files are retained (`hook.log`, `hook.log.1`, `hook.log.2`).
+`hook.log` rotates at 1 MB; up to 3 files are retained (`hook.log`, `hook.log.1`, `hook.log.2`).
 
 **The two turn-end-analysis branches of `post-turn-analysis-worker.js` log to their own dedicated files**, not
 `hook.log`: the Turn-End Cost Advisor branch writes `.artisyn/ai_work_dir/analysis.log`, and the
 AI Session Attribution branch writes `.artisyn/ai_work_dir/attribution.log` — same line format and
-same independent 100 KB / 3-file rotation as `hook.log` (each file rotates on its own; one filling
+same independent 1 MB / 3-file rotation as `hook.log` (each file rotates on its own; one filling
 up never rotates another). Worker-level events that precede or span both branches (the run
 starting, the combined config fetch failing, no `repoUrl` resolvable, or an uncaught top-level
 error) still go to the shared `hook.log`, since they aren't attributable to one branch. Any other

@@ -1,11 +1,11 @@
 ---
 type: "Architecture Guide"
 title: "Session Log View"
-description: "Session log view (Logs tab): the /logs payload contract (agent- prefix rules, descendant loading, client-only types), the Workflow tool lifecycle in transcripts, log parser, tool-call core (sections, status, permission attribution), the shared tool view, Context Growth steps, the Bash tab, text extraction, and MCP handling."
+description: "Session log view (Logs tab): the /logs payload contract (agent- prefix rules, descendant loading, client-only types), the Workflow tool lifecycle in transcripts, log parser, tool-call core (sections, status, permission attribution), the shared tool view, Context Growth steps, the Shell tab (Bash and PowerShell calls), text extraction, and MCP handling."
 tags:
   - client
   - logs
-generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-23T00:00:00+04:00" }
 ---
 
 # Session Log View
@@ -13,8 +13,10 @@ generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
 ## Overview
 
 The session log view is the **Logs tab** inside `RepositoryView`. It replaces a raw JSON dump with a structured
-display of Claude Code telemetry data. All parsing is done **client-side** from raw log events returned by
-`GET /api/v1/repositories/:repoId/sessions/:sessionId/logs`.
+display of Claude Code telemetry data. All parsing is done **client-side** from raw log events. The viewer
+loads them in parts (`GET …/sessions/:sessionId/logs/parts` plus one request per stored log, see
+[Client: loading a session in parts](#client-loading-a-session-in-parts)); the single-document
+`GET /api/v1/repositories/:repoId/sessions/:sessionId/logs` stays for older clients.
 
 Key files live in `client/src/viewer/pages/repository/session-log/`:
 
@@ -30,11 +32,11 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 | `PromptTurnItem.tsx` | Single turn row (header + metrics + skills + rules + tools + files + images + agent activations + sub-agents + workflows); clicking a tool, file, skill or orphan Agent-call row opens `ToolCallDetailModal` |
 | `tool-calls.ts` | Tool-call core: `TOOL_SECTION` / `toolSection`, `FILE_TOOL_NAMES`, `buildToolResultIndex`, `extractRawToolCalls`, `buildAllToolCalls`, `extractPermissionEvents`, `attributePermissionEvents`, `deepEqual` / `deepSubset` — see [Tool calls](#tool-calls-tool-callsts-tool-outcomets) and `algorithms/tool-call-sections.md` |
 | `tool-outcome.ts` | `classifyToolOutcome` / `outcomeToStatus` / `REJECTION_MARKERS` — shared by the parser and the Statistics walker; see `algorithms/tool-call-outcome.md` |
-| `tool-call-view/` | The shared tool view (`ToolCallView`, `ToolViewProvider` / `useToolView`, `StatusBadge` / `StatusMark`, `ToolOutputBlock`, `BashCommandView`, `tool-bodies.tsx`, `useBashView`) used by the Logs modal, `SubAgentDetail`, the Context Growth step modal and the Bash tab |
+| `tool-call-view/` | The shared tool view (`ToolCallView`, `ToolViewProvider` / `useToolView`, `StatusBadge` / `StatusMark`, `ToolOutputBlock`, `BashCommandView`, `tool-bodies.tsx`, `useBashView`) used by the Logs modal, `SubAgentDetail`, the Context Growth step modal and the Shell tab |
 | `ToolCallDetailModal.tsx` | Modal shell for one tool call: `Dialog` + `ToolCallView` (header with badges, a body per tool, the output block) |
 | `prompt-turn-helpers.tsx` | Extracted helper components: `ToolCallRow`, `FileRow` (status mark, clickable when it has a call), `ImageRow`, `SectionHeader`, summary builders |
 | `session-map/` | The Session Map tab (`session-map`): its own delta poll (`GET …/logs/delta`), merge, `parseSessionLogs` + map model, cards, side panel and timeline — see [Session Map Tab](session-map.md) |
-| `bash-tab/` | The session Bash tab: `collectBashCalls`, `SessionBashTab`, `BashCallList`, `useBashCallParam` — see [Bash tab](#bash-tab) |
+| `bash-tab/` | The session Shell tab (id `bash`): `collectBashCalls`, `SessionBashTab`, `BashCallList`, `useBashCallParam`, `useShellFilterParam` — see [Shell tab](#shell-tab) |
 | `SubAgentNode.tsx` | Collapsible sub-agent node for the turn-level Sub-agents section (supports arbitrary nesting depth); trigger + `children` recursion, the body is `SubAgentDetail` |
 | `SubAgentDetail.tsx` | Sub-agent detail body of `SubAgentNode` — prompt (200-char collapse), model, tokens + cost tooltip, duration, Skills, Rules, Tools (`ToolCallDetailModal`), Files |
 | `WorkflowNode.tsx` | Collapsible workflow run node; shows name pill + status badge + duration; expands to show args (captioned "Args"), stats strip, summary, the "Agents (N)" table (`WorkflowAgentsTable`, not collapsible), and findings |
@@ -84,13 +86,30 @@ response type to grep. The named types live only on the client: `SessionLogsData
 in `log-parser.ts`). `WorkflowRun` is the exception: declared in
 `server/src/logs/workflow-extractor.ts` and mirrored by hand in `client/src/models/workflows.ts`.
 
+- **Streaming (bounded memory).** The answer is **streamed one log row at a time**
+  (`SessionLogsStreamService.writeLegacyLogs`, `server/src/logs/session-logs-stream.service.ts`):
+  first every access check and every small figure is resolved from metadata only
+  (`readTreeLogsMeta` in `server/src/logs/session-tree-logs-meta.ts` — the tree's log rows
+  without bodies, root claude/artisyn first, then sub-agents by `sessions.session_id`; stats;
+  workflows; advisor; attribution; harness), 404 / 422 are answered before any byte, then one
+  `SELECT body::text FROM logs WHERE id = $1` per row is written through the backpressure writer
+  (`server/src/logs/streaming/response-stream.ts`). The bytes are identical to the former
+  single-string answer. At most `SESSION_LOGS_MAX_CONCURRENT_STREAMS` (default 2) bodies stream
+  per worker at once (`LogStreamLimiter`, FIFO, no timeout; a queued request leaves when its
+  client closes). A failure after the first byte destroys the socket — the client sees a broken
+  response, never a truncated 200 that parses.
+- **`workflows`** come from `session_stats.workflows`, stored at ingest
+  (`readStoredWorkflows`, `server/src/logs/stored-workflows.ts`, keys put back in extractor
+  order); a session the backfill has not reached yet falls back to parsing the root claude body.
 - **`main`** = the session's `artisyn` body spliced **before** its `claude` body (one array, artisyn
   lines first). No `claude` row → 404; a null body → 422.
 - **Descendants** (`subagents`): every session below the root at any depth
   (`getDescendantSessionIds`), each `LEFT JOIN`ed only to its `claude-subagent` log row. A
   descendant without that row is dropped from `subagents` but still feeds the workflow linkage;
   `subagentStats` (`selectSubagentStats`) has its own guard — a `session_stats` row plus some
-  transcript row, so an OTEL-only node is left out. A descendant's `claude` rows are never read. `parentSessionId` is the
+  transcript row, so an OTEL-only node is left out. Each entry ends with `cacheWrite5mTokens` /
+  `cacheWrite1hTokens` (the TTL split of `cacheWriteTokens`, appended last so earlier keys keep
+  their position), so a sub-agent's cost can be priced from its stats without its log body. A descendant's `claude` rows are never read. `parentSessionId` is the
   DB-authoritative immediate parent (`sessions.parent_session_id`) — the only reliable nesting
   source beyond depth 1 (see "Sub-agent nesting"). Each entry also carries `agentDescription` /
   `workflowPhase` (`string | null`; `sessions.agent_description` / `workflow_phase`, sent by hook
@@ -108,8 +127,109 @@ in `log-parser.ts`). `WorkflowRun` is the exception: declared in
   `sessions.workflow_run_id` + `parent_session_id`. See "Workflow tool lifecycle" below.
 - **`harnessSnapshot`** is loaded by the artisyn log **owner**, not the viewer (see "Special log
   event fields").
-- Adding a field: extend the string in `getSessionLogs` and `SessionLogsData`; keep it optional on
-  the client if older cached responses may lack it.
+- Adding a field: extend the extras in `gatherSessionLogsMeta` (shared with the parts manifest),
+  the tail string in `getSessionLogs` and `SessionLogsData`; keep it optional on the client if
+  older cached responses may lack it.
+
+### The parts API (manifest + one blob per request)
+
+The viewer's replacement for one big `/logs` document (task 2026-11-23-session-logs-streaming,
+DD-8, DD-11..DD-14). Server: `repositories.controller.ts` (`getSessionLogParts`,
+`getSessionLogPart`) and `server/src/logs/session-log-parts.service.ts`; types:
+`server/src/logs/dto/session-log-parts.dto.ts`. `/logs` stays for older clients and exports.
+
+- **Manifest** — `GET …/sessions/:sessionId/logs/parts?teamId=`. Same access chain and errors as
+  `/logs` (`resolveSessionLogsAccess`; 404 without a root claude row, 422 for its NULL body); no
+  body is read (only the root claude body while the workflows backfill has not reached the
+  session). `parts` lists every `readTreeLogsMeta` row whose body is not NULL, in the same order
+  (root `claude`, root `artisyn`, then `claude-subagent` rows by `sessions.session_id`), each with
+  `sessionId`, `logType`, `rev`, `parentSessionId`, `agentDescription`, `workflowPhase`,
+  `workflowRunId`. The other keys (`subagentStats`, `rootStats`, `workflows`, `turnEndAdvisor`,
+  `sessionAttribution`, `harnessSnapshot`) are the very objects `/logs` carries — both routes build
+  them in one private method, `gatherSessionLogsMeta`.
+- **`rev`** (DD-8) — `logs.body_rev` (a sequence value the `logs_body_guard` trigger assigns on
+  every body write) when set, else `'u' + updated_at` in microseconds for a legacy row the gzip
+  builder has not reached yet. Compare it only for equality: the sequence has gaps. A changed
+  `rev` is what tells the client a part must be refetched (FR-4).
+- **`derivedLagging`** (DD-14) — true when an `upload_queue` row of one of the tree's sessions is
+  still `pending` / `processing` more than `DERIVED_LAG_MS` (30 s) after `received_at`, or a
+  `session_reextract_queue` row for the root is older than that. The viewer shows a muted "figures
+  may lag" notice; nothing else depends on it.
+- **Part body** — `GET …/logs/parts/:partSessionId/:logType?teamId=&rev=` answers the row's body
+  as a JSON array of log lines. The client merges the root's artisyn lines before its claude
+  lines, exactly as `/logs` `main` does (DD-4). `?rev=` is only a cache-buster.
+  - Errors: the `/logs` access errors first; `logType` outside `claude` / `artisyn` /
+    `claude-subagent` → 400; a `(partSessionId, logType)` not among the tree's rows with a body →
+    404 `Session log part not found`.
+  - Headers (mirroring `common/precompressed-static.ts`): `Content-Type: application/json;
+    charset=utf-8`, `Vary: Accept-Encoding`, `ETag: "<rev>"`, `Cache-Control: private, no-cache`.
+  - **304** when `If-None-Match` names the current ETag — decided from metadata, so no body is
+    read and no `LogStreamLimiter` permit is taken.
+  - **gzip** when the stored copy is valid (`logs.body_gz`, built by `LogBodyGzService`, valid
+    while `body_gz_rev = body_rev`) and `Accept-Encoding` admits gzip: the stored bytes are sent
+    as-is with `Content-Encoding: gzip` and `Content-Length`.
+  - **Identity fallback**: a valid copy but no gzip accepted → the copy is decompressed on the fly
+    (`zlib.createGunzip`); no valid copy yet → `body::text` is streamed. One query reads either
+    the copy or the text, never both, and the ETag sent with a 200 is the revision of the bytes
+    actually read.
+  - The body is written under a `LogStreamLimiter` permit through the backpressure writer, like
+    `/logs`; a failure after the first byte destroys the socket.
+  - **Disk cache** (task 2026-11-24-session-parts-disk-cache, details in
+    [session-part-cache.md](session-part-cache.md)). When the cache is on and the row has a
+    numeric `body_rev` and a valid gzip copy, `streamPart` first opens
+    `<cache dir>/<logId>/<bodyRev>.json.gz`. **Hit**: one query reads only the revision columns
+    (`body_gz` is never detoasted); if the row is gone → 404; if the revision still matches, the
+    first chunk is read before any header is set (a read failure falls back to the DB path), then
+    the file is sent with the same headers / ETag as above (gzip as-is with `Content-Length`, or
+    gunzipped when gzip is not accepted), and the file's mtime is refreshed at most hourly. Any
+    other answer falls through to the **miss** path, which is today's single query unchanged;
+    after `res.end()` the gzip copy is written to the cache in the background (also when the
+    client did not accept gzip). Hits still take a `LogStreamLimiter` permit.
+
+### Client: loading a session in parts
+
+Client side of the parts API (DD-13, DD-30..DD-33), in `client/src/viewer/pages/repository/`:
+
+- **`session-parts/useSessionLogParts.ts`** — called by `useRepositoryData`. The manifest query
+  keeps the historic key `['session-logs', repoId, sessionId, teamId]`, so the watermark, Refresh
+  and every invalidator refetch only the manifest. Part queries are keyed
+  `['session-log-part', repoId, sessionId, partSessionId, logType, rev]` with
+  `staleTime: Infinity`: a changed `rev` refetches only parts already loaded, and the previous
+  body stays on screen until the new one lands. The root claude + artisyn parts load with the
+  session; sub-agent parts load only on `requestAgent(id, withDescendants)` / `requestAll()`, at
+  most `PART_LOAD_CONCURRENCY` (3) at a time. `assemble-session-logs.ts` turns manifest + loaded
+  parts into the legacy `SessionLogsData` (artisyn lines, then claude lines; `subagents` = loaded
+  parts only), so views written against `/logs` keep their props. `subagentLogsMap` holds the
+  loaded bodies; `agentParentMap`, `subagentMeta` and `knownAgentIds` cover every manifest part.
+- **`session-parts/SessionPartsContext.tsx`** — `{requestAgent, requestAll, loaded, total,
+  allLoaded}`, built in `RepositoryView` and provided by `SessionDetailPane` around the tab
+  content; read with `useSessionParts()`. Outside a provider every request resolves at once and
+  `allLoaded` is true.
+- **`session-parts/AllSessionPartsGate.tsx`** — views that aggregate across the whole agent tree
+  render only once every part is in: the tabs `bash`, the charts (`dashboard`, `context-growth`,
+  `context-usage`, `agent-tree`, `timeline`, `tool-heatmap`, `call-tree`), `usage` and
+  `harness-usage` (wrapped in `SessionTabContent`). It calls `requestAll()` on mount and shows
+  "Loading session logs {n} of {m}" with a progress bar meanwhile. The header's Shell count badge
+  and the MCP failure dot (`SessionDetailPane`) also wait for `allLoaded`; the pane's `usage` walk
+  covers the root transcript only (tree figures come from `subagentStats`).
+- **On-demand agents** — `AgentActivationItem` requests its agent (with descendants) on first
+  open, shows "Loading agent log…" until the part arrives, and parses the log only while open.
+  `ToolViewContext.openSubAgent` awaits `requestAgent(id, true)` before opening
+  `WorkflowAgentModal` (the latest click wins). The `tu` deep link in `SessionLogView` calls
+  `requestAll()` first, since the call may sit in any sub-agent's log.
+- **Banners** — `SessionLoadBanners.tsx` (under the header) holds the "Loading updated session…"
+  line and the non-dismissible amber `derivedLagging` notice.
+- **Stable root totals (DD-31)** — `parseSessionLogs(…, {knownSubagentIds})` decides which agents
+  are priced from their own transcript from the manifest's ids, not from the loaded
+  `subagentLogs`, so the root's totals do not shift as parts arrive.
+- **Pricing from stats (DD-32)** — `statsToTokenBreakdown(entry)` (in `log-parser.ts`) turns a
+  `subagentStats` entry into a `TokenBreakdown` (`cacheWrite5m = cacheWrite5mTokens ??
+  cacheWriteTokens`, `cacheWrite1h = cacheWrite1hTokens ?? 0`, so an older server still prices
+  everything as 5m). `computeTurnDirectAgentCost` and `computeWorkflowCostPerToken` take
+  `subagentStats` and price an agent whose part is not loaded from its stats entry (its `model`
+  and the helper); a loaded agent is still priced from its transcript.
+- **Export** — `session-export-runner.ts` loads the manifest and every part with the same
+  fetchers and assembles them; it no longer calls `/logs`.
 
 ### Sub-agent meta labels (description / phase)
 
@@ -411,7 +531,7 @@ permission event belongs to. Nothing else in the client hard-codes tool names fo
   isBinary, isError, timestamp, interrupted, bytes, uuid, denialKind}`; the first result for an id
   wins. `denialKind` is the result line's top-level `toolDenialKind` (`user-rejected`,
   `permission-rule`, `automode-blocked`, `interrupted`). It replaced four per-call linear scans
-  and is also used by the Bash tab.
+  and is also used by the Shell tab.
 - **Status** (`outcomeToStatus` over `classifyToolOutcome`): no result → `'missing'` ("output not
   captured"); `interrupted`, a `denialKind`, or a rejection marker on an `is_error` result →
   `'rejected'` ("⊘ rejected", "⏸ interrupted" when `interrupted`, tooltip from `denialKind`);
@@ -489,24 +609,37 @@ numbers until re-ingest or `recompute-all-sessions`. Re-capture with the PoC
 ### Shared tool view (`tool-call-view/`)
 
 - **`ToolViewProvider`** is mounted by `SessionDetailPane` around the whole tab content, so every
-  tool view of every tab (Logs, all three `ContextGrowthChart` mounts, Bash) gets
+  tool view of every tab (Logs, all three `ContextGrowthChart` mounts, Shell) gets
   `{repoRoot, openSubAgent}`. It owns one `WorkflowAgentModal` that `openSubAgent(agentId,
   label?)` opens with the agent's transcript from `subagentLogsMap` (a no-op without one).
   Outside a provider `useToolView()` returns `{repoRoot: ''}`.
 - **`ToolCallView`** `{call, charsPerToken, turnFiles?, subAgents?, defaultOpen?}`: header =
   tool badge, `StatusBadge` (status and permission badges), `≈N tok`, and `⏱` duration for
-  Bash. Body by tool: `Bash` → `BashCommandView`; `PowerShell` → `BashCommandView` with
-  `forceFallback`; section `'file'` → `FileToolBody` (repo-relative path, range, size from
+  Bash / PowerShell. Body by tool: any name with `shellOfTool(name) !== null` (`Bash` → `'bash'`,
+  `PowerShell` → `'powershell'`, `@loghub/bash-view` `shell.ts`) → `BashCommandView` with that
+  `shell` — PowerShell calls get the same formatted view as Bash, there is no `forceFallback`
+  any more; section `'file'` → `FileToolBody` (repo-relative path, range, size from
   `turnFiles`, input JSON, "File content is not stored" for Read); `Agent` → `AgentToolBody`
   (description, prompt, "Open sub-agent →"); anything else → `GenericToolBody` (JSON). Output
   always goes through `ToolOutputBlock` (`TRUNCATE_AT` = 20 000 chars, show all / less, copy of
   the full output, `N lines · X KB · ≈Yk tok`).
 - **`BashCommandView`**: caption (`description`, `timeout` / background chips) → WORKING DIR →
   FILES (`BashFileSummary`) → COMMAND (Formatted | Raw toggle, "N lines (was M)", "⧉ Copy
-  original" = `input.command`, `HighlightedScript` with line numbers, heredoc folds and a colour
-  legend) → OUTPUT. `useBashView` lazy-loads the tree-sitter parser (`lib/bash-view/`,
-  `import()` + WASM `?url` assets, never in the main bundle) and shows the raw text while loading
-  and for unparseable / PowerShell commands. Rules and examples: `algorithms/bash-command-view.md`.
+  original" = `input.command` — for PowerShell the `stripLhWrap` text, i.e. without a defensive
+  `__lhWrap` wrapper prefix —, `HighlightedScript` with line numbers, heredoc / here-string folds
+  and a colour legend) → OUTPUT. FILES lists removed paths (`files.deleted`: Bash `rm` / `rmdir`,
+  PowerShell `Remove-Item` and its aliases) in Changes with a muted `(deleted)` suffix.
+  `useBashView(command, shell)` builds with `buildShellView` and highlights with `highlightBash` /
+  `highlightPowerShell`; `useBashViews(rows)` loads only the parsers of the shells present in the
+  rows.
+- **Per-shell WASM loading:** each shell has its own browser entry, reachable only through
+  `import()` — `lib/bash-view/browser-parser.ts` (`getBrowserBashParser`, `HIGHLIGHT_QUERY`) and
+  `lib/bash-view/powershell-browser-parser.ts` (`getBrowserPowerShellParser`,
+  `PS_HIGHLIGHT_QUERY`); both call `loadTreeSitterParser(key, assets)` in `bash-parser.ts` (one
+  cached promise per shell, a failure is not cached, `Parser.init` once per page). So a Bash-only
+  session never requests `tree-sitter-powershell-<hash>.wasm` (~1.1 MB), and neither grammar is in
+  the main bundle. The raw text shows while loading and when a command cannot be parsed. Rules and
+  examples: `algorithms/bash-command-view.md` and `algorithms/powershell-command-view.md`.
 
 ---
 
@@ -779,32 +912,47 @@ dashboard and the Summary tab's extended details) composes `TurnBreakdownDialog`
 
 ---
 
-## Bash tab
+## Shell tab
 
-Session tab `bash` (after Logs, always shown; label `Bash` plus a muted count). Files in
-`session-log/bash-tab/`; the tab bar is `SessionTabBar.tsx`.
+Session tab `bash` (after Logs, always shown; label `Shell` plus a muted count; the id, the
+`bashCall` URL param and the `bash-*` test ids keep their old names). It lists every shell command
+of the session tree — Bash and PowerShell calls together. Tooltip: "Bash / PowerShell — every
+shell command the session tree ran, with exit status."; search synonyms include `bash`,
+`powershell`, `pwsh`. Files in `session-log/bash-tab/`; the tab bar is `SessionTabBar.tsx`.
 
 - **Collection** (`collectBashCalls(mainLogs, subagentLogsMap)`): per log — the main transcript,
   then each sub-agent's — `buildAllToolCalls(extractRawToolCalls(events, {skipSidechain}),
   buildToolResultIndex(events))`, where `skipSidechain` is true only for the main transcript (every
   line of a sub-agent transcript is `isSidechain: true`, as in the parser and the server), with the same per-log permission attribution as Logs, filtered to
-  `name === 'Bash'`. Rows are deduped by id, stably sorted by `startedAt` (missing last) and
-  numbered `n` after sorting. Sub-agent rows carry `agentId` and `agentLabel` (`Agent · <type>`
+  `shellOfTool(name) !== null` (`Bash` and `PowerShell`); each row carries `shell: ShellKind`
+  (`'bash' | 'powershell'`). Rows are deduped by id, stably sorted by `startedAt` (missing last) and
+  numbered `n` after sorting, across both shells. Sub-agent rows carry `agentId` and `agentLabel` (`Agent · <type>`
   from `collectAgentTypes` / `collectSpawnedAgentTypes` in `harness-session-tree.ts`, else
   `Agent <8 chars>`). Pure and WASM-free: `SessionDetailPane` memoises the length for the tab
-  count.
+  count, so the tab count, the Summary card and the map nav tree count both shells.
 - **UI** (`SessionBashTab`, `data-testid="session-bash-tab"`, lazy-loaded): a 340 px `listbox`
-  (`BashCallList`, rows `bash-call-row` with `data-call-id`) — `#n`, time, duration, status mark,
-  "changes N", a preview (`description`, else the first formatted statement, else the first raw
-  line) and a sub-agent badge; ↑ / ↓ move the selection. `useBashViews(rows)` loads the parser
-  once; until then there are no chips and previews are raw. The right pane shows the sub-agent
-  badge, "Open sub-agent →" (`openSubAgent`) and `ToolCallView`. Empty state: "No Bash commands
-  in this session". The list sits beside the details only when the tab is at least 42rem wide
+  (`BashCallList`, `aria-label="Shell commands"`, rows `bash-call-row` with `data-call-id` and
+  `data-shell`) — `#n`, time, duration, status mark, "changes N", a preview (`description`, else
+  the first formatted statement, else the first raw line) and a sub-agent badge; ↑ / ↓ move the
+  selection. `useBashViews(rows)` loads each present shell's parser once (a Bash-only session never
+  loads the PowerShell grammar); until then there are no chips and previews are raw. The right pane
+  shows the sub-agent badge, "Open sub-agent →" (`openSubAgent`) and `ToolCallView`. Empty state:
+  "No shell commands in this session".
+- **Mixed sessions** (both shells have calls): a filter row above the list — chips `All <n>` /
+  `Bash <n>` / `PowerShell <n>` (`data-testid="shell-filter-<all|bash|powershell>"`, counts over
+  the whole session) — and a `bash` / `pwsh` badge (`data-testid="shell-badge"`) on every row,
+  after the sub-agent badge and before the preview. A single-shell session shows neither. Row
+  numbers `n` never change under the filter. The list sits beside the details only when the tab is at least 42rem wide
   (container query `@container/bash` + `@2xl/bash:`); below that, e.g. at 1024 px with the sidebar
   and the session list open, it stacks above them at up to 40 % of the height.
 - **URL:** the selected call is the `bashCall` search param (`useBashCallParam`,
-  `setSearchParams(next, {replace: true})`); a missing or unknown id selects row 1 without
-  rewriting the URL.
+  `setSearchParams(next, {replace: true})`); a missing or unknown id selects the first visible row
+  without rewriting the URL. The filter is the `shell` search param (`useShellFilterParam`, values
+  `bash` | `powershell`, same `replace: true` pattern; it can rewrite `bashCall` in the same
+  update). An unknown value, or a filter on a single-shell session, reads as All. Precedence on
+  load: when `bashCall` names a row that `shell` would hide, `shell` is dropped from the URL and
+  that row stays selected. Picking a filter that hides the selected row selects the first visible
+  row and rewrites `bashCall`.
 
 ---
 

@@ -2,6 +2,7 @@
   "env": {
     "MCP_TIMEOUT": "90000"
   },
+  "autoMemoryEnabled": false,
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
     "log-hub-hooks@artisyn-e798dd87": true,

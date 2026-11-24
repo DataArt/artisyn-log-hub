@@ -5,37 +5,23 @@
  * (`analyzeBash` from `@loghub/bash-view`, FR-20), so the server loads the same WASM runtime and
  * grammar. Nothing is ever executed: commands are only parsed.
  *
- * WASM location: `dist/wasm/<name>` next to the ncc bundle (copied by `scripts/copy-wasm.js`, the
- * scenario stand and the Dockerfile), else the package file in `node_modules` (dev server, jest).
+ * The runtime init and the WASM location rule are shared with the PowerShell parser
+ * (`server-wasm-runtime.ts`, DD-17).
  *
  * Loaded once per process. When loading fails, {@link getServerBashParser} resolves `null` from
  * then on and one warning is logged: Bash calls are then skipped by the extraction, while
  * Read / Grep / Glob / Edit calls are still extracted.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { Logger } from '@nestjs/common';
 import type { BashParser } from '@loghub/bash-view';
 import { Language, Parser, Query } from 'web-tree-sitter';
+import { initTreeSitterRuntime, resolveWasm } from './server-wasm-runtime';
 
 const logger = new Logger('OkfBashParser');
 
-/** WASM file name → the package path `require.resolve` finds in `node_modules`. */
-const WASM_PACKAGE_PATHS: Record<string, string> = {
-  'web-tree-sitter.wasm': 'web-tree-sitter/web-tree-sitter.wasm',
-  'tree-sitter-bash.wasm': 'tree-sitter-bash/tree-sitter-bash.wasm',
-};
-
-/** Absolute path of one WASM file: the bundle's `wasm/` folder first, then `node_modules`. */
-function resolveWasm(name: string): string {
-  const bundled = join(__dirname, 'wasm', name);
-  if (existsSync(bundled)) return bundled;
-  return require.resolve(WASM_PACKAGE_PATHS[name] ?? name);
-}
-
 async function createServerBashParser(): Promise<BashParser> {
-  const runtimeWasm = resolveWasm('web-tree-sitter.wasm');
-  await Parser.init({ locateFile: () => runtimeWasm });
+  await initTreeSitterRuntime();
   // The grammar is handed over as bytes: given a path, `Language.load` reads it through a dynamic
   // `import('fs/promises')`, which the CommonJS jest runtime cannot run.
   const language = await Language.load(

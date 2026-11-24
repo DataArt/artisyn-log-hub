@@ -123,6 +123,14 @@ function nameFromScriptPath(scriptPath: unknown): string {
 // Main export
 // ---------------------------------------------------------------------------
 
+/**
+ * Version of {@link extractWorkflows}' output stored in `session_stats.workflows`
+ * (`workflows_version`, migration 0096). Bump it whenever the extraction rules change, together
+ * with a migration that sets `workflows_version = NULL`, so the workflows backfill
+ * (`workflows-backfill.service.ts`) re-extracts every stored session.
+ */
+export const WORKFLOWS_VERSION = 1;
+
 export function extractWorkflows(events: unknown[]): WorkflowRun[] {
   // Step 1: collect Workflow tool_use blocks from assistant events
   interface WorkflowCall {

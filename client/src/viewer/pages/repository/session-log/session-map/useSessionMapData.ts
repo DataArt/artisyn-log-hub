@@ -1,35 +1,27 @@
 /**
- * The Session Map's data (session-map DD-10, DD-12): polls `GET …/logs/delta` through the shared
- * `useOtelLivePoll` loop, merges each answer with `mergeSessionMapDelta`, and derives the parsed
- * root session and the map model — memoised on the merged state only, so a poll that changed
- * nothing (same state object) rebuilds nothing.
+ * The Session Map's data: the session's parts manifest and the assembled part bodies — the same
+ * pre-compressed, browser-cached parts every other session tab reads — turned into the Map's
+ * state, the parsed root session and the map model, memoised on the state only.
  *
- * - `{reload: true}` bumps `reloadGen` (a new `resetKey` → one empty-cursor snapshot) and
- *   invalidates the `/logs` query, which no longer matches either. The last good state stays on
- *   screen until the snapshot arrives.
- * - A failed poll keeps the last good state (`error` is set, polling continues). A 403 / 404 is
- *   fatal: the state is dropped and polling stops until the session (or team) changes.
+ * - Follows a live session (the manifest's `liveness.live`) by re-reading the manifest every
+ *   {@link SESSION_MAP_POLL_MS}; a part whose revision changed is then re-fetched by
+ *   `useSessionLogParts`, an unchanged one is not. The poll stops while the page is hidden
+ *   (TanStack's `refetchIntervalInBackground: false`) and once the session is no longer live.
+ * - A failed refetch keeps the last good state on screen (`error` is set).
  */
-import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ApiError, fetchSessionLogsDelta } from '../../../../api';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { fetchSessionLogParts, type SessionLogsData } from '../../../../api';
 import type { ModelPricingMap } from '../../../../../models/pricing';
 import type { RepoConfig } from '../../../../../models/repositories';
-import {
-  type OtelLiveIndicatorState,
-  type OtelPollStep,
-  useOtelLivePoll,
-} from '../../otel/useOtelLivePoll';
-import { EMPTY_OTEL_NEW_KEYS, NO_OTEL_FILLED } from '../../otel/otel-merge';
 import { parseSessionLogs } from '../log-parser';
 import type { ParsedSession } from '../types';
 import {
-  emptyMapState,
-  mergeSessionMapDelta,
+  buildSessionMapState,
   type SessionMapParseInputs,
   type SessionMapState,
   toParseInputs,
-} from './session-map-delta-merge';
+} from './session-map-state';
 import {
   buildSessionMapModel,
   type SessionMapModel,
@@ -42,6 +34,10 @@ export interface UseSessionMapDataOptions {
   teamId?: number;
   pricing: ModelPricingMap | undefined;
   repoConfig: RepoConfig | null;
+  /** The assembled logs of every part (the tab renders behind `AllSessionPartsGate`). */
+  logs: SessionLogsData | undefined;
+  /** The error of the session's parts query, if any. */
+  logsError: Error | null;
 }
 
 export interface SessionMapData {
@@ -49,26 +45,10 @@ export interface SessionMapData {
   parsed: ParsedSession | null;
   inputs: SessionMapParseInputs | null;
   model: SessionMapModel | null;
-  /** True until the first snapshot arrived (or failed). */
+  /** True until the manifest and the logs are in (or failed). */
   isLoading: boolean;
-  /** The latest poll error; with a state on screen it is a transient "update failed". */
-  error: unknown;
-  /** 403 / 404: the state is dropped and polling stopped until the session changes. */
-  fatal: boolean;
-  indicator: OtelLiveIndicatorState;
-  lastUpdatedAt: number | null;
-  /** Bumped on every `{reload: true}`; the playback clamps its position on a change. */
-  reloadGen: number;
-  /** Polls now (the header Refresh button). */
-  refresh: () => void;
-}
-
-const isMapLive = (s: SessionMapState): boolean => s.liveness.live;
-
-function isFatalError(e: unknown): boolean {
-  return (
-    e instanceof ApiError && (e.statusCode === 403 || e.statusCode === 404)
-  );
+  /** The latest manifest / part error; with a state on screen it is a transient "update failed". */
+  error: Error | null;
 }
 
 export function useSessionMapData({
@@ -77,69 +57,26 @@ export function useSessionMapData({
   teamId,
   pricing,
   repoConfig,
+  logs,
+  logsError,
 }: UseSessionMapDataOptions): SessionMapData {
-  const queryClient = useQueryClient();
-  const [reloadGen, setReloadGen] = useState(0);
-  const baseKey = `${repoId}|${sessionId}|${teamId ?? ''}`;
-  const resetKey = `${baseKey}|${reloadGen}`;
-
-  // A fatal error is remembered per resetKey: a new session (or reload) polls again.
-  const [fatalKey, setFatalKey] = useState<string | null>(null);
-  const [fatalError, setFatalError] = useState<unknown>(null);
-  const fatal = fatalKey === resetKey;
-
-  const poll = useCallback<OtelPollStep<SessionMapState>>(
-    async (prev, signal) => {
-      const cursor = prev !== null && prev.cursor !== '' ? prev.cursor : null;
-      const delta = await fetchSessionLogsDelta(
-        repoId,
-        sessionId,
-        cursor,
-        teamId,
-        signal,
-      );
-      if (delta.reload) {
-        setReloadGen((g) => g + 1);
-        void queryClient.invalidateQueries({
-          queryKey: ['session-logs', repoId, sessionId, teamId],
-        });
-        return {
-          state: prev ?? emptyMapState,
-          newKeys: EMPTY_OTEL_NEW_KEYS,
-          filled: NO_OTEL_FILLED,
-        };
-      }
-      return {
-        state: mergeSessionMapDelta(cursor === null ? null : prev, delta),
-        newKeys: EMPTY_OTEL_NEW_KEYS,
-        filled: NO_OTEL_FILLED,
-      };
-    },
-    [repoId, sessionId, teamId, queryClient],
-  );
-
-  const live = useOtelLivePoll<SessionMapState>({
-    resetKey,
-    enabled: !fatal,
-    intervalMs: SESSION_MAP_POLL_MS,
-    poll,
-    isLive: isMapLive,
+  // Same key and fetcher as `useSessionLogParts`: this observer only adds the live interval.
+  const manifestQuery = useQuery({
+    queryKey: ['session-logs', repoId, sessionId, teamId],
+    queryFn: () => fetchSessionLogParts(repoId, sessionId, teamId),
+    refetchInterval: (query) =>
+      query.state.data?.liveness?.live === true ? SESSION_MAP_POLL_MS : false,
   });
+  const manifest = manifestQuery.data;
+  const receivedAt = manifestQuery.dataUpdatedAt;
 
-  useEffect(() => {
-    if (isFatalError(live.error)) {
-      setFatalKey(resetKey);
-      setFatalError(live.error);
-    }
-  }, [live.error, resetKey]);
-
-  // The last good state of this session survives the reset a reload causes, so the Map does not
-  // flash its loading state while the empty-cursor snapshot is on its way.
-  const heldRef = useRef<{ key: string; state: SessionMapState } | null>(null);
-  if (live.state !== null)
-    heldRef.current = { key: baseKey, state: live.state };
-  else if (fatal || heldRef.current?.key !== baseKey) heldRef.current = null;
-  const state = live.state ?? heldRef.current?.state ?? null;
+  const state = useMemo(
+    () =>
+      manifest !== undefined && logs !== undefined
+        ? buildSessionMapState(manifest, logs, receivedAt)
+        : null,
+    [manifest, logs, receivedAt],
+  );
 
   const derived = useMemo(() => {
     if (state === null) return null;
@@ -160,17 +97,13 @@ export function useSessionMapData({
     return { inputs, parsed, model };
   }, [state, repoConfig, pricing]);
 
+  const error = manifestQuery.error ?? logsError;
   return {
     state,
     parsed: derived?.parsed ?? null,
     inputs: derived?.inputs ?? null,
     model: derived?.model ?? null,
-    isLoading: state === null && !fatal && live.isLoading,
-    error: fatal ? fatalError : live.error,
-    fatal,
-    indicator: live.indicator,
-    lastUpdatedAt: live.lastUpdatedAt,
-    reloadGen,
-    refresh: live.refresh,
+    isLoading: state === null && error === null,
+    error,
   };
 }
