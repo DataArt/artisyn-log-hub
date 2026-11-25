@@ -6,6 +6,13 @@
 // mode → mode A. AC-12 (nothing live → empty status) is covered by the contract rows in
 // server/test/contract/registry/f25-otel.ts.
 //
+// 2026-11-21 cloudwatch-cai-parity (impl-plan «Test coverage plan»): the default chart mode is
+// tiles (a grid of compact charts, a tile click enlarges it, «‹ All charts» / Esc go back), the
+// Tiles | Carousel choice survives closing the modal, the new KPIs (Active users, Cache hit %,
+// Active hours, the tokens total + sparkline), the «Over time by team / user» pages and «Edits by
+// tool» (Edit / Write spans counted, Read never; «not reported» on a node without spans; a root
+// the caller sees masked under DD-11 contributes no edits at any node level).
+//
 // Data: synthetic OTEL lines (tests/scenarios/fixtures/otel/otel-lines.ts). Every session is one
 // main-thread call uploaded as a regular `claude-otel` chunk, so its `chunk_last_at` (upload time,
 // server clock) makes it live; later updates come through the realtime channel.
@@ -13,7 +20,7 @@
 // Setup (one owner, two teams, a personal repository):
 //   - restricted team R (owner, manager, plain member) with repositories A and S;
 //   - transparent team T (owner only) with repository S — S is linked to both teams;
-//   - owner: «shared» in S (0.20), «otelonly» in A with only the artisyn log (0.07),
+//   - owner: «shared» in S (0.20; plus tool spans: Edit ×2, Write, Read), «otelonly» in A with only the artisyn log (0.07),
 //     «personal» in P, linked to no team (0.05), «old» in P aged past the live window (0.09);
 //   - manager: «mgr» in A (0.30); member: «mem» in A (0.40).
 //
@@ -28,7 +35,7 @@
 import type { Page, Request } from '@playwright/test';
 import { randomBytes } from 'crypto';
 import { test, expect, type ScenarioUser } from '../fixtures';
-import { apiRequestLine, micros, MODEL_A, plus } from '../fixtures/otel/otel-lines';
+import { apiRequestLine, micros, MODEL_A, plus, spanLine } from '../fixtures/otel/otel-lines';
 import { createApiKey } from '../helpers/api-key';
 import { otelUsd, sendRealtime, sessionOtel, uploadOtelChunk, uploadTranscript, waitForOtelProjected } from '../helpers/otel';
 import { ownRepoId } from '../helpers/prompt-session';
@@ -69,6 +76,9 @@ interface LiveResponse {
     breakdown: LiveNode[];
     costPerMinUsdMicros: string;
     flows: { rootId: number; model: string; agentKey: string | null; costUsdMicros: string; tokens: string }[];
+    hasSpans: boolean;
+    rootSeries?: { rootId: number; start: string; calls: number; costUsdMicros: string; tokens: string }[];
+    editsByTool?: { start: string; tool: string; count: number }[];
   };
   details: { key: string; firstPrompt: string | null; attributesMasked: boolean } | null;
 }
@@ -141,6 +151,27 @@ function countLiveRequests(page: Page): { live(): number; status(): number } {
   return { live: () => live, status: () => status };
 }
 
+/** Edits by tool of a view summed per tool name. */
+function editsPerTool(res: LiveResponse): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of res.view.editsByTool ?? []) out[r.tool] = (out[r.tool] ?? 0) + r.count;
+  return out;
+}
+
+function chartTile(page: Page, id: string) {
+  return page.locator(`[data-testid="live-chart-tile"][data-page="${id}"]`);
+}
+
+/** Steps the carousel forward (it wraps) until it shows page `id`. */
+async function carouselTo(page: Page, id: string): Promise<void> {
+  const carousel = page.getByTestId('live-chart-carousel');
+  for (let n = 0; n < 16; n++) {
+    if ((await carousel.getAttribute('data-page')) === id) return;
+    await page.getByTestId('live-chart-next').click();
+  }
+  await expect(carousel).toHaveAttribute('data-page', id);
+}
+
 async function openLive(page: Page, user: ScenarioUser, path: string): Promise<void> {
   await skipNewUserNudge(page.context());
   await user.signIn(page);
@@ -172,13 +203,24 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
   const member = await person('mem');
   const prompt = (name: string) => `${name} live prompt ${run}`;
 
-  /** One live session with one main call of `usd`; `only: 'artisyn'` = no claude transcript. */
-  const session = async (p: Person, name: string, url: string, usd: number, only?: 'artisyn'): Promise<string> => {
+  /**
+   * One live session with one main call of `usd`; `only: 'artisyn'` = no claude transcript;
+   * `tools` = one `claude_code.tool` span per name under an interaction span (Edits by tool).
+   */
+  const session = async (p: Person, name: string, url: string, usd: number, only?: 'artisyn', tools: readonly string[] = []): Promise<string> => {
     const sid = `otel02-${run}-${name}`;
     const req = `${name}${run}-req`;
     const queue = { db, userId: p.user.id };
     await uploadTranscript(api, p.apiKey, { sessionId: sid, prompt: prompt(name), repoUrls: [url], branch: 'main', at: base, requestIds: [req] }, queue, only);
-    await uploadOtelChunk(api, p.apiKey, sid, [apiRequestLine(sid, { requestId: req, querySource: 'repl_main_thread', model: MODEL_A, at: plus(base, 30), costUsd: usd, input: 1000, output: 100, cacheRead: 500 })], queue);
+    const trace = `${name}${run}trace`;
+    const spans = tools.length === 0 ? [] : [
+      spanLine(sid, { traceId: trace, spanId: `${name}${run}i`, parentSpanId: null, name: 'claude_code.interaction', start: plus(base, 10), end: plus(base, 120) }),
+      ...tools.map((tool, n) => spanLine(sid, {
+        traceId: trace, spanId: `${name}${run}t${n}`, parentSpanId: `${name}${run}i`, name: 'claude_code.tool',
+        start: plus(base, 40 + n * 10), end: plus(base, 45 + n * 10), attrs: { tool_name: tool },
+      })),
+    ];
+    await uploadOtelChunk(api, p.apiKey, sid, [apiRequestLine(sid, { requestId: req, querySource: 'repl_main_thread', model: MODEL_A, at: plus(base, 30), costUsd: usd, input: 1000, output: 100, cacheRead: 500 }), ...spans], queue);
     await waitForOtelProjected(db, sid);
     return sid;
   };
@@ -217,7 +259,7 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
   };
 
   const setup = await test.step('setup: restricted team R (owner, manager, member) with A and S, transparent team T with S, a personal repository P; live sessions by chunk upload, one aged session', async () => {
-    const shared = await session(owner, 'shared', urlS, 0.2);
+    const shared = await session(owner, 'shared', urlS, 0.2, undefined, ['Edit', 'Edit', 'Write', 'Read']);
     const otelOnly = await session(owner, 'otelonly', urlA, 0.07, 'artisyn');
     const personal = await session(owner, 'personal', urlP, 0.05);
     const old = await session(owner, 'old', urlP, 0.09);
@@ -360,12 +402,73 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
     expect(liveParam(page), 'collapsing does not select').not.toBe(oldKey);
     await oldToggle.click();
     await expect(oldAgents.first()).toBeVisible();
+  });
 
-    // The last carousel page splits Home by team / repository / user: three doughnuts, the
-    // personal and «old» sessions under No team next to the team ones.
+  await test.step('cloudwatch-cai-parity. Home: the new KPIs; tiles are the default chart mode; a tile enlarges with its controls and «‹ All charts» / Esc return to the grid; Over time by team / user and Edits by tool (Edit / Write, never Read; «not reported» on a session without spans); Carousel survives closing the modal', async () => {
+    await keepLive();
+    const kpis = page.getByTestId('live-kpi-tiles');
+    // Active users: the DISTINCT owners of the sessions under Home — owner, manager, member.
+    await expect(kpis.getByTestId('live-kpi-active-users')).toContainText('3');
+    for (const id of ['live-kpi-cache-hit', 'live-kpi-active-hours', 'otel-kpi-tokens-total', 'otel-sparkline']) {
+      await expect(kpis.getByTestId(id), id).toBeVisible();
+    }
+    await expect(kpis.getByTestId('live-kpi-active-hours')).toContainText(' h');
+
+    const charts = page.getByTestId('live-charts');
+    await expect(charts).toHaveAttribute('data-mode', 'tiles');
+    await expect(page.getByTestId('live-chart-grid')).toBeVisible();
+    await expect(page.getByTestId('live-chart-carousel')).toHaveCount(0);
+    for (const id of ['cost', 'share', 'team-time', 'user-time', 'edits-by-tool']) {
+      await expect(chartTile(page, id), id).toBeVisible();
+    }
+
+    // Edits by tool counts the whitelisted tools only: the Read span of «shared» never shows.
+    const home = await liveApi(owner.user);
+    expect(home.view.hasSpans).toBe(true);
+    expect(editsPerTool(home)).toEqual({ Edit: 2, Write: 1 });
+    expect(home.view.rootSeries?.some((r) => r.rootId === root.shared && r.calls > 0), 'a per-root row of «shared»').toBe(true);
+
+    // A tile click enlarges the page with its own Metric controls; «‹ All charts» goes back.
+    await chartTile(page, 'team-time').click();
     const carousel = page.getByTestId('live-chart-carousel');
-    await page.getByTestId('live-chart-prev').click();
-    await expect(carousel).toHaveAttribute('data-page', 'share');
+    await expect(carousel).toHaveAttribute('data-page', 'team-time');
+    await expect(carousel).toHaveAttribute('data-enlarged', 'true');
+    await expect(carousel.getByTestId('live-chart-metric')).toBeVisible();
+    await page.getByTestId('live-chart-back').click();
+    await expect(page.getByTestId('live-chart-grid')).toBeVisible();
+
+    // Enlarged Edits by tool: the legend lists Edit and Write, not Read; Esc returns to the grid
+    // and leaves the modal open.
+    await chartTile(page, 'edits-by-tool').click();
+    await expect(carousel).toHaveAttribute('data-page', 'edits-by-tool');
+    const legend = carousel.getByTestId('otel-chart-legend');
+    await expect(legend).toContainText('Edit');
+    await expect(legend).toContainText('Write');
+    await expect(legend).not.toContainText('Read');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('live-chart-grid')).toBeVisible();
+    await expect(page.getByTestId('live-modal')).toBeVisible();
+
+    // A session without spans: Edits by tool is a «not reported» tile, not zeros.
+    await selectNode(page, `session:${root.mem}@${teamR}`);
+    await expect(chartTile(page, 'edits-by-tool').getByTestId('live-chart-not-reported')).toBeVisible();
+    await expect(chartTile(page, 'user-time'), 'no «by user» on a session').toHaveCount(0);
+    await selectNode(page, 'home');
+
+    // Carousel is remembered across closing and reopening the modal.
+    await page.getByTestId('live-chart-mode').getByRole('button', { name: 'Carousel' }).click();
+    await expect(charts).toHaveAttribute('data-mode', 'carousel');
+    await expect(carousel).toHaveAttribute('data-page', 'cost');
+    await page.getByTestId('live-close').click();
+    await expect(page.getByTestId('live-modal')).toHaveCount(0);
+    await page.getByTestId('nav-live').click();
+    await expect(page.getByTestId('live-modal')).toBeVisible();
+    await expect(page.getByTestId('live-charts')).toHaveAttribute('data-mode', 'carousel', { timeout: 20_000 });
+    await expect(page.getByTestId('live-chart-grid')).toHaveCount(0);
+
+    // The Share page splits Home by team / repository / user: three doughnuts, the personal and
+    // «old» sessions under No team next to the team ones.
+    await carouselTo(page, 'share');
     const pies = carousel.getByTestId('live-share-pie');
     await expect(pies).toHaveCount(3);
     await expect(pies.nth(0)).toHaveAttribute('data-dimension', 'team');
@@ -374,8 +477,7 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
     await expect(pies.nth(2).getByTestId('live-share-legend-item').filter({ hasText: owner.user.email })).toHaveCount(1);
     // The carousel remembers its page across node selections, so wrap back to the first page
     // (cost) for the next step.
-    await page.getByTestId('live-chart-next').click();
-    await expect(carousel).toHaveAttribute('data-page', 'cost');
+    await carouselTo(page, 'cost');
   });
 
   const repoAKey = await test.step('AC-5, AC-6. a selected repository shows the tiles, the FR-5 breakdown columns and the cost and tokens charts; the OTEL-only session is listed; after a realtime call the session’s Live cost = its session OTEL tab cost', async () => {
@@ -535,6 +637,15 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
     expect(byRoot.get(root.mem)!.totals.costUsdMicros, 'aggregates stay unmasked').toBe(String(micros(0.4)));
     const panel = await liveApi(manager.user, { panel: `session:${root.mem}@${teamR}` });
     expect(panel.details).toMatchObject({ key: `session:${root.mem}@${teamR}`, firstPrompt: null, attributesMasked: true });
+    // Edits by tool keeps DD-11: the owner's «shared» session is masked for the manager under
+    // 🔒 R, so its Edit / Write spans count at no node level; the owner still sees them.
+    const repoSUnderR = managerView.nodes.find((n) => n.type === 'repo' && n.teamId === teamR && n.label === urlS);
+    expect(repoSUnderR, 'repository S under team R for the manager').toBeTruthy();
+    const sharedAgents = managerView.nodes.filter((n) => n.type === 'agent' && n.rootId === root.shared).map((n) => n.key);
+    for (const key of ['home', `team:${teamR}`, repoSUnderR!.key, `session:${root.shared}@${teamR}`, ...sharedAgents]) {
+      expect(editsPerTool(await liveApi(manager.user, { node: key })), `manager edits at ${key}`).toEqual({});
+    }
+    expect(editsPerTool(await liveApi(owner.user, { node: `session:${root.shared}@${teamT}` }))).toEqual({ Edit: 2, Write: 1 });
 
     const origin = new URL(page.url()).origin;
     for (const p of [member, manager]) {

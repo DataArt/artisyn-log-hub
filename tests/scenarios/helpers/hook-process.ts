@@ -463,7 +463,7 @@ export interface FakeRequest {
 
 /** What the hub does with one request. */
 export type FakeReply =
-  | { status: number; body?: string }
+  | { status: number; body?: string | Buffer }
   /** Accept the connection, never answer (the client's timeout must fire). */
   | 'hang'
   /** Destroy the socket without a response. */

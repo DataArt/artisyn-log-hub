@@ -5,7 +5,7 @@ description: "Folder-level index of client/src: what each folder holds, its entr
 tags:
   - client
   - ui
-generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
+generated: { by: "ai:claude", at: "2026-11-25T15:45:00+04:00" }
 ---
 
 # Client Components Structure
@@ -47,7 +47,7 @@ For routing, the provider tree, lazy chunks, URL state and browser storage see
 | `lib/` | Shared non-page logic — [below](#viewerlib) |
 | `ui/` | Shadcn/Radix primitives (`button`, `dialog`, `tabs`, `page-tabs`, `overflow-row`, `popover`, `tooltip`, `switch`, …). Prefer these over raw HTML elements |
 | `pages/` | One folder per page — [below](#viewerpages) |
-| `live/` | OTEL **Live view** modal (opened from the top-nav Live item, `?live=<nodeKey>`): `LiveModal` (shell, polling via `useOtelLivePoll`, banners, `LiveSplitter` pane handles) + `LiveModalHeader`, `LiveTree` (left pane), `LiveViewPane` (breadcrumb, `LiveKpiTiles`, `LiveChartCarousel` / `LiveLatencyChart` fed by `live-chart-data.ts` (last carousel page: `LiveSharePage` doughnuts fed by `live-share-data.ts`), `LiveFlowSankey` fed by `live-flow-data.ts`, `LiveBreakdownTable`), `LiveDetailsPanel` + `LiveDetailsParts` (right panel), `useLiveUrlState` (`?live=`), `live-links.ts` (Open session / OTEL tab targets), `live-format.ts` (`formatLiveDuration`, `formatLiveClock`), `live-node-key.ts`, `live.constants.ts`. Exported through `pages/repository/repository-tabs-lazy-group.ts` — [`otel-tabs.md`](otel-tabs.md) § "Live view" |
+| `live/` | OTEL **Live view** modal (opened from the top-nav Live item, `?live=<nodeKey>`): `LiveModal` (shell, polling via `useOtelLivePoll`, banners, `LiveSplitter` pane handles) + `LiveModalHeader`, `LiveTree` (left pane), `LiveViewPane` (breadcrumb, `LiveKpiTiles` (Active users / Active hours / token sparkline from `live-kpi-data.ts`), `LiveCharts` — one page list from `live-chart-data.ts` (`buildLiveChartPages`: incl. the `LiveSharePage` doughnuts fed by `live-share-data.ts`, Over time by team / user, Edits by tool) shown as the `LiveChartTiles` grid (default) or the `LiveChartCarousel` (also the enlarged tile), mode in `live-chart-mode.ts` (`artisyn:liveChartMode`); `LiveLatencyChart`, `LiveFlowSankey` fed by `live-flow-data.ts`, `LiveBreakdownTable`), `LiveDetailsPanel` + `LiveDetailsParts` (right panel), `useLiveUrlState` (`?live=`), `live-links.ts` (Open session / OTEL tab targets), `live-format.ts` (`formatLiveDuration`, `formatLiveClock`), `live-node-key.ts`, `live.constants.ts`. Exported through `pages/repository/repository-tabs-lazy-group.ts` — [`otel-tabs.md`](otel-tabs.md) § "Live view" |
 
 ---
 

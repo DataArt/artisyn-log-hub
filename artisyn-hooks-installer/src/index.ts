@@ -36,6 +36,11 @@ Options (install and upgrade):
                        and restored when the last repo is uninstalled.
                        Default: ask in a terminal, else keep. The answer is
                        remembered until your collector settings change.
+  --allow-downgrade    Install an older bundled hook over a newer installed one
+                       without asking. Without it a terminal asks to confirm and
+                       a non-interactive run stops. When the server serves a newer
+                       hook than this installer bundles (a stale npx cache), the
+                       installer fetches the current one and re-runs itself first.
 
 Other actions:
   --restart-otel-receiver
@@ -111,6 +116,8 @@ for (let i = 0; i < args.length; i++) {
       process.exit(1);
     }
     flags.otelExisting = value as ExistingChoice;
+  } else if (arg === '--allow-downgrade') {
+    flags.allowDowngrade = true;
   } else if (arg === '--restart-otel-receiver') {
     restartOtelReceiver = true;
   } else if (arg.startsWith('--')) {
@@ -143,14 +150,14 @@ if (restartOtelReceiver) {
     printUsageAndExit(1);
   }
 
-  runUpgrade({ otelExisting: flags.otelExisting }).catch((err: unknown) => {
+  runUpgrade({ otelExisting: flags.otelExisting, allowDowngrade: flags.allowDowngrade }).catch((err: unknown) => {
     console.error('Unexpected error:', err instanceof Error ? err.message : String(err));
     process.exit(1);
   });
 } else if (subcommand === 'uninstall') {
   if (flags.serverUrl !== undefined || flags.apiKey !== undefined || flags.otelPort !== undefined || flags.otelTraces !== undefined
-    || flags.otelExisting !== undefined) {
-    console.error('Error: uninstall does not accept --server-url/--api-key/--otel-port/--otel-traces/--otel-existing');
+    || flags.otelExisting !== undefined || flags.allowDowngrade !== undefined) {
+    console.error('Error: uninstall does not accept --server-url/--api-key/--otel-port/--otel-traces/--otel-existing/--allow-downgrade');
     printUsageAndExit(1);
   }
 

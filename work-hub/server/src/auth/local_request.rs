@@ -18,20 +18,62 @@ pub fn peer_string(peer: Option<SocketAddr>) -> String {
 }
 
 /// Part A: is a request from `remote_address` (the socket peer; `None` = missing) local, given
-/// the process's trusted gateway?
-pub fn is_local_address(remote_address: Option<&str>, trusted_gateway: Option<&str>) -> bool {
+/// the process's trusted gateway and configured peers (`AUTH_NONE_TRUSTED_PEERS`)?
+pub fn is_local_address(
+    remote_address: Option<&str>,
+    trusted_gateway: Option<&str>,
+    trusted_peers: &[String],
+) -> bool {
     let remote = remote_address.unwrap_or("");
     let normalized = remote.strip_prefix("::ffff:").unwrap_or(remote);
     if normalized == "127.0.0.1" || normalized == "::1" {
         return true;
     }
-    trusted_gateway.is_some_and(|g| g == normalized)
+    if trusted_gateway.is_some_and(|g| g == normalized) {
+        return true;
+    }
+    trusted_peers.iter().any(|p| p == normalized)
 }
 
-/// [`is_local_address`] with this process's memoized trusted gateway.
+/// [`is_local_address`] with this process's memoized trusted gateway and peers.
 pub fn is_local_request(peer: Option<SocketAddr>) -> bool {
     let remote = peer_string(peer);
-    is_local_address(Some(&remote), trusted_gateway())
+    is_local_address(Some(&remote), trusted_gateway(), &trusted_peers().peers)
+}
+
+/// Rule 9: `AUTH_NONE_TRUSTED_PEERS` split on commas and whitespace.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TrustedPeers {
+    pub peers: Vec<String>,
+    pub rejected: Vec<String>,
+}
+
+/// Rule 9: keeps plain private IPv4 addresses (rule 7) once, in order; everything else is rejected.
+pub fn parse_trusted_peers(raw: Option<&str>) -> TrustedPeers {
+    let mut out = TrustedPeers::default();
+    for entry in raw
+        .unwrap_or("")
+        .split(|c: char| c == ',' || js::is_js_whitespace(c))
+    {
+        if entry.is_empty() {
+            continue;
+        }
+        if !is_trustable_private_ipv4(entry) {
+            out.rejected.push(entry.to_string());
+        } else if !out.peers.iter().any(|p| p == entry) {
+            out.peers.push(entry.to_string());
+        }
+    }
+    out
+}
+
+static TRUSTED_PEERS: OnceLock<TrustedPeers> = OnceLock::new();
+
+/// This process's `AUTH_NONE_TRUSTED_PEERS`, parsed once.
+pub fn trusted_peers() -> &'static TrustedPeers {
+    TRUSTED_PEERS.get_or_init(|| {
+        parse_trusted_peers(std::env::var("AUTH_NONE_TRUSTED_PEERS").ok().as_deref())
+    })
 }
 
 /// File access for part B. `Err` = the probe itself failed (resolution then yields no gateway).

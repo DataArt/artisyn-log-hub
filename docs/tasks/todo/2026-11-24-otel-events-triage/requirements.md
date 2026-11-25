@@ -79,6 +79,25 @@ Sources: https://code.claude.com/docs/en/monitoring-usage, the Claude Code CHANG
 
   Log Hub's own hook is not singled out: Claude Code does not report which hook command or plugin
   ran.
+
+  Note (2026-11-25, Claude Code 2.1.332): `assistant_response` gained a tool-sent variant — text
+  sent through `SendUserMessage` or Cowork's message tool, carrying `tool_use_id`; the text is
+  sent only with `OTEL_LOG_ASSISTANT_RESPONSES=1`. The capture behind this table predates it
+  (2.1.331). The decision stays *ignore* (the reply text is already in the transcript and the
+  hook does not set that env var); revisit only if a session-events row "message sent to the
+  user" is wanted, joined to the tool call by `tool_use_id`.
+
+  Note (2026-11-25, Claude Code 2.1.332): the new `PreSkillShellCommand` hook event (runs before
+  a skill's inline `!` shell command; matcher `Bash` / `PowerShell`; can only block) has **no OTEL
+  event of its own**, and the inline commands themselves are not logged in OTEL either. When some
+  hook is configured for it, its runs arrive as ordinary `hook_execution_start` /
+  `hook_execution_complete` events with `hook_event = PreSkillShellCommand` (documented shape
+  generic; `hook_name` presumably `PreSkillShellCommand:<matcher>` — unverified). The Hook overhead
+  card therefore groups **every** `hook_event` / `hook_name` it receives, with no allowlist of
+  known hook events, so `PreSkillShellCommand` (and any later hook event) shows up without a code
+  change. Log Hub's own hook does **not** register `PreSkillShellCommand`: the plugin's static
+  `hooks.json` cannot be gated on the Claude Code version, and Claude Code ≤ 2.1.331 shows a
+  startup dialog for an unknown hook event — revisit once old versions are rare.
 - **FR-3 Token rule in the KB.** `docs/knowledgebase/otel-tabs.md` (span attributes) and
   `docs/knowledgebase/llm-call-math.md` say that `gen_ai.usage.input_tokens` already includes
   cache tokens and must never be added to `cache_read_tokens` / `cache_creation_tokens` again.

@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { getTrustedGateway } from './auth/utils/container-gateway.util';
+import { getTrustedPeers } from './auth/utils/trusted-peers.util';
 import { HttpExceptionFilter } from './common/http-exception.filter';
 import { warnKnownSecrets } from './common/known-secrets';
 import { AppLogger } from './common/app-logger';
@@ -87,6 +88,19 @@ async function bootstrap() {
     if (trustedGateway) {
       appLogger.log(
         `AUTH_MODE=none: container detected, also trusting default gateway ${trustedGateway} as a local caller`,
+        'Bootstrap',
+      );
+    }
+    const { peers, rejected } = getTrustedPeers();
+    if (peers.length > 0) {
+      appLogger.log(
+        `AUTH_MODE=none: also trusting AUTH_NONE_TRUSTED_PEERS ${peers.join(', ')} as local callers`,
+        'Bootstrap',
+      );
+    }
+    if (rejected.length > 0) {
+      appLogger.warn(
+        `AUTH_NONE_TRUSTED_PEERS: ignored ${rejected.join(', ')} — only exact private IPv4 addresses (10/8, 172.16/12, 192.168/16, 169.254/16) are accepted`,
         'Bootstrap',
       );
     }

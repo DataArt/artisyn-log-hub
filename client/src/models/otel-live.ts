@@ -125,6 +125,38 @@ export interface OtelLiveView {
   distinctFootnote: boolean;
   /** Sankey rows over the 2 h window; absent from servers before 2026-11-05. */
   flows?: OtelLiveFlowRow[];
+  /**
+   * Per root × 5-min bucket figures over the 2 h window (2026-11-21 cloudwatch-cai-parity),
+   * ordered by `rootId`, `start`; only buckets with calls; capped to whole roots by 2 h cost.
+   * `[]` for an agent. Absent from older servers: missing = no data.
+   */
+  rootSeries?: OtelLiveRootSeriesRow[];
+  /**
+   * Edit-tool span counts per 5-min bucket × tool (2026-11-21 cloudwatch-cai-parity), ordered by
+   * `start`, `tool`; DD-11-masked roots left out. Absent from older servers: missing = no data.
+   */
+  editsByTool?: OtelLiveEditsRow[];
+}
+
+/** One per-root series row; `rootId` = `sessions.id`, as a session node's `rootId`. */
+export interface OtelLiveRootSeriesRow {
+  rootId: number;
+  /** ISO UTC 5-min bucket start. */
+  start: string;
+  calls: number;
+  costUsdMicros: string;
+  /** input + output + cache read + cache write. */
+  tokens: string;
+}
+
+export type OtelLiveEditTool = 'Edit' | 'MultiEdit' | 'Write' | 'NotebookEdit';
+
+/** One "Edits by tool" row: tool spans of a whitelisted edit tool started in the bucket. */
+export interface OtelLiveEditsRow {
+  /** ISO UTC 5-min bucket start. */
+  start: string;
+  tool: OtelLiveEditTool;
+  count: number;
 }
 
 /** One Live sankey row: per root × model (parent nodes) or model × agent (a session). */

@@ -21,11 +21,13 @@ import {
   loadOtelLiveCandidateRoots,
   loadOtelLiveClaudeVersion,
   loadOtelLiveCostRate,
+  loadOtelLiveEditsByTool,
   loadOtelLiveFlows,
   loadOtelLiveEvents,
   loadOtelLiveLatency,
   loadOtelLivePlacements,
   loadOtelLiveRepoLabel,
+  loadOtelLiveRootSeries,
   loadOtelLiveRootTotals,
   loadOtelLiveSpark,
   loadOtelLiveTeams,
@@ -196,8 +198,9 @@ export class OtelLiveReader {
 
     const panelNode =
       query.panel === undefined ? null : tree.resolve(query.panel);
+    const maskedRootIds = this.maskedRootIds(user, placements, scopeTeams);
     const [view, details] = await Promise.all([
-      this.buildView(tree, selected, now, window),
+      this.buildView(tree, selected, now, window, maskedRootIds),
       panelNode === null
         ? Promise.resolve(null)
         : this.buildDetails(
@@ -347,32 +350,75 @@ export class OtelLiveReader {
       .sort((a, b) => lastActivityMs(b) - lastActivityMs(a));
   }
 
+  /**
+   * Roots that DD-11 masks under any of the caller's placements: another member's session in a
+   * `team-no-prompts` team — even when the same root is visible through a transparent team. A row
+   * whose owner is unknown is masked rather than leaked, as in `buildDetails`.
+   */
+  private maskedRootIds(
+    user: AuthUser,
+    placements: OtelLivePlacementRow[],
+    scopeTeams: OtelLiveScopeTeam[],
+  ): Set<number> {
+    const noPromptTeams = new Set(
+      scopeTeams
+        .filter((t) => t.scope.visibility === 'team-no-prompts')
+        .map((t) => t.teamId),
+    );
+    const masked = new Set<number>();
+    for (const p of placements) {
+      if (
+        p.teamId !== null &&
+        noPromptTeams.has(p.teamId) &&
+        p.userId !== user.id
+      ) {
+        masked.add(p.rootId);
+      }
+    }
+    return masked;
+  }
+
   private async buildView(
     tree: OtelLiveTree,
     selected: OtelLiveNode,
     now: Date,
     window: OtelLiveWindow,
+    maskedRootIds: ReadonlySet<number>,
   ): Promise<OtelLiveView> {
     const rootIds = tree.rootIdsOf(selected.key);
     const agent = this.agentFilterOf(selected);
-    const [buckets, latency, costPerMinUsdMicros, calls, flows] =
-      await Promise.all([
-        loadOtelLiveBuckets(this.db, rootIds, window, agent),
-        loadOtelLiveLatency(this.db, rootIds, window, agent),
-        loadOtelLiveCostRate(this.db, rootIds, now, agent),
-        agent === undefined
-          ? Promise.resolve(null)
-          : loadOtelLiveCalls(this.db, agent, OTEL_LIVE_AGENT_CALLS_LIMIT),
-        // The sankey: parents by root × model, a session by model × agent, none for an agent.
-        selected.type === 'agent'
-          ? Promise.resolve([])
-          : loadOtelLiveFlows(
-              this.db,
-              rootIds,
-              window,
-              selected.type === 'session',
-            ),
-      ]);
+    const editRootIds = rootIds.filter((id) => !maskedRootIds.has(id));
+    const [
+      buckets,
+      latency,
+      costPerMinUsdMicros,
+      calls,
+      flows,
+      rootSeries,
+      editsByTool,
+    ] = await Promise.all([
+      loadOtelLiveBuckets(this.db, rootIds, window, agent),
+      loadOtelLiveLatency(this.db, rootIds, window, agent),
+      loadOtelLiveCostRate(this.db, rootIds, now, agent),
+      agent === undefined
+        ? Promise.resolve(null)
+        : loadOtelLiveCalls(this.db, agent, OTEL_LIVE_AGENT_CALLS_LIMIT),
+      // The sankey: parents by root × model, a session by model × agent, none for an agent.
+      selected.type === 'agent'
+        ? Promise.resolve([])
+        : loadOtelLiveFlows(
+            this.db,
+            rootIds,
+            window,
+            selected.type === 'session',
+          ),
+      // Per-root series (2026-11-21 cloudwatch-cai-parity): none for an agent, as the sankey.
+      selected.type === 'agent'
+        ? Promise.resolve([])
+        : loadOtelLiveRootSeries(this.db, rootIds, window),
+      // Edits by tool: every node type, DD-11-masked roots left out.
+      loadOtelLiveEditsByTool(this.db, editRootIds, window, agent),
+    ]);
 
     let breakdown: OtelLiveNode[];
     let moreAgents = 0;
@@ -396,6 +442,8 @@ export class OtelLiveReader {
       calls,
       distinctFootnote: tree.distinctFootnote(selected.key),
       flows,
+      rootSeries,
+      editsByTool,
     };
   }
 

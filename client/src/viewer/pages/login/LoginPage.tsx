@@ -68,8 +68,19 @@ function IdentifyForm() {
       const profile = await identify(email);
       setUser(profile);
       navigate(from, { replace: true });
-    } catch {
-      setError('Could not continue with that email. Please try again.');
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.statusCode === 403 &&
+        err.code === 'not_local'
+      ) {
+        // The server names the address it saw; the fix is in the install's .env.
+        setError(
+          `${err.message}. Re-run the Log Hub installer on this machine (it detects and trusts this address), or set AUTH_MODE=password in .env.`,
+        );
+      } else {
+        setError('Could not continue with that email. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }

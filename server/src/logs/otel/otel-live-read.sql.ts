@@ -32,9 +32,11 @@ import { OTEL_MAIN_AGENT_KEY } from './otel-facts-writer';
 import type { OtelStructure } from './otel-facts.types';
 import {
   OTEL_LIVE_COST_RATE_MS,
+  OTEL_LIVE_EDIT_TOOLS,
   OTEL_LIVE_EVENTS_LIMIT,
   OTEL_LIVE_FLOW_ROWS,
   OTEL_LIVE_RETAIN_MAX_MS,
+  OTEL_LIVE_ROOT_SERIES_ROWS,
   OTEL_LIVE_TOP_N,
   OTEL_LIVE_TOP_TOOLS,
 } from './otel-live.constants';
@@ -44,10 +46,13 @@ import type {
   OtelLiveBucket,
   OtelLiveCallRow,
   OtelLiveCandidate,
+  OtelLiveEditsRow,
+  OtelLiveEditTool,
   OtelLiveEvent,
   OtelLiveFlowRow,
   OtelLiveLatencyBucket,
   OtelLivePlacementRow,
+  OtelLiveRootSeriesRow,
   OtelLiveRootTotalsRow,
   OtelLiveScopeTeam,
   OtelLiveSpark,
@@ -837,6 +842,111 @@ export async function loadOtelLiveFlows(
     calls: toNum(r.calls),
     tokens: microsText(r.tokens),
   }));
+}
+
+/**
+ * Per root × 5-min bucket series over `window` (2026-11-21 cloudwatch-cai-parity), from
+ * `otel_cost_buckets` through its `(session_id, bucket_start)` access path — the same source and
+ * filter as `loadOtelLiveBuckets`. Ordered by root, then bucket; only buckets with calls. When the
+ * rows exceed `OTEL_LIVE_ROOT_SERIES_ROWS`, whole roots are kept by their 2 h cost (ties by id).
+ */
+export async function loadOtelLiveRootSeries(
+  db: DrizzleDb,
+  rootIds: number[],
+  window: OtelLiveWindow,
+): Promise<OtelLiveRootSeriesRow[]> {
+  if (rootIds.length === 0) return [];
+  const result = await db.execute(sql`
+    WITH r AS (
+      SELECT b.session_id AS root_id, b.bucket_start AS start,
+             SUM(b.calls) AS calls,
+             COALESCE(SUM(b.cost_usd_micros), 0) AS cost,
+             COALESCE(SUM(COALESCE(b.input_tokens, 0) + COALESCE(b.output_tokens, 0)
+                        + COALESCE(b.cache_read_tokens, 0) + COALESCE(b.cache_write_tokens, 0)), 0)
+               AS tokens
+        FROM otel_cost_buckets b
+       WHERE b.session_id = ANY(${intArray(rootIds)})
+         AND b.bucket_start >= ${window.from}
+         AND b.bucket_start < ${window.to}
+         AND b.calls <> 0
+       GROUP BY 1, 2
+    ), ranked AS (
+      SELECT root_id,
+             SUM(COUNT(*)) OVER (ORDER BY SUM(cost) DESC, root_id) AS upto
+        FROM r
+       GROUP BY root_id
+    )
+    SELECT r.root_id, r.start, r.calls, r.cost, r.tokens
+      FROM r
+      JOIN ranked k ON k.root_id = r.root_id
+     WHERE k.upto <= ${OTEL_LIVE_ROOT_SERIES_ROWS}
+     ORDER BY r.root_id, r.start
+  `);
+  return (
+    result.rows as unknown as {
+      root_id: DbValue;
+      start: DbDate;
+      calls: DbValue;
+      cost: DbValue;
+      tokens: DbValue;
+    }[]
+  ).map((r) => ({
+    rootId: toNum(r.root_id),
+    start: isoOrEpoch(r.start),
+    calls: toNum(r.calls),
+    costUsdMicros: microsText(r.cost),
+    tokens: microsText(r.tokens),
+  }));
+}
+
+function isEditTool(name: string | null): name is OtelLiveEditTool {
+  return (OTEL_LIVE_EDIT_TOOLS as readonly string[]).includes(name ?? '');
+}
+
+/**
+ * "Edits by tool" over `window` (2026-11-21 cloudwatch-cai-parity): tool spans of the
+ * `OTEL_LIVE_EDIT_TOOLS` names per `(5-min bucket, tool)`, through the `otel_spans
+ * (session_id, start_time)` index; narrowed to the agent when given. The caller passes `rootIds`
+ * with the DD-11-masked roots already removed.
+ */
+export async function loadOtelLiveEditsByTool(
+  db: DrizzleDb,
+  rootIds: number[],
+  window: OtelLiveWindow,
+  agent?: OtelLiveAgentFilter,
+): Promise<OtelLiveEditsRow[]> {
+  if (rootIds.length === 0) return [];
+  const tools = sql.join(
+    OTEL_LIVE_EDIT_TOOLS.map((t) => sql`${t}`),
+    sql`, `,
+  );
+  const result = await db.execute(sql`
+    SELECT ${bin5m(sql`s.start_time`)} AS start, s.attributes->>'tool_name' AS tool,
+           COUNT(*) AS count
+      FROM otel_spans s
+     WHERE s.session_id = ANY(${intArray(rootIds)})
+       AND s.name = ${OTEL_SPAN_TOOL}
+       AND s.start_time >= ${window.from}
+       AND s.start_time < ${window.to}
+       AND s.attributes->>'tool_name' IN (${tools})
+       ${spanAgentSql(agent, 's')}
+     GROUP BY 1, 2
+     ORDER BY 1, 2
+  `);
+  const rows: OtelLiveEditsRow[] = [];
+  for (const r of result.rows as unknown as {
+    start: DbDate;
+    tool: string | null;
+    count: DbValue;
+  }[]) {
+    if (!isEditTool(r.tool)) continue;
+    rows.push({
+      start: isoOrEpoch(r.start),
+      tool: r.tool,
+      count: toNum(r.count),
+    });
+  }
+  return rows;
 }
 
 /**

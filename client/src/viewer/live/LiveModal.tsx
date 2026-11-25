@@ -39,6 +39,7 @@ import { LiveDetailsPanel } from './LiveDetailsPanel';
 import { LiveModalHeader } from './LiveModalHeader';
 import { LiveSplitter } from './LiveSplitter';
 import { LiveTree } from './LiveTree';
+import type { LiveEscapeHandler } from './LiveCharts';
 import { LiveViewPane } from './LiveViewPane';
 import { useLiveUrlState } from './useLiveUrlState';
 
@@ -88,6 +89,8 @@ export function LiveModal() {
 
   // Both splitters are draggable; the middle pane keeps at least LIVE_VIEW_MIN_WIDTH_PX.
   const panesRef = useRef<HTMLDivElement | null>(null);
+  // While a chart tile is enlarged, Esc returns to the grid instead of closing the modal.
+  const chartEscapeRef = useRef<LiveEscapeHandler | null>(null);
   const treeWidthRef = useRef(LIVE_TREE_WIDTH_PX);
   const detailsWidthRef = useRef(0);
   const panesWidth = () => panesRef.current?.clientWidth ?? window.innerWidth;
@@ -179,6 +182,9 @@ export function LiveModal() {
         showCloseButton={false}
         aria-describedby={undefined}
         data-testid="live-modal"
+        onEscapeKeyDown={(e) => {
+          if (chartEscapeRef.current?.()) e.preventDefault();
+        }}
       >
         <LiveModalHeader
           lastUpdatedAt={lastUpdatedAt}
@@ -230,6 +236,7 @@ export function LiveModal() {
                 res={res}
                 onSelect={select}
                 onOpenPanel={setPanelKey}
+                escapeRef={chartEscapeRef}
               />
             )}
             {res === null && isLoading && (

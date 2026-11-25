@@ -82,9 +82,14 @@ scenario is missing (add a step) or the code is not needed (delete it) — not a
   every `static` check in `repo-health-checks.json` (lint, the three typechecks, the algorithm
   tests of server / client / hook, the build-script tests) plus `build`. No DB, no stand, no dev
   app — a few minutes.
-- To see the behaviour you are changing while iterating, run **only the touched scenario**:
-  `npm run test:scenarios -- --mode <a|b|c|d> --only scenarios --grep "<@S-TAG>"` (a mode the
-  scenario declares; add `,contract` to `--only` if you changed a route).
+- To see the behaviour you are changing while iterating, run **only the touched scenarios**, on the
+  warm dev stand and **in one batch** at the end of an iteration (not after every edit):
+  `npm run test:scenarios -- --dev --mode <a|b|c|d> --only scenarios --grep "<@S-TAG>|<@S-TAG2>"`
+  (a mode the scenario declares; add `,contract` to `--only` if you changed a route). `--dev`
+  skips the stand build: a background supervisor (`scripts/scenarios/dev-stand.mjs`, started by the
+  first `--dev` run and left running) keeps `server/dist-scn` compiled from the sources (`tsc --watch`,
+  `vite build --watch`, the installer on hook changes); each pass still gets a fresh stand and
+  schema. Stop it with `node scripts/scenarios/dev-stand.mjs --stop`. The final run never uses `--dev`.
 - **Before declaring the work done** (`finalRun: true`) the full set runs: the fast set plus the
   `finalOnly` checks — `contract`, `scenarios-a`/`-b`/`-c`/`-d`, `e2e-fast`, `e2e-full`.
 
@@ -106,7 +111,8 @@ skills and workflows); this table is human documentation and must be kept in syn
 | Server typecheck (tsc) | `npm run typecheck` | `server/` |
 | Server algorithm tests (jest, `*.algo.spec.ts` only, no DB) | `npm run test` | `server/` |
 | Build-script tests (`node --test`) | `npm run test:scripts` | repo root |
-| One scenario while iterating (not a health check) | `npm run test:scenarios -- --mode <a\|b\|c\|d> --only scenarios --grep "<@S-TAG>"` | repo root |
+| Touched scenarios while iterating, on the warm dev stand (not a health check) | `npm run test:scenarios -- --dev --mode <a\|b\|c\|d> --only scenarios --grep "<@S-TAG>"` | repo root |
+| Stop the warm dev stand supervisor | `node scripts/scenarios/dev-stand.mjs --stop` | repo root |
 | Tests typecheck (tsc over `tests/`) | `npm run typecheck:tests` | repo root |
 | Hook algorithm tests (`node --test`, `__tests__/*.algo.test.js`) | `npm test` | `hook/` |
 | E2E — fast `@core` loop (< 3 min; legacy `tests/e2e/` specs not yet replaced by scenarios) | `npm run test:e2e` | repo root |
@@ -367,6 +373,14 @@ product. Never make a menu, help page or doc online-only — no runtime fetches 
 link to GitHub/a website as the only place a fact is documented. Shipped READMEs (release kit,
 `hook/README.md`) stay self-contained. Online material (GitHub Pages site, deck) is an extra, never
 the only home of user documentation.
+
+## Show, don't limit
+
+If a user does something that is an anti-pattern but does not break Log Hub (too many tags, a
+volatile value as a label, a noisy config), Log Hub does not silently cap, drop or hide it — it
+shows it with a warning that names the fix. Hard limits exist only as breakage guards, set far above
+honest use, and hitting one is shown too. A tight "comfortable" cap masks the problem. Details:
+`docs/product-kb/design-principles.md`.
 
 ## Compatability 
 

@@ -141,12 +141,7 @@ row whose cost went up flashes green for a moment, so you can see which session 
 Drag the borders between the tree, the middle pane and the details panel to resize them; the
 widths are remembered in your browser.
 
-**The middle pane** for the selected node: KPI tiles (cost, running time, live sessions and
-agents — or calls and model for an agent — and cost per minute), a chart carousel (cost, tokens, calls and cost by model,
-cost by structure, cost by skill / MCP server, with traces on LLM and tool latency p50 / p95, and on
-Home, a team or a repository three doughnuts side by side — cost or tokens by team, by repository
-and by user; these count each session's totals since start once, under its first team and repository)
-and a breakdown table of the node's children (cost, input, output, cache read and write, calls,
+**The middle pane** for the selected node: KPI tiles, the charts, and a breakdown table of the node's children (cost, input, output, cache read and write, calls,
 running time, last activity). Below the charts, a **Cost flow** diagram shows where the cost of
 the last 2 hours went: from models to teams, users and sessions on Home, to users, repositories
 and sessions for a team, and to users and sessions for a repository. For a session it is a
@@ -154,6 +149,45 @@ and sessions for a team, and to users and sessions for a repository. For a sessi
 A session's breakdown lists its agents, including finished ones
 (up to 50, then "+N more"); a session row has **Open session ↗**, which opens that session in its
 repository. An agent shows its latest 50 calls instead.
+
+**KPI tiles.** Cost since start, tokens by type with their total and a sparkline of the tokens per
+5 minutes over the last 2 hours, live sessions and agents (for a session: its live agents), and
+cost per minute. On every node except an agent there are also:
+
+- **Active users** — how many different people own the sessions under the node (not shown for a
+  single session);
+- **Cache hit %** — the share of input that was read from the prompt cache;
+- **Active hours** — the run time of all sessions under the node added up: each session's time
+  from its first to its latest call, since start. It differs from **Running**, which is the longest
+  single session.
+
+A session placed in two repositories or teams counts once. A tile with nothing to show reads
+`n/a`, not 0. An agent shows cost, calls, its model and running time instead.
+
+**Charts.** Every chart covers the last 2 hours in 5-minute steps (Share: totals since start). The
+node can show:
+
+- **Cost over time** and **Tokens over time**;
+- **Calls and cost by model**, **Cost by structure** and **Cost by skill / MCP server**;
+- **Latency p50 / p95** of LLM and tool calls (needs traces);
+- **Share by team / repository / user** — three doughnuts on Home, a team or a repository; each
+  session's totals since start count once, under its first team and repository;
+- **Over time by team** and **Over time by user** — the cost, tokens or calls of each team or
+  person per 5 minutes (by user is not shown for a single session). Each session counts under its
+  first team; whatever cannot be split goes to **Other**, so the stack always adds up to the total;
+- **Edits by tool** — how many Edit, MultiEdit, Write and NotebookEdit calls ran per 5 minutes.
+  It comes from OTEL traces: with no traces in the last 2 hours it says "Not reported: no traces in
+  the last 2 h" instead of showing zeros. Sessions whose prompts the team hides from you are left
+  out of this chart.
+
+A chart with no data in the last 2 hours is left out.
+
+**Tiles or carousel.** By default the charts are a grid of small tiles ("click a tile to
+enlarge"); the grid has more columns as the pane gets wider. Click a tile to enlarge it: you get
+the full chart with its own **Metric** / **By** controls and ‹ › to step through the charts;
+**‹ All charts** or Esc goes back to the grid (Esc again closes the window). The **Tiles |
+Carousel** switch above the charts shows one chart at a time instead; your choice is remembered
+in your browser.
 
 **The details panel** shows top users, models and repositories for a team, repository or Home;
 the owner, start time, Claude Code version, first prompt, agents, top tools and latest events for

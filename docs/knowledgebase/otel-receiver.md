@@ -5,7 +5,7 @@ description: "Why the hook runs its own loopback OTLP/JSON receiver, why it is o
 tags:
   - hooks
   - otel
-generated: { by: "human:denistsyplakov", at: "2026-11-18T23:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T13:30:00+04:00" }
 ---
 
 # OTEL Receiver
@@ -230,7 +230,11 @@ are dropped and counted (`pending-expire`). A register re-routes the session's s
   (`<ISO> <event> <message>`). Each per-repo slice of an OTLP request writes
   `ingest repo=<repoKey> receiverVersion=<v> signal=… bytes=… sessions=… records=… dropped=… writeErrors=…`
   there and mirrors the same line into that repo's `<otelDir>/receiver.log`. Pending records log
-  `ingest repo=pending …` in the shared log only. Idle-exit logs
+  `ingest repo=pending …` in the shared log only. Hook 3.3.3+: the first written record of each
+  session and signal also logs (shared log + repo mirror, once per receiver run, bounded set)
+  `first-record repo=<repoKey> session=<id> signal=… service=<service.name> serviceVersion=<service.version> scope=<name>@<version>`
+  (`-` for a missing value) — it tells a Claude Desktop session (`service=claude-code-desktop`, whose
+  `service.version` is the Desktop app's) from a CLI one. Idle-exit logs
   `idle-exit idleMs=<n> ingests=<count since start> sessions=<registry size>`, followed by a `no-data` line when
   `ingests` is 0 (Claude Code never exported to this receiver — hook 2.30.3+). An `addr-in-use` exit is skipped when
   the last log line is already `addr-in-use`, so a burst of losing spawns leaves one line.

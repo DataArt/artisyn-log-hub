@@ -17,6 +17,7 @@ lines to one or two sentences. Everything here is in English, like everything un
 ## Product
 
 * [Product Purpose and Full Data Capture](product-purpose-and-data-capture.md) - Read before proposing redaction or "privacy fixes" to capture: the product captures session data in full by design
+* [Product Design Principles](design-principles.md) - Read before designing any limit, cap, validation or filtering of user data: show, don't limit — non-breaking anti-patterns get a warning, not a silent cap
 * [Competitors](competitors.md) - Read before positioning, pitching or prioritising features: 14 tools by category and the gaps they expose
 
 ## Product ideas

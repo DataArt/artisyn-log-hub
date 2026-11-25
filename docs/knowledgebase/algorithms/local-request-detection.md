@@ -3,7 +3,7 @@ type: "Algorithm"
 title: "Local request detection: who may use passwordless mode"
 description: "In `AUTH_MODE=none` anyone can identify as any e-mail without a password, so that mode is limited to requests from the same machine. This rule decides whether a request is \"local\"."
 tags: [algorithm]
-generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
+generated: { by: "ai:claude-opus-5-5", at: "2026-11-25T16:00:00+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---
@@ -24,10 +24,13 @@ gateway, never from loopback).
   - `server/src/auth/utils/localhost.util.ts` (`isLocalhostRequest`);
   - `server/src/auth/utils/container-gateway.util.ts` (`resolveTrustedGateway`,
     `isContainerized`, `parseDefaultGatewayIpv4`, `isTrustablePrivateIpv4`; `getTrustedGateway`
-    memoizes `resolveTrustedGateway` for the process).
+    memoizes `resolveTrustedGateway` for the process);
+  - `server/src/auth/utils/trusted-peers.util.ts` (`parseTrustedPeers`; `getTrustedPeers`
+    memoizes it over `AUTH_NONE_TRUSTED_PEERS`).
 - Twins: Work Hub's Rust port `work-hub/server/src/auth/local_request.rs` (`is_local_address`
-  takes the peer address and the trusted gateway directly, so part A rows never build a request;
-  `resolve_trusted_gateway` and `is_trustable_private_ipv4` take an `FsProbe`). It runs every row
+  takes the peer address, the trusted gateway and the trusted peers directly, so part A rows never
+  build a request; `resolve_trusted_gateway` and `is_trustable_private_ipv4` take an `FsProbe`;
+  `parse_trusted_peers` is part C). It runs every row
   in `work-hub/server/tests/algo.rs` (`cargo test --test algo`, i.e. `npm run test:algo` from
   `work-hub/`).
 - Test: `server/src/auth/utils/localhost.util.algo.spec.ts`.
@@ -42,7 +45,8 @@ gateway, never from loopback).
    reports it in lower case, and only that exact lower-case prefix is stripped, so
    `::FFFF:127.0.0.1` stays as it is and is not local).
 3. Local if the result is exactly `127.0.0.1` or `::1` (other `127.x` addresses are not).
-4. Otherwise local only if a trusted gateway exists (part B) and equals the result exactly.
+4. Otherwise local only if the result equals exactly the trusted gateway (part B, when there is
+   one) or one of the configured trusted peers (part C).
 
 **B. Trusted gateway** (resolved once per process; `null` = none):
 
@@ -78,6 +82,21 @@ gateway, never from loopback).
 8. Probing never crashes startup: the real file probe treats any file it cannot read as
    missing, and any other error while resolving means no gateway.
 
+**C. Configured trusted peers** (`AUTH_NONE_TRUSTED_PEERS`, read once per process):
+
+9. The value (unset = empty) is split on commas and whitespace; empty entries are skipped. An
+   entry is kept only if it passes rule 7 as it is (a plain private IPv4 address: no `::ffff:`
+   form, no subnet, no name); a repeat is kept once, in first-seen order. Every other entry is
+   rejected (the server logs the rejected ones at startup in mode `none`) and does not affect the
+   kept ones.
+
+Why part C exists: some runtimes deliver host traffic to the published port from neither loopback
+nor the container's gateway. Rancher Desktop on Windows forwards `127.0.0.1:5003` through its own VM
+network, so the peer is `192.168.127.1` while the gateway is the compose bridge's `172.x.0.1`. The
+release installer finds that address itself: after `docker compose up -d` it calls
+`GET /api/v1/auth/local-check` from the host, and on `local: false` writes the reported `peer` into
+`.env` and restarts the app (`release-template/install.ps1`, `install.sh`).
+
 The rows test each signal kind, not every listed name: the other marker files, platform
 variables, `container` values, cgroup words, bind-source words and host-init names are
 configuration lists checked by the same code path as the one tested member.
@@ -101,18 +120,25 @@ configuration lists checked by the same code path as the one tested member.
   on-link `00000000` gateway skipped even with the lowest metric: LR-18; non-default routes
   ignored: LR-27; equal metrics: LR-28; malformed route rows (in LR-29); a leading space: LR-71.
 - Probing throws: LR-36.
+- Rancher Desktop peer with and without a configured peer: LR-77, LR-78; a configured peer's
+  neighbour: LR-79; loopback still local next to configured peers: LR-80.
+- Parsing the configured peers: the installer's value (LR-81), separators, blanks and repeats
+  (LR-82), rejected forms (LR-83), unset (LR-84), a rejected entry next to a kept one (LR-85).
 - Private ranges: `172.15`/`172.16`/`172.31`/`172.32` (LR-19..LR-22), `10` vs `11` (LR-23, LR-40),
   `192.168` vs `192.167`/`192.169` (LR-37, LR-38, LR-24), `169.254` vs `169.253` (LR-25, LR-39);
   malformed addresses: LR-26, LR-41, LR-42, LR-44, LR-45, LR-46.
 
 ## Examples
 
-Three kinds of rows.
+Four kinds of rows.
 
-- `"kind": "request"`: `remoteAddress` (or `null` for none), optional `headers`, and
-  `trustedGateway` (the result of part B for this process, or `null`). The fake request's `ip`
+- `"kind": "request"`: `remoteAddress` (or `null` for none), optional `headers`,
+  `trustedGateway` (the result of part B for this process, or `null`) and optional
+  `trustedPeers` (the kept list of part C; absent = none). The fake request's `ip`
   is what Express would report behind a trusted proxy: the `X-Forwarded-For` value if given,
   else the peer address. Expects `local`.
+- `"kind": "peers"`: `raw`, the `AUTH_NONE_TRUSTED_PEERS` value (`null` = unset). Expects
+  `peers` (kept) and `rejected`, both in input order.
 - `"kind": "gateway"`: a fake machine for part B. `files` maps a path to its content (a path not
   listed does not exist), `env` is the environment, `pid` the process id; with `"throws": true`
   every file access fails with an error. Expects `trustedGateway`.
@@ -121,7 +147,7 @@ Three kinds of rows.
 A route file is the header line plus rows of tab-separated fields
 `Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT`.
 
-Rows (75): [`docs/algorithm-examples/local-request-detection.json`](../../algorithm-examples/local-request-detection.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (84): [`docs/algorithm-examples/local-request-detection.json`](../../algorithm-examples/local-request-detection.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -163,11 +189,17 @@ Rows (75): [`docs/algorithm-examples/local-request-detection.json`](../../algori
   `a >= 10 && a <= 11` -> LR-40.
 - Octet range not checked -> LR-26; `>= 255` instead of `> 255` -> LR-68; part count not checked -> LR-41, LR-46; digits not checked
   (octets read with `Number`) -> LR-42, LR-44, LR-45.
-- Not in the table: the per-process memo of `getTrustedGateway` and `nodeFsProbe` swallowing real
-  filesystem errors.
+- Configured peers ignored -> LR-77; trusted by subnet or prefix -> LR-79; replacing loopback ->
+  LR-80. Parsing: whitespace not a separator -> LR-82; repeats kept -> LR-82; rule 7 not applied
+  (public, subnet, name or mapped form kept) -> LR-83; one bad entry drops the whole list -> LR-85.
+- Not in the table: the per-process memos of `getTrustedGateway` / `getTrustedPeers` and
+  `nodeFsProbe` swallowing real filesystem errors.
 
 ## Where the result is visible
 
-Mode `none`: `POST /api/v1/auth/identify` answers `403` to a non-local request, and the
-auto-identify guard does not sign it in, so the login page cannot be used from another machine.
-At startup in mode `none` the server logs the trusted gateway when there is one.
+Mode `none`: `POST /api/v1/auth/identify` answers `403` (`error: "not_local"`, the message names
+the peer address it saw) to a non-local request, and the auto-identify guard does not sign it in,
+so the login page cannot be used from another machine; the login page shows that message.
+`GET /api/v1/auth/local-check` returns `{local, peer}` for the caller (the installer's probe). At
+startup in mode `none` the server logs the trusted gateway and the configured peers, and warns
+about rejected peers.

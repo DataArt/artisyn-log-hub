@@ -104,7 +104,10 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   exists. See [hook-api-versioning.md](hook-api-versioning.md) § "Uploads into another user's session".
 - **Localhost-only identify** — `POST /api/v1/auth/identify` and the `auto-identify` guard on
   `GET /api/v1/auth/me` accept only `127.0.0.1`/`::1` by `req.socket.remoteAddress` (never
-  `X-Forwarded-For`), plus the container's own default gateway when containerized. 403 otherwise.
+  `X-Forwarded-For`), plus the container's own default gateway when containerized and the
+  exact addresses in `AUTH_NONE_TRUSTED_PEERS`. 403 otherwise (`error: "not_local"`, the message
+  names the peer). `GET /api/v1/auth/local-check` (mode `none` only) returns `{local, peer}` for
+  the release installer's self-check.
 - **Route order** — literal segments must be declared before parametric siblings in the
   controller (`repositories/hooks` before `:repoId`, `teams/pending-disclosures` before
   `:teamId`): Nest matches in declaration order and the `ParseIntPipe` would 400.
@@ -200,7 +203,8 @@ Compatibility matrix and per-feature history: [hook-api-versioning.md](hook-api-
 [deployment-auth-mode.md](deployment-auth-mode.md), [user-account-flows.md](user-account-flows.md)).
 The client reads `GET /api/v1/auth/config` first and renders the matching login UI.
 
-- `none`: `POST identify` (email only, localhost-only); `GET me` auto-identifies a local caller
+- `none`: `POST identify` (email only, localhost-only), `GET local-check` (installer probe);
+  `GET me` auto-identifies a local caller
   (one user → that user; several → id 1; none → 401).
 - `password` / `password-confirm`: `signup` (first user becomes admin), `login`, `forgot-password`
   → `reset-password`; `password-confirm` adds `confirm-email` / `resend-confirmation` (60 s

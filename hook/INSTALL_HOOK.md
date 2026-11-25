@@ -52,6 +52,7 @@ command to reproduce it, instead of `ready to use`.
 | `--otel-port <n>` | Pins the loopback port of the per-user OTEL receiver (integer `1`–`65535`; anything else exits 1). Since hook `2.30.0` one receiver serves every repo of this OS user, so this rewrites `~/.artisyn/otel/port.json`, the OTEL endpoints in `~/.claude/settings.json`, and the `.claude/settings.local.json` mirror and `otelReceiverPort` of **every** installed repo listed in `~/.artisyn/otel/repos.json`; restart Claude Code afterwards. Use it when another program already holds the port — see [Port allocation](#port-allocation). |
 | `--otel-existing=proxy\|keep\|replace` | What to do when Claude Code already exports OTEL to another collector (in `~/.claude/settings.json` or the process environment) — hook `2.30.0`+, accepted by `install` **and** `upgrade`. Omitted → the choice stored with an unchanged collector config, else a TTY prompt, else `keep`. See [An existing OTEL collector](#an-existing-otel-collector). Any other value exits 1. |
 | `--otel-traces=yes|no` | Whether Claude Code also exports its traces (enhanced telemetry beta) to the OTEL receiver (installer with hook `2.29.0`+). Omitted → a TTY prompt `Also export Claude Code traces (enhanced telemetry beta) to Log Hub? [Y/n]`; a non-interactive run answers yes. The answer is stored as `otelTraces` in `.artisyn/config/log-hub.json` and `upgrade` reuses it — see [Traces](#traces-opt-in). Any other value exits 1. |
+| `--allow-downgrade` | Accepted by `install` **and** `upgrade` (installer `1.1.6`+). Lets the run install an older bundled hook over a newer installed one without asking — see [Downgrade guard](#downgrade-guard). Without it a terminal asks `Are you sure…? [y/N]` and a non-interactive run stops with exit 1. |
 | `--help` | Prints usage and exits. |
 
 One more action takes no subcommand: `npx <server-origin>/static/artisyn-hooks-installer.tgz --restart-otel-receiver`
@@ -182,8 +183,26 @@ Configuration.
 ## 2. Upgrade
 
 ```sh
-npx <server-origin>/static/artisyn-hooks-installer.tgz upgrade
+npx "<server-origin>/static/artisyn-hooks-installer.tgz?v=<hook version>" upgrade
 ```
+
+Keep the `?v=<hook version>` suffix (the server's current hook version, in
+`<server-origin>/static/installer-version.json`): npx keeps one cached installer per command line, so a bare URL
+it has run before re-runs that old installer instead of downloading the new one.
+
+### Downgrade guard
+
+When the bundled hook is older than the installed one, `install` / `upgrade` (installer `1.1.6`+) first asks the
+server which hook it serves (`/static/installer-version.json`), before changing anything:
+
+- the server serves a **newer** hook than this installer bundles — a stale cached installer: it prints
+  `this installer bundles hooks vX but <server> serves vY …`, downloads `<server>/static/artisyn-hooks-installer.tgz?v=Y`,
+  unpacks it into `~/.artisyn/installer/Y/` and re-runs the same command with it (once);
+- otherwise it is a real downgrade: `Warning: this upgrade would DOWNGRADE the hooks vA → vB`. A terminal asks
+  `Are you sure you want to install the OLDER hooks vB? [y/N]`; a non-interactive run stops with exit 1 unless
+  `--allow-downgrade` is given. A refused downgrade changes nothing and logs a `warn` line to `hook.log`.
+
+Older installers (before `1.1.6`) still downgrade with only a warning — use the command with the `?v=` suffix.
 
 The **My API Keys** page (**Install** tab) has an "Upgrade Hooks" copy-and-paste box with this command pre-filled. `upgrade`
 takes no `--server-url`/`--api-key`/`--otel-port`/`--otel-traces` flags — those are install-only; the
@@ -819,7 +838,11 @@ keys. Deleting the nine `env` keys (twelve with traces) by hand works too — fr
 The shared receiver writes `~/.artisyn/otel/receiver.log` (plain text, truncated above 1 MiB, never uploaded); its
 `start listening` line names `mode=shared` and a prefix of the owner hash, never a home path. Each `ingest` line is
 also mirrored into the target repo's `<telemetryDir>/otel/receiver.log`, so a repo's own log still shows that the
-exporter is reaching it. Records waiting for their session to register log a pending `ingest`; rejected
+exporter is reaching it. Since hook `3.3.3` the first written record of each session and signal also logs one
+`first-record repo=… session=… signal=… service=<service.name> serviceVersion=<service.version> scope=<name>@<version>`
+line (mirrored the same way): a Claude Desktop Code-tab session shows `service=claude-code-desktop`, where
+`serviceVersion` is the Desktop app's version and the scope version is Claude Code's. Records waiting for their
+session to register log a pending `ingest`; rejected
 authentication logs `auth-reject route=…`; a session re-registered from another repo logs `register-rebind`;
 forwarding logs `forward signal=… status=… queued=… dropped=…` (no header values). An `addr-in-use` line is
 normal — one receiver serves every session of every repo; back-to-back repeats are written once. A `no-data` line at
