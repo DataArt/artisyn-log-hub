@@ -1,17 +1,17 @@
 /**
  * Middle pane of the Live modal (2026-11-04 otel-live-view, FR-5): the breadcrumb of the
  * selected node (its `parentKey` chain), its heading with Last activity, the KPI tiles, the
- * chart carousel and then the breakdown table (`LiveBreakdownTable`). When the only node is home
- * and nothing is live, the pane shows the DD-18 empty state with a link to the offline help.
+ * charts (tile grid or carousel, `LiveCharts`), the Sankey and then the breakdown table
+ * (`LiveBreakdownTable`). When the only node is home and nothing is live, the pane shows the DD-18 empty state with a link to the offline help.
  */
-import { Fragment } from 'react';
+import { Fragment, type RefObject } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { OtelLiveNode, OtelLiveResponse } from '../../models/otel-live';
 import { OtelHelpLink } from '../pages/repository/otel/OtelHelpLink';
 import { OTEL_HELP_ANCHORS } from '../pages/repository/otel/otel.constants';
 import { formatLiveClock } from './live-format';
 import { LiveBreakdownTable } from './LiveBreakdownTable';
-import { LiveChartCarousel } from './LiveChartCarousel';
+import { LiveCharts, type LiveEscapeHandler } from './LiveCharts';
 import { LiveFlowSankey } from './LiveFlowSankey';
 import { LiveKpiTiles } from './LiveKpiTiles';
 import { liveNodeLabel } from './LiveTree';
@@ -21,6 +21,8 @@ export interface LiveViewPaneProps {
   onSelect: (key: string) => void;
   /** Opens the details panel of a breakdown row. */
   onOpenPanel: (key: string) => void;
+  /** Set while an enlarged chart tile handles Esc (consulted by `LiveModal`). */
+  escapeRef?: RefObject<LiveEscapeHandler | null>;
 }
 
 /** The node itself plus its ancestors, home first. */
@@ -62,6 +64,7 @@ export function LiveViewPane({
   res,
   onSelect,
   onOpenPanel,
+  escapeRef,
 }: LiveViewPaneProps) {
   const byKey = new Map<string, OtelLiveNode>();
   for (const n of res.view.breakdown) byKey.set(n.key, n);
@@ -137,8 +140,19 @@ export function LiveViewPane({
           · totals since start, charts last 2 h
         </span>
       </div>
-      <LiveKpiTiles node={node} view={res.view} />
-      <LiveChartCarousel view={res.view} nodes={res.nodes} selected={node} />
+      <LiveKpiTiles
+        node={node}
+        view={res.view}
+        nodes={res.nodes}
+        windowFrom={res.windowFrom}
+        windowTo={res.windowTo}
+      />
+      <LiveCharts
+        view={res.view}
+        nodes={res.nodes}
+        selected={node}
+        escapeRef={escapeRef}
+      />
       <LiveFlowSankey view={res.view} nodes={res.nodes} selected={node} />
       <LiveBreakdownTable
         node={node}

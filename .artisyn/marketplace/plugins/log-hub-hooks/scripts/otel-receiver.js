@@ -3715,6 +3715,45 @@ function retireRepo(key, key16, droppedLines) {
  * @property {number} dropped
  */
 
+/** `<sessionId>\n<signal>` pairs whose first written record was already logged (bounded). */
+const firstRecordLogged = new Set();
+const FIRST_RECORD_LOGGED_MAX = 5000;
+
+/** A log-safe token: no whitespace, at most 64 characters, `-` when empty or not a string. */
+function logToken(value) {
+  if (typeof value !== 'string' || value.trim() === '') return '-';
+  return value.trim().replace(/\s+/g, '_').slice(0, 64);
+}
+
+/**
+ * Log once per session and signal who produced the records: the resource `service.name` /
+ * `service.version` and the instrumentation scope. Tells a Claude Desktop session
+ * (`service=claude-code-desktop`, whose `service.version` is the Desktop app's and whose scope
+ * version is Claude Code's) from a CLI one without opening the chunk files.
+ * @param {{ repoKey: string, otelDir: string }} target
+ * @param {string} sessionId
+ * @param {'logs'|'metrics'|'spans'} signal
+ * @param {string|undefined} serialised the session's first serialised chunk line (`pushLine`)
+ */
+function logFirstRecord(target, sessionId, signal, serialised) {
+  const key = `${sessionId}\n${signal}`;
+  if (firstRecordLogged.has(key)) return;
+  if (firstRecordLogged.size >= FIRST_RECORD_LOGGED_MAX) firstRecordLogged.clear();
+  firstRecordLogged.add(key);
+  let line;
+  try {
+    line = typeof serialised === 'string' ? JSON.parse(serialised) : undefined;
+  } catch {
+    line = undefined;
+  }
+  const resource = line && line.resource && typeof line.resource === 'object' ? line.resource : {};
+  const scope = line && line.scope && typeof line.scope === 'object' ? line.scope : {};
+  receiverLogMirrored(target.otelDir, 'first-record',
+    `repo=${target.repoKey} session=${logToken(sessionId)} signal=${signal} ` +
+    `service=${logToken(resource['service.name'])} serviceVersion=${logToken(resource['service.version'])} ` +
+    `scope=${logToken(scope.name)}@${logToken(scope.version)}`);
+}
+
 /**
  * Route, stamp, write and count a batch of collected (or re-routed pending) records. Writes one
  * chunk per session per repo slice, logs one DD-19 `ingest repo=<repoKey> …` line per slice (shared
@@ -3775,6 +3814,7 @@ function dispatchRecords(items, wireBytes, now) {
       for (const sessionId of written.written) {
         const lines = slice.groups.get(sessionId) || [];
         const entry = registry.get(sessionId);
+        logFirstRecord(target, sessionId, slice.signal, lines[0]);
         if (entry && normalizeGitRoot(entry.gitRoot) === key) {
           if (!entry.received || typeof entry.received !== 'object') entry.received = { logs: 0, metrics: 0, spans: 0 };
           entry.received[slice.signal] = (Number(entry.received[slice.signal]) || 0) + lines.length;

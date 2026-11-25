@@ -373,6 +373,25 @@ Two caveats to know before relying on this:
   address becomes trusted. Accepted rather than special-cased: under host networking Mode 1 is already reachable from
   the LAN and loopback works natively, so the delta is one extra trusted address.
 
+**Runtimes where the peer is not the gateway — `AUTH_NONE_TRUSTED_PEERS`.** Rancher Desktop on Windows (seen on
+2026-11-25, Docker engine 29 inside its WSL VM) forwards host `127.0.0.1:5003` through its own VM network and iptables
+DNAT keeps the source: the peer arrives as `::ffff:192.168.127.1` while the container's gateway is the compose bridge's
+`172.19.0.1`, so every identify got 403 and the login page was unusable. Fix, layered:
+
+- `server/src/auth/utils/trusted-peers.util.ts` reads `AUTH_NONE_TRUSTED_PEERS` once per process: exact private IPv4
+  addresses, comma/whitespace-separated, anything else rejected (startup warning). `isLocalhostRequest()` accepts them
+  after loopback and the gateway. Rules: [local-request-detection](algorithms/local-request-detection.md) part C.
+- `GET /api/v1/auth/local-check` (mode `none` only, 404 otherwise) returns `{local, peer}` for the caller. The release
+  installers call it from the host right after `docker compose up -d` and, on `local: false`, write the reported peer
+  into `.env` and recreate `app` ([release-pipeline](release-pipeline.md) § Install scripts). So "after install it
+  works" holds without anyone knowing the runtime's address.
+- The identify 403 now carries `error: "not_local"` and a message naming the peer it saw (it is the caller's own
+  address, nothing leaks); the exception filter logs it and `LoginPage.tsx` shows it with the fix.
+
+Security delta: the same as the gateway trust — the trusted address is the one host-loopback traffic arrives from, and
+the `127.0.0.1`-only publish stays the real boundary. The installer only adds a private IPv4 the app itself reported
+for a request the installer made to `127.0.0.1:5003`.
+
 ## Azure tenant (Mode 4 is single-tenant only)
 
 - `validateMode4` requires `AZURE_TENANT_ID` to match

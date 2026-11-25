@@ -3,6 +3,7 @@ import { maxVersion } from '../../common/semver';
 import {
   attributesOf,
   cappedStringAttrOf,
+  claudeCodeVersionOfLine,
   costMicrosOf,
   nullableTokenCountOf,
   stringAttrOf,
@@ -51,6 +52,7 @@ interface OtelLine {
   signal?: unknown;
   receivedAt?: unknown;
   resource?: unknown;
+  scope?: unknown;
   record?: unknown;
   hookVersion?: unknown;
 }
@@ -171,10 +173,12 @@ export interface ExtractedOtelCall {
   mcpToolName: string | null;
 }
 
-/** Resource `service.version`, cut to the column width, or null. */
-function serviceVersionOf(resource: unknown): string | null {
-  if (!resource || typeof resource !== 'object') return null;
-  const raw = (resource as Record<string, unknown>)['service.version'];
+/**
+ * The line's Claude Code version (`claudeCodeVersionOfLine` — never a Desktop app's
+ * `service.version`), cut to the column width, or null.
+ */
+function ccVersionOfLine(line: OtelLine): string | null {
+  const raw = claudeCodeVersionOfLine(line);
   if (typeof raw !== 'string' || raw.trim() === '') return null;
   return raw.trim().slice(0, CC_VERSION_MAX);
 }
@@ -206,7 +210,7 @@ export function extractOtelCalls(lines: unknown[]): ExtractedOtelCall[] {
       requestId,
       querySource: stringAttrOf(attrs, 'query_source'),
       model: stringAttrOf(attrs, 'model'),
-      claudeCodeVersion: serviceVersionOf(entry.resource),
+      claudeCodeVersion: ccVersionOfLine(entry),
       promptId:
         stringAttrOf(attrs, 'prompt.id') ?? stringAttrOf(attrs, 'prompt_id'),
       agentId: stringAttrOf(attrs, 'agent_id'),

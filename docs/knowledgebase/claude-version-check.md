@@ -6,7 +6,7 @@ tags:
   - server
   - client
   - analytics
-generated: { by: "human:denistsyplakov", at: "2026-10-14T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T12:30:00+04:00" }
 ---
 
 # Claude Code Version Check
@@ -45,7 +45,19 @@ of them changed, with `effective_from` set to the fetch time. The claim SQL, the
   transcript lines (`maxVersion` in `claude-extractor.ts`), written with the rest of the session
   stats.
 - `claude_version_otel` — the highest OTEL `service.version` seen on the session's `claude-otel`
-  chunks (`otel-chunk.ts`). It is only ever raised.
+  chunks (`otel-chunk.ts`). It is only ever raised. The version of one line comes from
+  `claudeCodeVersionOfLine` (`otel-chunk.ts`), which `otel_calls.claude_code_version` (and so the
+  `cc_version` cost buckets and the live session panel) uses too:
+  - `service.name` absent or `claude-code` (CLI) → `service.version`;
+  - `claude-code-desktop` (sessions started from the Claude Desktop app's Code tab; seen with
+    Claude Code 2.1.325) → `service.version` is the **Desktop app's** version (e.g. `5.11492.5`),
+    so the Claude Code version is the logs / metrics `scope.version`
+    (`com.anthropic.claude_code.events` / `com.anthropic.claude_code`; the tracing scope says
+    `1.0.0` and is skipped);
+  - any other `service.name` (a foreign producer sharing the collector) → none.
+
+  Migration `0098_otel_desktop_cc_version_reproject.sql` re-queued the Desktop chunks projected
+  before this rule, so their calls moved from the Desktop-version buckets to the right one.
 
 Readers use `COALESCE(claude_version, claude_version_otel)`, so the transcript value wins and OTEL
 is the fallback for a session whose transcript carries no version.

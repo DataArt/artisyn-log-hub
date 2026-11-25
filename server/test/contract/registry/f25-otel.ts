@@ -1923,6 +1923,8 @@ const liveRows: ContractCase[] = [
           calls: null,
           distinctFootnote: false,
           flows: [],
+          rootSeries: [],
+          editsByTool: [],
         },
         details: null,
       },

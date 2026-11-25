@@ -39,5 +39,19 @@ export const OTEL_LIVE_RECENT_MS = OTEL_LIVE_WINDOW_MS;
 /** Sankey rows returned at most (largest cost first); the rest are left out. */
 export const OTEL_LIVE_FLOW_ROWS = 500;
 
+/**
+ * Per-root series rows returned at most (2026-11-21 cloudwatch-cai-parity): 50 roots × 24 buckets.
+ * Over the cap, whole roots are kept by their 2 h cost; the client draws the rest as "Other".
+ */
+export const OTEL_LIVE_ROOT_SERIES_ROWS = 1200;
+
+/** Built-in tool names the "Edits by tool" chart counts; no other tool name is ever returned. */
+export const OTEL_LIVE_EDIT_TOOLS = [
+  'Edit',
+  'MultiEdit',
+  'Write',
+  'NotebookEdit',
+] as const;
+
 /** A named (retained) root older than this is not retained, so the key falls back to home (DD-5). */
 export const OTEL_LIVE_RETAIN_MAX_MS = 86_400_000;

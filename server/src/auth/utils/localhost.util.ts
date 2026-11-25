@@ -1,7 +1,21 @@
 import type { Request } from 'express';
 import { getTrustedGateway } from './container-gateway.util';
+import { getTrustedPeers } from './trusted-peers.util';
 
 const LOCAL_ADDRESSES = new Set(['127.0.0.1', '::1']);
+
+/**
+ * The TCP peer address with an IPv4-mapped `::ffff:` prefix stripped.
+ *
+ * The server listens without a host (see main.ts), so it binds the dual-stack `::` socket. An IPv4
+ * connection arriving on that socket is reported by Node as `::ffff:127.0.0.1`, not `127.0.0.1`.
+ */
+export function peerAddress(req: Request): string {
+  const remoteAddress = req.socket.remoteAddress ?? '';
+  return remoteAddress.startsWith('::ffff:')
+    ? remoteAddress.slice('::ffff:'.length)
+    : remoteAddress;
+}
 
 /**
  * Checks req.socket.remoteAddress only — never X-Forwarded-For. `TRUST_PROXY`
@@ -10,18 +24,13 @@ const LOCAL_ADDRESSES = new Set(['127.0.0.1', '::1']);
  * keeps ignoring it. Used by Mode 1's `identify` endpoint and by
  * `AutoIdentifyGuard`, which apply the exact same restriction.
  *
- * The server listens without a host (see main.ts), so it binds the dual-stack
- * `::` socket. An IPv4 loopback connection arriving on that socket is reported
- * by Node as the IPv4-mapped IPv6 form `::ffff:127.0.0.1`, not `127.0.0.1` —
- * strip that prefix before comparing, or every user whose OS/browser resolves
- * `localhost` to the IPv4 address gets rejected as non-local.
- *
  * Inside a container one further address is accepted: the container's
  * own private default gateway, resolved once at startup by
  * `container-gateway.util.ts`. Host→published-port traffic arrives from exactly
- * that address and never from loopback, so without this Mode 1 is unusable in
- * the released image. Outside a container nothing changes — the gateway resolves
- * to null and only `127.0.0.1`/`::1` pass.
+ * that address on Docker and Docker Desktop, never from loopback. Runtimes that
+ * deliver it from yet another address (Rancher Desktop: `192.168.127.1`) are covered
+ * by `AUTH_NONE_TRUSTED_PEERS` (trusted-peers.util.ts), which the release installer
+ * fills in by probing `GET /api/v1/auth/local-check`.
  *
  * Caveat worth knowing: with Docker's userland `docker-proxy` *every* inbound
  * connection appears to come from the gateway, so the `127.0.0.1`-bound port
@@ -31,12 +40,11 @@ const LOCAL_ADDRESSES = new Set(['127.0.0.1', '::1']);
  * authentificaiton.md.
  */
 export function isLocalhostRequest(req: Request): boolean {
-  const remoteAddress = req.socket.remoteAddress ?? '';
-  const normalized = remoteAddress.startsWith('::ffff:')
-    ? remoteAddress.slice('::ffff:'.length)
-    : remoteAddress;
+  const normalized = peerAddress(req);
   if (LOCAL_ADDRESSES.has(normalized)) return true;
 
   const trustedGateway = getTrustedGateway();
-  return trustedGateway !== null && trustedGateway === normalized;
+  if (trustedGateway !== null && trustedGateway === normalized) return true;
+
+  return getTrustedPeers().peers.includes(normalized);
 }

@@ -21,7 +21,7 @@
 // tests/corpus/, impl-plan DD I1–I3) always runs on the mode-A stand: in the same pass as `mode-a`
 // when both are selected, otherwise in a pass of its own. `--only contract` skips the stand build.
 //
-// Usage: node scripts/scenarios/run.mjs [--mode a,b,c,d] [--grep <re>] [--skip-build] [--only scenarios,corpus,contract]
+// Usage: node scripts/scenarios/run.mjs [--mode a,b,c,d] [--grep <re>] [--skip-build] [--dev] [--only scenarios,corpus,contract]
 // Exit codes: 0 all green, 1 a step failed or the dev DB/static changed, 2 usage/preflight error.
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -33,6 +33,15 @@ import { DEFAULT_DATABASE_URL, DEFAULT_MAILPIT_URL, STAND_MODES, parseModes } fr
 import { ROOT, buildStand } from './build-stand.mjs';
 import { preflightOrExit, redactUrl } from './preflight.mjs';
 import { reportStandCoverage, startStand, stopStand } from './stand.mjs';
+import {
+  DEV_ENTRY,
+  DEV_LOG_FILE,
+  DEV_OUT_DIR,
+  DEV_PART_INPUTS,
+  DEV_PARTS,
+  DEV_STAND_DIR,
+  liveDevStatus,
+} from './dev-stand.mjs';
 
 export const USAGE_EXIT_CODE = 2;
 export const AVAILABLE_STEPS = ['scenarios', 'corpus', 'contract'];
@@ -48,7 +57,7 @@ export const SERVER_DIR = path.join(ROOT, 'server');
 
 /** Parses the runner's argv. Throws with a usage message on anything unknown. */
 export function parseArgs(argv) {
-  const opts = { modes: [...STAND_MODES], grep: null, skipBuild: false, only: [...AVAILABLE_STEPS] };
+  const opts = { modes: [...STAND_MODES], grep: null, skipBuild: false, dev: false, only: [...AVAILABLE_STEPS] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const eq = arg.indexOf('=');
@@ -68,6 +77,9 @@ export function parseArgs(argv) {
         break;
       case '--skip-build':
         opts.skipBuild = true;
+        break;
+      case '--dev':
+        opts.dev = true;
         break;
       case '--only':
         opts.only = parseSteps(value());
@@ -312,7 +324,92 @@ function runContract(databaseUrl) {
 
 let activeStand = null;
 
-async function runPass(pass, mode, env) {
+// ---------------------------------------------------------------------------------------------
+// --dev: the warm stand of dev-stand.mjs instead of the built one (iterations only; the final run
+// keeps the built stand)
+
+export const DEV_READY_TIMEOUT_MS = 600_000;
+/** How long a part may stay idle after an edit newer than its last build before it counts as "not in its build". */
+export const DEV_REBUILD_GRACE_MS = 5_000;
+
+/** Newest mtime (ms) of the files under `paths`, skipping node_modules and test files. */
+export function newestMtime(paths) {
+  let newest = 0;
+  const visit = (p) => {
+    let st;
+    try {
+      st = fs.statSync(p);
+    } catch {
+      return;
+    }
+    if (st.isDirectory()) {
+      for (const name of fs.readdirSync(p)) {
+        if (name === 'node_modules' || name === '__tests__') continue;
+        visit(path.join(p, name));
+      }
+    } else if (!/\.(spec|test)\.[cm]?[jt]sx?$/.test(p)) {
+      newest = Math.max(newest, st.mtimeMs);
+    }
+  };
+  for (const p of paths) visit(p);
+  return newest;
+}
+
+/**
+ * Whether a dev-stand part is usable for a run that started after edits up to `editedAt`:
+ * `ready`, and its last build started after that edit — or no rebuild came within the grace
+ * period (the edit is not part of that build, e.g. a file no module imports).
+ */
+export function devPartReady(part, editedAt, now, graceMs = DEV_REBUILD_GRACE_MS) {
+  if (!part || part.state !== 'ready') return false;
+  const started = part.buildStartedAt ? Date.parse(part.buildStartedAt) : 0;
+  return started >= editedAt - 1000 || now - editedAt > graceMs;
+}
+
+async function ensureDevStand() {
+  let status = liveDevStatus();
+  if (!status) {
+    fs.mkdirSync(DEV_STAND_DIR, { recursive: true });
+    const log = fs.openSync(DEV_LOG_FILE, 'a');
+    const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'scenarios', 'dev-stand.mjs')], {
+      cwd: ROOT,
+      detached: true,
+      windowsHide: true,
+      stdio: ['ignore', log, log],
+    });
+    fs.closeSync(log);
+    child.unref();
+    process.stderr.write(`[scenarios] dev: started the warm stand supervisor (pid ${child.pid}, log ${DEV_LOG_FILE}); ` +
+      'it keeps running — stop it with node scripts/scenarios/dev-stand.mjs --stop\n');
+  }
+  const editedAt = Object.fromEntries(DEV_PARTS.map((p) => [p, newestMtime(DEV_PART_INPUTS[p])]));
+  const deadline = Date.now() + DEV_READY_TIMEOUT_MS;
+  let lastNote = '';
+  while (Date.now() < deadline) {
+    status = liveDevStatus();
+    if (status) {
+      const failed = DEV_PARTS.filter((p) => status.parts[p]?.state === 'failed');
+      if (failed.length) {
+        throw new Error(`dev stand part(s) failed: ${failed.map((p) => `${p}: ${status.parts[p].message}`).join('; ')} (see ${DEV_LOG_FILE})`);
+      }
+      const now = Date.now();
+      const waiting = DEV_PARTS.filter((p) => !devPartReady(status.parts[p], editedAt[p], now));
+      if (waiting.length === 0) {
+        if (status.parts.server.errors) {
+          process.stderr.write(`[scenarios] dev: WARNING server has ${status.parts.server.errors} type error(s) — run the typecheck\n`);
+        }
+        return;
+      }
+      const note = waiting.map((p) => `${p}=${status.parts[p]?.state}`).join(' ');
+      if (note !== lastNote) process.stderr.write(`[scenarios] dev: waiting for ${note}\n`);
+      lastNote = note;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`dev stand not ready within ${DEV_READY_TIMEOUT_MS / 1000} s (see ${DEV_LOG_FILE})`);
+}
+
+async function runPass(pass, mode, env, standOptions = {}) {
   if (pass.skipWhenEmpty) {
     const n = countTests(pass);
     if (n === 0) {
@@ -323,7 +420,7 @@ async function runPass(pass, mode, env) {
   process.stderr.write(`\n[scenarios] ${pass.label}: starting stand (mode ${mode})\n`);
   let stand;
   try {
-    stand = await startStand({ mode, databaseUrl: env.DATABASE_URL });
+    stand = await startStand({ mode, databaseUrl: env.DATABASE_URL, ...standOptions });
   } catch (err) {
     process.stderr.write(`[scenarios] ${pass.label}: stand failed to start: ${err.message}\n`);
     return { label: pass.label, status: 'stand-failed', code: 1 };
@@ -380,7 +477,7 @@ export async function main(argv = process.argv.slice(2)) {
     opts = parseArgs(argv);
   } catch (err) {
     process.stderr.write(`test:scenarios: ${err.message}\n` +
-      'Usage: npm run test:scenarios -- [--mode a,b,c,d] [--grep <re>] [--skip-build] [--only scenarios,corpus,contract]\n');
+      'Usage: npm run test:scenarios -- [--mode a,b,c,d] [--grep <re>] [--skip-build] [--dev] [--only scenarios,corpus,contract]\n');
     return USAGE_EXIT_CODE;
   }
 
@@ -403,7 +500,19 @@ export async function main(argv = process.argv.slice(2)) {
       `static ${before.staticDir.missing ? 'absent' : `${Object.keys(before.staticDir.mtimes).length} files`}\n`,
   );
 
-  if (withScenarios && !opts.skipBuild) {
+  let standOptions = {};
+  if (withScenarios && opts.dev) {
+    try {
+      await ensureDevStand();
+    } catch (err) {
+      process.stderr.write(`[scenarios] dev stand: ${err.message}\n`);
+      return 1;
+    }
+    if (process.env.SCENARIOS_COVERAGE === '1') {
+      process.stderr.write('[scenarios] dev: SCENARIOS_COVERAGE ignored — coverage is measured on the built stand only\n');
+    }
+    standOptions = { standDir: DEV_OUT_DIR, entryFile: DEV_ENTRY, coverage: false };
+  } else if (withScenarios && !opts.skipBuild) {
     try {
       buildStand();
     } catch (err) {
@@ -413,7 +522,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   const results = [];
-  for (const { mode, pass } of passes) results.push(await runPass(pass, mode, env));
+  for (const { mode, pass } of passes) results.push(await runPass(pass, mode, env, standOptions));
   const staticDrift = [];
   let staticRef = before.staticDir;
   if (opts.only.includes('contract')) {

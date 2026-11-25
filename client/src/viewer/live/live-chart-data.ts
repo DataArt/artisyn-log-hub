@@ -4,14 +4,26 @@
  * module derives the pages from them. Pages 1–5 map rows to `OtelBucket` so they render with the
  * existing `OtelCostChart`; page 6 is the latency line chart. A page whose rows are all zero is
  * skipped, except "Cost over time", which is always shown.
+ *
+ * 2026-11-21 cloudwatch-cai-parity: the builder returns the full ordered page list (Share included)
+ * for both the carousel and tile mode, and adds "Over time by team" / "Over time by user" (per-root
+ * `view.rootSeries` folded by first placement, with an "Other" remainder against `view.buckets`)
+ * and "Edits by tool" (`view.editsByTool`; "not reported" without spans).
  */
 import type {
   OtelLiveBucket,
   OtelLiveLatencyBucket,
+  OtelLiveNode,
   OtelLiveView,
 } from '../../models/otel-live';
 import type { OtelBucket } from '../../models/repositories';
 import type { OtelMetric } from '../pages/repository/otel/otel-url-state';
+import { liveNodeLabel } from './LiveTree';
+import {
+  buildLiveShare,
+  rootsUnder,
+  type RootPlacement,
+} from './live-share-data';
 
 /** One stack variant of a bucket page (page 5 has two: skill / MCP server). */
 export interface LiveChartVariant {
@@ -23,11 +35,28 @@ export interface LiveChartVariant {
 
 export interface LiveBucketChartPage {
   kind: 'buckets';
-  id: 'cost' | 'tokens' | 'model' | 'structure' | 'attribution';
+  id:
+    | 'cost'
+    | 'tokens'
+    | 'model'
+    | 'structure'
+    | 'attribution'
+    | 'team-time'
+    | 'user-time'
+    | 'edits-by-tool';
   title: string;
   /** Metrics the page offers; the first is the default (page 3 toggles cost / calls). */
   metrics: readonly OtelMetric[];
   variants: LiveChartVariant[];
+  /** "Edits by tool" without spans in the window: a "not reported" note instead of the chart. */
+  notReported?: boolean;
+}
+
+/** The Share page: three doughnuts built from the tree by `LiveSharePage`. */
+export interface LiveSharePageRef {
+  kind: 'share';
+  id: 'share';
+  title: string;
 }
 
 export interface LiveLatencyPoint {
@@ -48,7 +77,13 @@ export interface LiveLatencyChartPage {
   failedTools: number;
 }
 
-export type LiveChartPage = LiveBucketChartPage | LiveLatencyChartPage;
+export type LiveChartPage =
+  | LiveBucketChartPage
+  | LiveLatencyChartPage
+  | LiveSharePageRef;
+
+/** Series key of what the listed roots do not cover (capped roots, roots not in `nodes`). */
+export const LIVE_OTHER_SERIES = 'Other';
 
 function toBigInt(v: string | null | undefined): bigint {
   if (!v) return 0n;
@@ -180,8 +215,148 @@ function latencyPoints(
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
-/** The carousel pages of a node view, in DD-13 order. */
-export function buildLiveChartPages(view: OtelLiveView): LiveChartPage[] {
+interface Sums {
+  calls: number;
+  cost: bigint;
+  tokens: bigint;
+}
+
+function addSums(
+  acc: Map<string, Sums>,
+  id: string,
+  calls: number,
+  cost: bigint,
+  tokens: bigint,
+): void {
+  const a = acc.get(id) ?? { calls: 0, cost: 0n, tokens: 0n };
+  a.calls += calls;
+  a.cost += cost;
+  a.tokens += tokens;
+  acc.set(id, a);
+}
+
+/**
+ * `view.rootSeries` folded into one series per `keyOf(first placement)`; roots without a
+ * placement under the node, and the per-bucket remainder of `view.buckets` the listed roots do
+ * not cover, go to `LIVE_OTHER_SERIES`. Empty when the server sent no per-root rows.
+ */
+function groupedBuckets(
+  view: OtelLiveView,
+  roots: readonly RootPlacement[],
+  keyOf: (p: RootPlacement) => string,
+): OtelBucket[] {
+  const series = view.rootSeries ?? [];
+  if (series.length === 0) return [];
+  const keyByRoot = new Map<number, string>();
+  for (const p of roots) {
+    if (p.session.rootId !== null) keyByRoot.set(p.session.rootId, keyOf(p));
+  }
+  const acc = new Map<string, Sums>();
+  const listed = new Map<string, Sums>();
+  for (const r of series) {
+    const key = keyByRoot.get(r.rootId) ?? LIVE_OTHER_SERIES;
+    const cost = toBigInt(r.costUsdMicros);
+    const tokens = toBigInt(r.tokens);
+    addSums(acc, `${r.start}|${key}`, r.calls, cost, tokens);
+    addSums(listed, r.start, r.calls, cost, tokens);
+  }
+  const totals = new Map<string, Sums>();
+  for (const b of view.buckets) {
+    addSums(totals, b.start, b.calls, toBigInt(b.costUsdMicros), rowTokens(b));
+  }
+  for (const [start, t] of totals) {
+    const l = listed.get(start) ?? { calls: 0, cost: 0n, tokens: 0n };
+    const calls = Math.max(0, t.calls - l.calls);
+    const cost = t.cost > l.cost ? t.cost - l.cost : 0n;
+    const tokens = t.tokens > l.tokens ? t.tokens - l.tokens : 0n;
+    if (calls === 0 && cost === 0n && tokens === 0n) continue;
+    addSums(acc, `${start}|${LIVE_OTHER_SERIES}`, calls, cost, tokens);
+  }
+  return [...acc.entries()].map(([id, a]) => {
+    const sep = id.indexOf('|');
+    return {
+      start: id.slice(0, sep),
+      key: id.slice(sep + 1),
+      calls: a.calls,
+      costUsdMicros: a.cost.toString(),
+      tokens: a.tokens.toString(),
+      changeKind: 'confirm' as const,
+    };
+  });
+}
+
+const TIME_METRICS: readonly OtelMetric[] = ['cost', 'tokens', 'calls'];
+
+/** "Over time by team" / "Over time by user"; none on an agent node, no "by user" on a session. */
+function placementPages(
+  view: OtelLiveView,
+  nodes: readonly OtelLiveNode[],
+  selected: OtelLiveNode,
+): LiveBucketChartPage[] {
+  if (selected.type === 'agent') return [];
+  const roots = rootsUnder(nodes, selected.key);
+  const pages = [
+    bucketPage('team-time', 'Over time by team', TIME_METRICS, [
+      {
+        value: 'team',
+        label: 'Team',
+        stackBy: 'team',
+        buckets: groupedBuckets(view, roots, (p) =>
+          p.team ? liveNodeLabel(p.team) : LIVE_OTHER_SERIES,
+        ),
+      },
+    ]),
+  ];
+  if (selected.type !== 'session') {
+    pages.push(
+      bucketPage('user-time', 'Over time by user', TIME_METRICS, [
+        {
+          value: 'user',
+          label: 'User',
+          stackBy: 'user',
+          buckets: groupedBuckets(
+            view,
+            roots,
+            (p) => p.session.userEmail || '(unknown)',
+          ),
+        },
+      ]),
+    );
+  }
+  return pages.filter((p) =>
+    p.variants.some((v) => hasValue(v.buckets, p.metrics)),
+  );
+}
+
+/**
+ * "Edits by tool": span counts per tool as `calls`. Without spans in the window the page is a
+ * "not reported" note; with spans but no edits (or every root masked) it is hidden.
+ */
+function editsPage(view: OtelLiveView): LiveBucketChartPage | null {
+  const buckets: OtelBucket[] = (view.editsByTool ?? []).map((r) => ({
+    start: r.start,
+    key: r.tool,
+    calls: r.count,
+    costUsdMicros: '0',
+    tokens: '0',
+    changeKind: 'confirm',
+  }));
+  const page = bucketPage(
+    'edits-by-tool',
+    'Edits by tool',
+    ['calls'],
+    [{ value: 'tool', label: 'Tool', stackBy: 'tool', buckets }],
+  );
+  if (!view.hasSpans) return { ...page, notReported: true };
+  return hasValue(buckets, page.metrics) ? page : null;
+}
+
+/** The chart pages of a node view, in DD-13 order, for both the carousel and tile mode. */
+export function buildLiveChartPages(
+  view: OtelLiveView,
+  nodes: readonly OtelLiveNode[],
+  selected: OtelLiveNode,
+): LiveChartPage[] {
   const rows = view.buckets;
   const pages: LiveChartPage[] = [];
 
@@ -280,5 +455,16 @@ export function buildLiveChartPages(view: OtelLiveView): LiveChartPage[] {
       });
     }
   }
+
+  if (buildLiveShare(nodes, selected, 'cost') !== null) {
+    pages.push({
+      kind: 'share',
+      id: 'share',
+      title: 'Share by team / repository / user',
+    });
+  }
+  pages.push(...placementPages(view, nodes, selected));
+  const edits = editsPage(view);
+  if (edits) pages.push(edits);
   return pages;
 }

@@ -133,7 +133,25 @@ export interface OtelTokenTotals {
   cacheWrite: number;
 }
 
-export function OtelTokensTile({ tokens }: { tokens: OtelTokenTotals }) {
+export interface OtelTokensTileProps {
+  tokens: OtelTokenTotals;
+  /**
+   * Optional "Total" line (sum of the four kinds; 2026-11-21 cloudwatch-cai-parity, Live view).
+   * `null` renders `n/a`; omitted, the tile looks as on the OTEL tabs.
+   */
+  total?: number | null;
+  /** Optional sparkline under the kinds (Live view: tokens per 5-min bucket, last 2 h). */
+  sparkline?: readonly number[];
+  /** Hint override; the default describes the OTEL tabs' period and filters. */
+  hint?: string;
+}
+
+export function OtelTokensTile({
+  tokens,
+  total,
+  sparkline,
+  hint,
+}: OtelTokensTileProps) {
   const parts: [string, number][] = [
     ['input', tokens.input],
     ['output', tokens.output],
@@ -147,8 +165,22 @@ export function OtelTokensTile({ tokens }: { tokens: OtelTokenTotals }) {
     >
       <TileLabel
         label="Tokens by type"
-        hint="Sum of the input, output, cache read and cache write tokens of the OTEL API calls in the period and filters."
+        hint={
+          hint ??
+          'Sum of the input, output, cache read and cache write tokens of the OTEL API calls in the period and filters.'
+        }
       />
+      {total !== undefined && (
+        <div className="mt-1 flex items-baseline gap-1.5">
+          <span className="text-[10px] text-muted-foreground">total</span>
+          <span
+            className="font-mono text-lg font-bold"
+            data-testid="otel-kpi-tokens-total"
+          >
+            {total === null ? 'n/a' : formatTokenCount(total)}
+          </span>
+        </div>
+      )}
       <div className="mt-1 grid grid-cols-4 gap-2">
         {parts.map(([name, v]) => (
           <div key={name}>
@@ -159,16 +191,24 @@ export function OtelTokensTile({ tokens }: { tokens: OtelTokenTotals }) {
           </div>
         ))}
       </div>
+      {sparkline && <OtelSparkline values={sparkline} />}
     </div>
   );
 }
 
-export function OtelCacheRatioTile({ ratio }: { ratio: number | null }) {
+export function OtelCacheRatioTile({
+  ratio,
+  testId = 'otel-kpi-cache-ratio',
+}: {
+  ratio: number | null;
+  /** Defaults to the OTEL tabs' id; the Live view passes `live-kpi-cache-hit`. */
+  testId?: string;
+}) {
   const pct = ratio === null ? null : Math.max(0, Math.min(1, ratio));
   return (
     <div
       className="min-w-[200px] flex-1 rounded-md border px-4 py-3"
-      data-testid="otel-kpi-cache-ratio"
+      data-testid={testId}
     >
       <TileLabel
         label="Cache read ratio"

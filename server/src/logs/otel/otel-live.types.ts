@@ -130,6 +130,39 @@ export interface OtelLiveView {
    * per model × agent for a session, `[]` for an agent. Added later — older clients ignore it.
    */
   flows: OtelLiveFlowRow[];
+  /**
+   * Per root × 5-min bucket figures over the 2 h window (2026-11-21 cloudwatch-cai-parity), ordered
+   * by `rootId`, `start`; only buckets with calls. At most `OTEL_LIVE_ROOT_SERIES_ROWS` rows, whole
+   * roots kept by 2 h cost. `[]` for an agent. Added later — older clients ignore it.
+   */
+  rootSeries: OtelLiveRootSeriesRow[];
+  /**
+   * Edit-tool span counts per 5-min bucket × tool (2026-11-21 cloudwatch-cai-parity), ordered by
+   * `start`, `tool`; every node type, filtered to the agent on an agent node. Roots that DD-11
+   * masks under any of the caller's placements are left out. Added later — older clients ignore it.
+   */
+  editsByTool: OtelLiveEditsRow[];
+}
+
+/** One per-root series row; `rootId` = `sessions.id`, as a session node's `rootId`. */
+export interface OtelLiveRootSeriesRow {
+  rootId: number;
+  /** ISO UTC 5-min bucket start. */
+  start: string;
+  calls: number;
+  costUsdMicros: string;
+  /** input + output + cache read + cache write. */
+  tokens: string;
+}
+
+export type OtelLiveEditTool = 'Edit' | 'MultiEdit' | 'Write' | 'NotebookEdit';
+
+/** One "Edits by tool" row: tool spans of a whitelisted edit tool started in the bucket. */
+export interface OtelLiveEditsRow {
+  /** ISO UTC 5-min bucket start. */
+  start: string;
+  tool: OtelLiveEditTool;
+  count: number;
 }
 
 /** One Live sankey row; the client maps `rootId` to team / user / repo / session from `nodes`. */

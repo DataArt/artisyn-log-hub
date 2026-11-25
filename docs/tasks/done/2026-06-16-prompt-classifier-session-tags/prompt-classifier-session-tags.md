@@ -98,3 +98,7 @@ hook spawns a non-interactive subprocess, so there is no recursion risk.
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
+- **2026-11-25:** Closed (user decision). The idea was partly implemented as Session Attributes —
+  LLM-extracted, team-configured values with filter and group-by (AI Attribute Extraction, KB
+  `turn-end-cost-advisor.md`), which stay. Free-form labels come from OTEL resource attributes —
+  see `2026-11-24-otel-session-tags`.

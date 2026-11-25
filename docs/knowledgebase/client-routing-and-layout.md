@@ -5,7 +5,7 @@ description: "React SPA routing, layout, provider hierarchy, major page componen
 tags:
   - client
   - routing
-generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T15:45:00+04:00" }
 ---
 
 # Client Component Hierarchy
@@ -265,7 +265,7 @@ API-keys tabs have no URL param (team tabs have `ttab`, but a `teamTab` state se
 | `recent-visits` | `{v:1, repos[], sessions[]}`, at most 10 + 10 (`recent-visits.ts`) | `RepositoryView` via `useRecentVisits` |
 | `map-expanded` | string[] of expanded map node ids | `MapTree` |
 
-Other browser keys: `artisyn:leftNavCollapsed` / `artisyn:leftNavWidth` (not per user, `AppLeftNav`) and `charts-sub-tab` (`CHART_TAB_STORAGE_KEY`, the last chart tab shown, read only by the legacy `tab=charts` redirect). Home pins are not in the browser: they are the `home.pins` user setting (`saveUserSetting`, `useHomePins`), so they follow the user across browsers.
+Other browser keys: `artisyn:leftNavCollapsed` / `artisyn:leftNavWidth` (not per user, `AppLeftNav`), `artisyn:liveChartMode` (`'tiles' | 'carousel'`, the Live view chart mode, not per user; missing / unknown / unreadable = tiles; `LIVE_CHART_MODE_STORAGE_KEY` in `viewer/live/live-chart-mode.ts`) and `charts-sub-tab` (`CHART_TAB_STORAGE_KEY`, the last chart tab shown, read only by the legacy `tab=charts` redirect). Home pins are not in the browser: they are the `home.pins` user setting (`saveUserSetting`, `useHomePins`), so they follow the user across browsers.
 
 ### Cross-component window events
 | Event | Dispatched by | Listener | `detail` |

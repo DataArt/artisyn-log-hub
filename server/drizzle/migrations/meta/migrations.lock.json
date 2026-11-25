@@ -990,6 +990,16 @@
         "926201cddaa7871549e40c2a3406b98e1c41300f1f4b2054cf48e3bf069151e0",
         "f84bf821dc2988625645283068446924e6b112ef5ae2d459c2113deb12cd61eb"
       ]
+    },
+    {
+      "idx": 98,
+      "tag": "0098_otel_desktop_cc_version_reproject",
+      "when": 1792627440000,
+      "sha256": "65cb1dc24d04c649c7e6b94d21dbd1f0679dadab0788c7ddf9fe08aa08517818",
+      "acceptedHashes": [
+        "65cb1dc24d04c649c7e6b94d21dbd1f0679dadab0788c7ddf9fe08aa08517818",
+        "a5a459deae4b2f361b5a5a9154495184ec6939681f60bfc97859ea0204b5ca0b"
+      ]
     }
   ]
 }

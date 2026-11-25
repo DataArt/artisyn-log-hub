@@ -12,8 +12,9 @@ and only where the change needs them — do not multiply tests:
 2. **API contract** — a new or changed route: its row in `server/test/contract/registry/` (the
    meta-test fails otherwise). Run `npm run test:contract` (from `server/`).
 3. **Scenario** — the behaviour: a step in an existing scenario in `tests/scenarios/` (grep the
-   area first). A new scenario file only for a genuinely new feature. Run just that scenario:
-   `npm run test:scenarios -- --mode <a|b|c> --only scenarios --grep "<@S-TAG>"`.
+   area first). A new scenario file only for a genuinely new feature. Run just the touched
+   scenarios, in one batch, on the warm dev stand (no build):
+   `npm run test:scenarios -- --dev --mode <a|b|c|d> --only scenarios --grep "<@S-TAG>"`.
 
 Never add other `*.spec.ts` / `*.e2e-spec.ts` files. If no scenario can reach the code, either a
 step is missing or the code is not needed — target ≥ 80 % coverage from scenarios.

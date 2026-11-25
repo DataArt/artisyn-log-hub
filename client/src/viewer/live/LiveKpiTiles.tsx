@@ -3,9 +3,13 @@
  * shared `OtelKpiTile` / `OtelTokensTile`. Totals are the session lifetime ("since start");
  * Cost/min covers the last 5 min. Parent nodes show live sessions / agents, session nodes the
  * live agents and running time, agent nodes Cost, Calls, Model and Running.
+ * 2026-11-21 cloudwatch-cai-parity (FR-2): non-agent nodes add Active users (not on sessions),
+ * Cache hit % (`OtelCacheRatioTile`), Active hours and a total + 2 h sparkline on the tokens
+ * tile; an undefined value reads `n/a`, never 0.
  */
 import type { OtelLiveNode, OtelLiveView } from '../../models/otel-live';
 import {
+  OtelCacheRatioTile,
   OtelKpiTile,
   OtelTokensTile,
   type OtelTokenTotals,
@@ -13,8 +17,20 @@ import {
 import {
   formatCount,
   formatMicrosUsd,
+  otelCacheReadRatio,
 } from '../pages/repository/otel/otel-format';
 import { formatLiveDuration } from './live-format';
+import {
+  liveActiveHoursMs,
+  liveActiveUsers,
+  liveTokenSpark,
+} from './live-kpi-data';
+
+/** `6.2 h` (one decimal); `n/a` when undefined, never `0 h`. */
+function formatActiveHours(ms: number | null): string {
+  if (ms === null) return 'n/a';
+  return `${(ms / 3_600_000).toFixed(1)} h`;
+}
 
 function tokenTotals(node: OtelLiveNode): OtelTokenTotals {
   const n = (v: string) => Number(v) || 0;
@@ -51,9 +67,16 @@ function plural(n: number, one: string, many: string): string {
 export function LiveKpiTiles({
   node,
   view,
+  nodes,
+  windowFrom,
+  windowTo,
 }: {
   node: OtelLiveNode;
   view: OtelLiveView;
+  /** The whole live tree: Active users / hours count the DISTINCT roots under `node`. */
+  nodes: readonly OtelLiveNode[];
+  windowFrom: string;
+  windowTo: string;
 }) {
   const t = node.totals;
   const cost = (
@@ -101,10 +124,21 @@ export function LiveKpiTiles({
     );
   }
 
+  const tokens = tokenTotals(node);
+  const tokenTotal =
+    tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
+  const activeUsers =
+    node.type === 'session' ? null : liveActiveUsers(nodes, node.key);
+  const activeHoursMs = liveActiveHoursMs(nodes, node.key);
   return (
     <div className="flex flex-wrap gap-3" data-testid="live-kpi-tiles">
       {cost}
-      <OtelTokensTile tokens={tokenTotals(node)} />
+      <OtelTokensTile
+        tokens={tokens}
+        total={tokenTotal}
+        sparkline={liveTokenSpark(view, windowFrom, windowTo)}
+        hint="Input, output, cache read and cache write tokens of the sessions under this node since they started; the total is all four kinds, the sparkline the tokens per 5 min over the last 2 h."
+      />
       {node.type === 'session' ? (
         <OtelKpiTile
           label="Agents live"
@@ -128,6 +162,30 @@ export function LiveKpiTiles({
         value={`${formatMicrosUsd(view.costPerMinUsdMicros)}/min`}
         secondary="last 5 min"
         testId="live-kpi-cost-rate"
+      />
+      {node.type !== 'session' && (
+        <OtelKpiTile
+          label="Active users"
+          hint="Distinct owners of the sessions under this node (live or ended within 2 h); a session placed in several repos or teams counts once."
+          value={activeUsers === null ? 'n/a' : formatCount(activeUsers)}
+          secondary="distinct users under node"
+          testId="live-kpi-active-users"
+        />
+      )}
+      <OtelCacheRatioTile
+        ratio={otelCacheReadRatio(
+          tokens.input,
+          tokens.cacheRead,
+          tokens.cacheWrite,
+        )}
+        testId="live-kpi-cache-hit"
+      />
+      <OtelKpiTile
+        label="Active hours"
+        hint="Sum of session run time: each distinct session's wall-clock time from its first to its latest OTEL API call, since start. Not the same as Running, which is the longest session."
+        value={formatActiveHours(activeHoursMs)}
+        secondary="sum of session run time"
+        testId="live-kpi-active-hours"
       />
     </div>
   );
