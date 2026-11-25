@@ -12,8 +12,54 @@ import { maxVersion } from '../common/semver';
 /** The OTLP log-record body value that marks a billable API call. */
 const API_REQUEST_EVENT = 'claude_code.api_request';
 
-/** The OTEL `service.name` Claude Code reports on its resource. */
+/** The OTEL `service.name` whose `service.version` is the Claude Code CLI version. */
 const CLAUDE_CODE_SERVICE_NAME = 'claude-code';
+
+/**
+ * The OTEL `service.name` of sessions started from the Claude Desktop app's Code tab. Their
+ * `service.version` is the **Desktop app's** version (e.g. `5.11492.5`), not Claude Code's.
+ */
+const CLAUDE_DESKTOP_SERVICE_NAME = 'claude-code-desktop';
+
+/**
+ * Instrumentation scopes whose `version` is the Claude Code version (logs and metrics). The
+ * tracing scope `com.anthropic.claude_code.tracing` carries its own `1.0.0` and is not one.
+ */
+const CLAUDE_CODE_VERSIONED_SCOPES: ReadonlySet<string> = new Set([
+  'com.anthropic.claude_code.events',
+  'com.anthropic.claude_code',
+]);
+
+/**
+ * The Claude Code version a receiver line reports, as the raw value (not validated), or
+ * `undefined` when the line carries none.
+ *
+ * - `service.name` absent or `claude-code` (CLI, every Claude Code before the Desktop rename):
+ *   `resource['service.version']`.
+ * - `claude-code-desktop` (Desktop Code tab): `service.version` is the Desktop app's version, so
+ *   the Claude Code version comes from the logs / metrics `scope.version` instead.
+ * - anything else (a foreign producer sharing the collector): `undefined`.
+ */
+export function claudeCodeVersionOfLine(line: unknown): unknown {
+  const entry = line as { resource?: unknown; scope?: unknown } | null;
+  const resource = entry?.resource;
+  if (!resource || typeof resource !== 'object') return undefined;
+  const attrs = resource as Record<string, unknown>;
+  const serviceName = attrs['service.name'];
+  if (
+    serviceName === undefined ||
+    serviceName === null ||
+    serviceName === CLAUDE_CODE_SERVICE_NAME
+  ) {
+    return attrs['service.version'];
+  }
+  if (serviceName !== CLAUDE_DESKTOP_SERVICE_NAME) return undefined;
+  const scope = entry?.scope as { name?: unknown; version?: unknown } | null;
+  if (typeof scope?.name !== 'string') return undefined;
+  return CLAUDE_CODE_VERSIONED_SCOPES.has(scope.name)
+    ? scope.version
+    : undefined;
+}
 
 /**
  * A chunk is immutable once the receiver renames it into place, so its content IS its identity.
@@ -151,9 +197,10 @@ export interface OtelChunkSummary {
   /** Earliest `receivedAt` stamped by the receiver, used to order chunks for replay. */
   receivedAt: Date | null;
   /**
-   * Highest valid `resource['service.version']` over the chunk's lines whose
-   * `resource['service.name']` is absent or `'claude-code'` — the OTEL fallback for the
-   * session's Claude Code version. `null` when no line carries a usable one.
+   * Highest valid Claude Code version over the chunk's lines (`claudeCodeVersionOfLine`:
+   * `service.version` of `claude-code`, the logs / metrics `scope.version` of
+   * `claude-code-desktop`) — the OTEL fallback for the session's Claude Code version. `null`
+   * when no line carries a usable one.
    */
   claudeVersion: string | null;
   /**
@@ -191,18 +238,7 @@ export function summarizeOtelChunk(
     };
 
     // The receiver already flattened resource attributes into plain strings.
-    const resource = entry?.resource;
-    if (resource && typeof resource === 'object') {
-      const attrs = resource as Record<string, unknown>;
-      const serviceName = attrs['service.name'];
-      if (
-        serviceName === undefined ||
-        serviceName === null ||
-        serviceName === CLAUDE_CODE_SERVICE_NAME
-      ) {
-        versions.push(attrs['service.version']);
-      }
-    }
+    versions.push(claudeCodeVersionOfLine(entry));
 
     if (typeof entry?.receivedAt === 'string') {
       const ms = Date.parse(entry.receivedAt);

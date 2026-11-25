@@ -60,6 +60,19 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
             None => tracing::info!("AUTH_MODE=none: only loopback requests are local"),
         }
+        let peers = auth::local_request::trusted_peers();
+        if !peers.peers.is_empty() {
+            tracing::info!(
+                "AUTH_MODE=none: also trusting AUTH_NONE_TRUSTED_PEERS {} as local",
+                peers.peers.join(", ")
+            );
+        }
+        if !peers.rejected.is_empty() {
+            tracing::warn!(
+                "AUTH_NONE_TRUSTED_PEERS: ignored {} - only exact private IPv4 addresses are accepted",
+                peers.rejected.join(", ")
+            );
+        }
     }
 
     let db = db::init(&config).await?;

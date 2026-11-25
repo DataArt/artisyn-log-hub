@@ -22,13 +22,24 @@ describe('parseArgs', () => {
       modes: ['a', 'b', 'c', 'd'],
       grep: null,
       skipBuild: false,
+      dev: false,
       only: ['scenarios', 'corpus', 'contract'],
     });
   });
 
-  test('reads --mode, --grep, --skip-build and --only in both spellings', () => {
-    const opts = run.parseArgs(['--mode', 'c,a', '--grep=@S-AUTH-01', '--skip-build', '--only', 'scenarios']);
-    assert.deepEqual(opts, { modes: ['a', 'c'], grep: '@S-AUTH-01', skipBuild: true, only: ['scenarios'] });
+  test('reads --mode, --grep, --skip-build, --dev and --only in both spellings', () => {
+    const opts = run.parseArgs(['--mode', 'c,a', '--grep=@S-AUTH-01', '--skip-build', '--dev', '--only', 'scenarios']);
+    assert.deepEqual(opts, { modes: ['a', 'c'], grep: '@S-AUTH-01', skipBuild: true, dev: true, only: ['scenarios'] });
+  });
+
+  test('--dev: a part counts as ready once rebuilt after the last edit, or after the grace period without a rebuild', () => {
+    const editedAt = Date.parse('2026-11-25T10:00:00Z');
+    const part = (state, startedIso) => ({ state, buildStartedAt: startedIso });
+    assert.equal(run.devPartReady(part('building', '2026-11-25T10:00:01Z'), editedAt, editedAt + 2000), false);
+    assert.equal(run.devPartReady(part('ready', '2026-11-25T10:00:01Z'), editedAt, editedAt + 2000), true);
+    assert.equal(run.devPartReady(part('ready', '2026-11-25T09:59:00Z'), editedAt, editedAt + 2000), false);
+    assert.equal(run.devPartReady(part('ready', '2026-11-25T09:59:00Z'), editedAt, editedAt + run.DEV_REBUILD_GRACE_MS + 1), true);
+    assert.equal(run.devPartReady(undefined, editedAt, editedAt), false);
   });
 
   test('the corpus step is available; an unknown step is an error', () => {

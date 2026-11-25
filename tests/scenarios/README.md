@@ -86,6 +86,7 @@ npm run test:scenarios -- --mode a          # one mode (a, b, c, d or a list: a,
 npm run test:scenarios -- --grep S-AUTH-01  # only matching titles
 npm run test:scenarios -- --mode a --grep @TOUR-  # only the screen tours (tests/scenarios/tours/)
 npm run test:scenarios -- --skip-build      # reuse tmp/scenarios/stand/ as is
+npm run test:scenarios -- --dev --mode a --grep S-OTEL-01  # iterations: the warm dev stand, no build (see below)
 npm run test:scenarios -- --only scenarios  # pick steps: scenarios, corpus, contract (all by default)
 npm run test:scenarios -- --mode a --only corpus  # only the session corpus (tests/corpus/), mode-A stand
 npm run test:scenarios -- --only contract   # only the API vs DB contract suite: no stand, no Mailpit, no browser
@@ -95,6 +96,21 @@ The `corpus` step runs the Playwright project `corpus` ([`corpus/`](corpus/), th
 [`tests/corpus/`](../corpus/README.md)) on the mode-A stand, in the same pass as `mode-a` when both
 are selected. The `contract` step runs `npm run test:contract` in `server/` after the modes, with the runner's
 `DATABASE_URL` (see [`server/test/contract/README.md`](../../server/test/contract/README.md)).
+
+**Warm dev stand (`--dev`, iterations only).** Instead of building `tmp/scenarios/stand/`, the
+runner uses an unbundled build kept up to date by a background supervisor,
+[`scripts/scenarios/dev-stand.mjs`](../../scripts/scenarios/dev-stand.mjs): `tsc --watch` of the
+server into `server/dist-scn` (a sibling of `server/dist`, so every `__dirname`-relative path works as
+in `start:dev`), `vite build --watch` of the client into `server/dist-scn/public` (precompressed after
+each build), the installer tarballs into `server/dist-scn/public/static` on every change under
+`hook/.claude/telemetry_tool` or `artisyn-hooks-installer/src`, and `build.origin.json`. The first
+`--dev` run starts it (detached, log `tmp/scenarios/dev-stand/supervisor.log`) and it keeps running;
+`node scripts/scenarios/dev-stand.mjs --status` / `--stop`. Before the passes the runner waits until
+every part is `ready` and was rebuilt after your last edit (a part that does not rebuild within 5 s
+counts as not affected). Each pass still starts its own stand process from `server/dist-scn/main.js`
+on a fresh schema. Differences from the built stand: no ncc bundle, the help pages are generated only
+when the supervisor starts (restart it after editing `user-docs/`), and no coverage (`SCENARIOS_COVERAGE`
+is ignored). The final verification (`finalRun`) always uses the built stand.
 
 The stand is rebuilt only when its inputs changed (content hash of `client/`, `server/src`,
 `server/drizzle`, `hook/`, `artisyn-hooks-installer/`). The HTML report lands in

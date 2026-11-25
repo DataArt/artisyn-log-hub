@@ -26,6 +26,7 @@ type Call = { method: 'GET' | 'POST'; path: string };
 
 const MODE_ROUTES: Record<string, Call> = {
   identify: { method: 'POST', path: '/api/v1/auth/identify' },
+  'local-check': { method: 'GET', path: '/api/v1/auth/local-check' },
   signup: { method: 'POST', path: '/api/v1/auth/signup' },
   login: { method: 'POST', path: '/api/v1/auth/login' },
   'confirm-email': { method: 'POST', path: '/api/v1/auth/confirm-email' },
@@ -39,7 +40,7 @@ const MODE_ROUTES: Record<string, Call> = {
 
 /** Routes that exist in each mode (`@AllowedAuthModes` in auth.controller.ts / azure-callback.controller.ts). */
 const EXISTS: Record<AuthMode, readonly string[]> = {
-  none: ['identify'],
+  none: ['identify', 'local-check'],
   password: ['signup', 'login', 'forgot-password', 'reset-password', 'change-password'],
   'password-confirm': [
     'signup',
@@ -192,6 +193,16 @@ test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mod
       } finally {
         await ctx.dispose();
       }
+    });
+
+    await test.step('2c. mode none: the installer self-check sees this caller as local', async () => {
+      // What install.ps1 / install.sh call after `docker compose up -d`: the stand runs on the host,
+      // so the peer is loopback and nothing needs adding to AUTH_NONE_TRUSTED_PEERS.
+      const res = await api.get('/api/v1/auth/local-check');
+      expect(res.status()).toBe(200);
+      const body = (await res.json()) as { local: boolean; peer: string };
+      expect(body.local).toBe(true);
+      expect(['127.0.0.1', '::1']).toContain(body.peer);
     });
   }
 

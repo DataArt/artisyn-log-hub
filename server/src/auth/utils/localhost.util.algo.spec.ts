@@ -1,18 +1,25 @@
 /**
  * Table test for docs/knowledgebase/algorithms/local-request-detection.md. Part A rows run
- * `isLocalhostRequest` with the process's trusted gateway pinned by the row; part B rows run the
- * real `resolveTrustedGateway` / `isTrustablePrivateIpv4` against a fake filesystem.
+ * `isLocalhostRequest` with the process's trusted gateway and configured peers pinned by the row;
+ * part B rows run the real `resolveTrustedGateway` / `isTrustablePrivateIpv4` against a fake
+ * filesystem; `peers` rows run the real `parseTrustedPeers`.
  */
 import type { Request } from 'express';
 import { loadExamples } from '../../../../scripts/algo-docs/load-examples.cjs';
 import type * as ContainerGateway from './container-gateway.util';
 import { getTrustedGateway } from './container-gateway.util';
 import { isLocalhostRequest } from './localhost.util';
+import type * as TrustedPeersUtil from './trusted-peers.util';
+import { getTrustedPeers, parseTrustedPeers } from './trusted-peers.util';
 
-// Only the memoized process-wide lookup is replaced; the pure functions stay real.
+// Only the memoized process-wide lookups are replaced; the pure functions stay real.
 jest.mock('./container-gateway.util', () => ({
   ...jest.requireActual<typeof ContainerGateway>('./container-gateway.util'),
   getTrustedGateway: jest.fn(() => null),
+}));
+jest.mock('./trusted-peers.util', () => ({
+  ...jest.requireActual<typeof TrustedPeersUtil>('./trusted-peers.util'),
+  getTrustedPeers: jest.fn(() => ({ peers: [], rejected: [] })),
 }));
 
 const { resolveTrustedGateway, isTrustablePrivateIpv4 } = jest.requireActual<
@@ -20,6 +27,7 @@ const { resolveTrustedGateway, isTrustablePrivateIpv4 } = jest.requireActual<
 >('./container-gateway.util');
 
 const getTrustedGatewayMock = jest.mocked(getTrustedGateway);
+const getTrustedPeersMock = jest.mocked(getTrustedPeers);
 
 type LocalInput =
   | {
@@ -27,7 +35,9 @@ type LocalInput =
       remoteAddress: string | null;
       headers?: Record<string, string>;
       trustedGateway: string | null;
+      trustedPeers?: string[];
     }
+  | { kind: 'peers'; raw: string | null }
   | {
       kind: 'gateway';
       files: Record<string, string>;
@@ -58,6 +68,10 @@ function evaluate(input: LocalInput): Record<string, unknown> {
   switch (input.kind) {
     case 'request':
       getTrustedGatewayMock.mockReturnValue(input.trustedGateway);
+      getTrustedPeersMock.mockReturnValue({
+        peers: input.trustedPeers ?? [],
+        rejected: [],
+      });
       return {
         local: isLocalhostRequest(
           fakeRequest(input.remoteAddress, input.headers ?? {}),
@@ -82,6 +96,10 @@ function evaluate(input: LocalInput): Record<string, unknown> {
     }
     case 'private':
       return { trusted: isTrustablePrivateIpv4(input.address) };
+    case 'peers': {
+      const { peers, rejected } = parseTrustedPeers(input.raw ?? undefined);
+      return { peers, rejected };
+    }
   }
 }
 
@@ -91,6 +109,7 @@ const rows = loadExamples<LocalInput, Record<string, unknown>>(
 
 afterEach(() => {
   getTrustedGatewayMock.mockReturnValue(null);
+  getTrustedPeersMock.mockReturnValue({ peers: [], rejected: [] });
 });
 
 it.each(rows)('$id', ({ input, expected }) => {

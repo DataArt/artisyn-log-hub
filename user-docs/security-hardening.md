@@ -274,7 +274,9 @@ also trusts the container's default gateway, because that is where host traffic 
 port comes from. With Docker's userland proxy every inbound connection arrives from that gateway,
 so a port published on all interfaces lets every client that can reach it sign in, without a
 password, as any user, including the admin. Switch `AUTH_MODE` to another mode before you widen
-the mapping.
+the mapping. The same holds for an address in `AUTH_NONE_TRUSTED_PEERS` (the installer adds one
+when the Docker runtime, e.g. Rancher Desktop, delivers host traffic from neither loopback nor the
+gateway): it is trusted only because the port is published on `127.0.0.1`.
 
 The `db` service is not published at all; keep it that way.
 

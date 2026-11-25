@@ -19,7 +19,8 @@ use serde_json::{Map, Value, json};
 use work_hub_server::agent::AgentRegistry;
 use work_hub_server::auth::backoff::{LoginBackoff, ManualClock};
 use work_hub_server::auth::local_request::{
-    FsProbe, is_local_address, is_trustable_private_ipv4, resolve_trusted_gateway,
+    FsProbe, is_local_address, is_trustable_private_ipv4, parse_trusted_peers,
+    resolve_trusted_gateway,
 };
 use work_hub_server::auth::password_policy::apply_password_policy;
 use work_hub_server::auth::startup::validate_auth_startup_config;
@@ -562,7 +563,21 @@ fn local_request_detection() {
             "request" => {
                 let remote = input.get("remoteAddress").and_then(Value::as_str);
                 let gateway = input.get("trustedGateway").and_then(Value::as_str);
-                json!({"local": is_local_address(remote, gateway)})
+                let peers: Vec<String> = input
+                    .get("trustedPeers")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                json!({"local": is_local_address(remote, gateway, &peers)})
+            }
+            "peers" => {
+                let parsed = parse_trusted_peers(input.get("raw").and_then(Value::as_str));
+                json!({"peers": parsed.peers, "rejected": parsed.rejected})
             }
             "gateway" => {
                 let fs = FakeFs {

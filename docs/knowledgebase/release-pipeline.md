@@ -177,9 +177,16 @@ download `docker-compose.yml` and `env.example` of `VERSION` (`latest` by defaul
 `vX.Y.Z`); refuse a downgrade unless `FORCE=1` (migrations are forward-only; the check is skipped
 when the installed compose file has no `X.Y.Z` tag, e.g. an old zip bundle or `local`); keep the
 previous compose file as `docker-compose.yml.prev`; generate `.env` with random
-`POSTGRES_PASSWORD` / `SESSION_SECRET` and `NODE_ENV=production` on the first install only (an
-existing `.env` is never opened for writing); `docker compose pull` (restoring the previous
-compose file on failure) and `docker compose up -d`; print the install dir and the URL
+`POSTGRES_PASSWORD` / `SESSION_SECRET` and `NODE_ENV=production` on the first install only;
+`docker compose pull` (restoring the previous compose file on failure) and `docker compose up -d`;
+with `AUTH_MODE=none` in `.env`, the Mode 1 self-check: poll
+`http://127.0.0.1:5003/api/v1/auth/local-check` (no proxy, up to 180 s while the app starts; 404 =
+an image without the route, skipped), and on `local: false` with a private IPv4 `peer` add it to
+`AUTH_NONE_TRUSTED_PEERS` in `.env` (extend the active line or append one — the only edit ever made
+to an existing `.env`), `docker compose up -d --force-recreate app` and probe again; it only ever
+prints a warning, never fails the install (why: Rancher Desktop delivers host traffic from
+`192.168.127.1`, see [local-request-detection](algorithms/local-request-detection.md) part C);
+print the install dir and the URL
 (`PUBLIC_BASE_URL` or `http://localhost:5003`). The install dir is `INSTALL_DIR`, default
 `$HOME/artisyn-log-hub` / `%USERPROFILE%\artisyn-log-hub`. The user-facing guide is
 `release-template/INSTALL.md`.

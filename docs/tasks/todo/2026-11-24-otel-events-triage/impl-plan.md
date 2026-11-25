@@ -87,6 +87,7 @@
    | `errors` | Σ `numNonBlockingError` |
 
    - Rows are ordered by `totalDurationMs` descending, then by `hookName`.
+   - No allowlist of hook events (requirements FR-2, note of 2026-11-25): any `hook_event` is grouped, so a `PreSkillShellCommand` run (Claude Code 2.1.332+) shows up as its own row. The scenario fixture for the Hook overhead card includes one `hook_execution_complete` with `hook_event = PreSkillShellCommand`, `hook_name = PreSkillShellCommand:Bash`.
    - `totalDurationMs` (top level) = Σ of the rows.
    - `wallMs` = max − min of `event_time` over the root's `otel_calls` rows and its `otel_session_events` rows of every kind, hook runs included. `otel_spans` times are not used. It is null when below 1000 ms.
    - The client derives hooks/run = `hooks / runs`, avg = `totalDurationMs / runs`, share = row / total, and the header % = total / `wallMs`.

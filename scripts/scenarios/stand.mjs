@@ -217,11 +217,13 @@ export async function startStand({
   mailpitSmtp = process.env.MAILPIT_SMTP || DEFAULT_MAILPIT_SMTP,
   coverage = process.env.SCENARIOS_COVERAGE === '1',
   standDir = STAND_DIR,
+  // `index.js` of the built (ncc) stand; `main.js` of the warm dev stand's server/dist-scn (--dev).
+  entryFile = 'index.js',
   labelsFile = SCHEMA_LABELS_FILE,
   healthTimeoutMs = HEALTH_TIMEOUT_MS,
 } = {}) {
   if (!MODES[mode]) throw new Error(`Unknown stand mode "${mode}"`);
-  const entry = path.join(standDir, 'index.js');
+  const entry = path.join(standDir, entryFile);
   if (!fs.existsSync(entry)) throw new Error(`${entry} not found — run scripts/scenarios/build-stand.mjs first`);
 
   const schema = schemaName(mode);

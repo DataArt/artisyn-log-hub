@@ -765,6 +765,60 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
         await shutdownSharedReceiver(qHome);
       }
     });
+
+    await test.step('19 (installer 1.1.6). downgrade guard — the installed hook is newer than the bundled one: when the server serves a newer hook (a stale npx copy) the installer downloads the server\'s installer with ?v=, unpacks it under ~/.artisyn/installer and re-runs once; a real downgrade without a terminal stops with exit 1 and changes nothing; --allow-downgrade continues', async () => {
+      const dHome = makeFakeHome(dirs);
+      writeClaudeSettings(dHome, USER_SCOPE_SETTINGS);
+      const repo = makeFakeGitRepo(dirs, { remote: 'git@git.arrakis.test:scn/inst01/downgrade.git' });
+      writeClaudeSettings(repo, USER_SETTINGS);
+      const tgz = Buffer.from(await (await fetch(`${stand.url}/static/artisyn-hooks-installer.tgz`)).arrayBuffer());
+      const serve = (serverVersion: string) => hub!.respond((req) => {
+        if (req.path === '/static/installer-version.json') return { status: 200, body: JSON.stringify({ version: serverVersion }) };
+        if (req.path === '/static/artisyn-hooks-installer.tgz') return { status: 200, body: tgz };
+        return { status: 201, body: JSON.stringify({ warnings: [] }) };
+      });
+      const upgrade = (extra: string[] = []) => runInstaller(cli, repo, ['upgrade', ...extra], { home: dHome, fakeClaudeDir: fakeClaude.dir });
+      try {
+        const inst = await runInstaller(cli, repo, ['install', '--server-url', hub!.url, '--api-key', API_KEY], { home: dHome, fakeClaudeDir: fakeClaude.dir });
+        expect(inst.code, inst.output).toBe(0);
+        const manifest = path.join(pluginRoot(repo), '.claude-plugin', 'plugin.json');
+        const bundled = readJson<{ version: string }>(manifest).version;
+        // A newer hook is already installed (say, by a newer release's installer).
+        fs.writeFileSync(manifest, JSON.stringify({ ...readJson(manifest), version: '99.0.0' }, null, 2));
+        const installedVersion = () => readJson<{ version: string }>(manifest).version;
+
+        // The server serves a newer hook than this installer bundles → a stale copy: refresh once.
+        serve('99.0.1');
+        const stale = await upgrade();
+        expect(stale.code, stale.output).toBe(1);
+        const refreshLine = `upgrade: this installer bundles hooks v${bundled} but ${hub!.url} serves v99.0.1`;
+        expect(stale.output.split(refreshLine).length - 1, 'refreshed exactly once, no loop').toBe(1);
+        const downloads = hub!.requests.filter((r) => r.path === '/static/artisyn-hooks-installer.tgz');
+        expect(downloads.map((r) => r.query.get('v'))).toEqual(['99.0.1']);
+        expect(fs.existsSync(path.join(dHome, '.artisyn', 'installer', '99.0.1', 'package', 'dist', 'index.js'))).toBe(true);
+        expect(stale.stderr).toContain(`The installer downloaded from the server still bundles v${bundled}, though it reports v99.0.1.`);
+        expect(stale.stderr).toContain('Not a terminal: re-run with --allow-downgrade to confirm the downgrade.');
+        expect(installedVersion(), 'nothing changed').toBe('99.0.0');
+
+        // The server serves the same hook as the bundle → a real downgrade: no download, stop.
+        serve(bundled);
+        const real = await upgrade();
+        expect(real.code, real.output).toBe(1);
+        expect(real.stderr).toContain(`Warning: this upgrade would DOWNGRADE the hooks v99.0.0 → v${bundled} (${hub!.url} serves v${bundled}).`);
+        expect(real.output).not.toContain('fetching the current installer');
+        expect(hub!.requests.filter((r) => r.path === '/static/artisyn-hooks-installer.tgz')).toHaveLength(1);
+        expect(installedVersion(), 'nothing changed').toBe('99.0.0');
+
+        // Confirmed on the command line → the downgrade runs.
+        const allowed = await upgrade(['--allow-downgrade']);
+        expect(allowed.code, allowed.output).toBe(0);
+        expect(allowed.stderr).toContain('--allow-downgrade given — continuing.');
+        expect(installedVersion()).toBe(bundled);
+      } finally {
+        hub!.respond(() => ({ status: 201, body: JSON.stringify({ warnings: [] }) }));
+        await shutdownSharedReceiver(dHome);
+      }
+    });
   } finally {
     // Hook 3.0.0: an installed Stop that finds no live uploader spawns the shared receiver (DD-7),
     // detached with a 10-min idle timeout — stop it so nothing outlives the scenario.

@@ -61,3 +61,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-05-auth-mode-admin-invite] Auth Mode 5 — Admin-Provisioned Users, Set-Password Links by Email — archived 2026-11-24
 - [2026-11-24-session-parts-disk-cache] Disk File Cache for Session Log Parts — archived 2026-11-24
 - [2026-11-24-traffic-optimization] Traffic Optimization: Append Uploads and Compressed Large Answers — archived 2026-11-24
+- [2026-06-16-prompt-classifier-session-tags] Prompt Classifier — Auto-tag Sessions via `claude -p` — closed: partly implemented as Session Attributes (AI Attribute Extraction); free-form labels go to OTEL session tags (2026-11-24-otel-session-tags) — archived 2026-11-25

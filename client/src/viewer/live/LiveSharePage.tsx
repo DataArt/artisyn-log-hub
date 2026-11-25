@@ -2,6 +2,9 @@
  * Share page of the Live chart carousel (2026-11-05 follow-up): three doughnuts side by side —
  * cost or tokens of the sessions under the selected node by team, by repository and by user
  * (`buildLiveShare`). Each doughnut has a short legend with the value and its share.
+ *
+ * `compact` (Live tile grid, 2026-11-21 cloudwatch-cai-parity): the three doughnuts shrunk side
+ * by side, cost only, with no Metric control and no legend.
  */
 import { useState } from 'react';
 import { Pie, PieChart, Tooltip } from 'recharts';
@@ -25,6 +28,7 @@ import {
 } from './live-share-data';
 
 const PIE_SIZE = 120;
+const COMPACT_PIE_SIZE = 64;
 const SERIES_COLORS = OTEL_SERIES_PALETTE.filter(
   (c) => c !== OTEL_NOT_REPORTED_COLOR,
 );
@@ -39,14 +43,74 @@ function formatValue(metric: LiveShareMetric, v: number): string {
   return metric === 'cost' ? formatMicrosUsd(v) : formatTokenCount(v);
 }
 
-function SharePie({
+function SharePieChart({
   dim,
   metric,
+  total,
+  size,
 }: {
   dim: LiveShareDimension;
   metric: LiveShareMetric;
+  total: number;
+  size: number;
+}) {
+  return dim.slices.length === 0 ? (
+    <div
+      className="flex shrink-0 items-center justify-center text-xs text-muted-foreground"
+      style={{ width: size, height: size }}
+    >
+      No data
+    </div>
+  ) : (
+    <PieChart width={size} height={size} className="shrink-0">
+      <Pie
+        data={dim.slices.map((s, i) => ({
+          ...s,
+          fill: sliceColor(s, i),
+        }))}
+        dataKey="value"
+        nameKey="label"
+        innerRadius={size * 0.28}
+        outerRadius={size / 2 - 4}
+        stroke={dim.slices.length > 1 ? 'hsl(var(--background))' : 'none'}
+        isAnimationActive={false}
+      />
+      <Tooltip
+        formatter={(value, name) => [
+          `${formatValue(metric, Number(value))} (${formatShare(Number(value) / total)})`,
+          String(name),
+        ]}
+      />
+    </PieChart>
+  );
+}
+
+function SharePie({
+  dim,
+  metric,
+  compact = false,
+}: {
+  dim: LiveShareDimension;
+  metric: LiveShareMetric;
+  compact?: boolean;
 }) {
   const total = dim.slices.reduce((s, x) => s + x.value, 0);
+  const size = compact ? COMPACT_PIE_SIZE : PIE_SIZE;
+  if (compact) {
+    return (
+      <div
+        className="flex min-w-0 flex-col items-center gap-1"
+        data-testid="live-share-pie"
+        data-dimension={dim.id}
+        data-slices={dim.slices.length}
+      >
+        <SharePieChart dim={dim} metric={metric} total={total} size={size} />
+        <span className="w-full truncate text-center text-[11px] text-muted-foreground">
+          {dim.title}
+        </span>
+      </div>
+    );
+  }
   return (
     <div
       className="min-w-0 space-y-1.5"
@@ -65,35 +129,7 @@ function SharePie({
         </span>
       </h4>
       <div className="flex items-start gap-3">
-        {dim.slices.length === 0 ? (
-          <div
-            className="flex shrink-0 items-center justify-center text-xs text-muted-foreground"
-            style={{ width: PIE_SIZE, height: PIE_SIZE }}
-          >
-            No data
-          </div>
-        ) : (
-          <PieChart width={PIE_SIZE} height={PIE_SIZE} className="shrink-0">
-            <Pie
-              data={dim.slices.map((s, i) => ({
-                ...s,
-                fill: sliceColor(s, i),
-              }))}
-              dataKey="value"
-              nameKey="label"
-              innerRadius={PIE_SIZE * 0.28}
-              outerRadius={PIE_SIZE / 2 - 4}
-              stroke={dim.slices.length > 1 ? 'hsl(var(--background))' : 'none'}
-              isAnimationActive={false}
-            />
-            <Tooltip
-              formatter={(value, name) => [
-                `${formatValue(metric, Number(value))} (${formatShare(Number(value) / total)})`,
-                String(name),
-              ]}
-            />
-          </PieChart>
-        )}
+        <SharePieChart dim={dim} metric={metric} total={total} size={size} />
         <ul className="min-w-0 max-w-[340px] flex-1 space-y-0.5 text-xs">
           {dim.slices.map((s, i) => (
             <li
@@ -122,12 +158,23 @@ function SharePie({
 export function LiveSharePage({
   nodes,
   selected,
+  compact = false,
 }: {
   nodes: readonly OtelLiveNode[];
   selected: OtelLiveNode;
+  compact?: boolean;
 }) {
   const [metric, setMetric] = useState<LiveShareMetric>('cost');
   const dims = buildLiveShare(nodes, selected, metric) ?? [];
+  if (compact) {
+    return (
+      <div className="grid grid-cols-3 gap-2 py-2">
+        {dims.map((d) => (
+          <SharePie key={d.id} dim={d} metric={metric} compact />
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">

@@ -16,6 +16,13 @@ export const f03AuthModes: ContractFamily = {
       expect: { status: 404 },
     },
     {
+      // Mode 1 self-check for the release installer: `none` only.
+      id: 'F03-local-check-404',
+      route: 'GET /api/v1/auth/local-check',
+      actor: 'anon',
+      expect: { status: 404 },
+    },
+    {
       id: 'F03-azure-404',
       route: 'GET /api/v1/auth/azure',
       actor: 'anon',

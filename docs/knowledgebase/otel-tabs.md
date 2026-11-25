@@ -1,14 +1,14 @@
 ---
 type: "Architecture Guide"
 title: "OTEL Tabs (realtime + projected OTEL facts)"
-description: "How the repository, session and team OTEL tabs get their data: the two channels (hook realtime batches and the durable claude-otel chunk upload drained by a projection), the five OTEL fact tables, the per-root seq cursor and lock order, call structure (main / subagent / hidden) and queued reclassification, realtime / gap / fill states, the per-session OTEL status (otel-status event, reason panel, partial banner), repository and team coverage with reason chips, the utility-call cost marker, the routes, the attribution stack-bys (skill / MCP server / effort / speed, \"not reported\"), the account latest-wins rule, plan mix and session plan, projection version 2, the user-wide Live view (routes, node keys, placement, retention, stored totals tables, long sessions, scope cuts), retention, the hook-by-server and Claude Code compatibility matrix and the measured per-request cost."
+description: "How the repository, session and team OTEL tabs get their data: the two channels (hook realtime batches and the durable claude-otel chunk upload drained by a projection), the five OTEL fact tables, the per-root seq cursor and lock order, call structure (main / subagent / hidden) and queued reclassification, realtime / gap / fill states, the per-session OTEL status (otel-status event, reason panel, partial banner), repository and team coverage with reason chips, the utility-call cost marker, the routes, the attribution stack-bys (skill / MCP server / effort / speed, \"not reported\"), the account latest-wins rule, plan mix and session plan, projection version 2, the user-wide Live view (routes, node keys, placement, retention, stored totals tables, long sessions, per-root series and edits by tool, KPI row, tile mode, scope cuts), retention, the hook-by-server and Claude Code compatibility matrix and the measured per-request cost."
 tags:
   - otel
   - hooks
   - session-view
   - reports
   - teams
-generated: { by: "human:denistsyplakov", at: "2026-11-21T12:45:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T15:45:00+04:00" }
 ---
 
 # OTEL Tabs
@@ -525,7 +525,7 @@ replace); the details-panel key is local state. Files: `client/src/viewer/live/`
   overlay (`app.css`, off under `prefers-reduced-motion`). Nothing flashes on the first answer.
 - **"Cost over time"** is one series named `Total` (an empty key would read "(unknown)" in
   `OtelCostChart`).
-- **Share page** (last carousel page, Home / team / No team / repository only): three doughnuts
+- **Share page** (after the latency page, Home / team / No team / repository only): three doughnuts
   side by side — cost or tokens by team, repository and user (`LiveSharePage`,
   `live-share-data.ts`). Client-only, from `nodes`: the DISTINCT session roots under the selected
   node with their lifetime totals, each counted once under its first placement in display order,
@@ -542,6 +542,47 @@ replace); the details-panel key is local state. Files: `client/src/viewer/live/`
   a session model → agent (tokens). Drawn by the shared `OtelFlowSankey` over the
   column-agnostic `layoutFlow` (`otel-cost-flow-layout.ts`), which the OTEL "Cost flow" uses too.
   `flows` is optional on the client model, so a client against an older server shows no sankey.
+
+**CloudWatch-style metrics and tile mode (task `2026-11-21-cloudwatch-cai-parity`).**
+
+- **Two more view fields** (additive; the client declares both optional, missing = "no data"),
+  loaded by two more loaders in the `buildView` `Promise.all` (`otel-live-read.sql.ts`); no DB
+  change, no new route:
+  - `view.rootSeries: { rootId, start, calls, costUsdMicros, tokens }[]` (`loadOtelLiveRootSeries`)
+    — `otel_cost_buckets` grouped by `(session_id, bucket_start)` over the node's `rootIdsOf` and
+    the 2 h window, only buckets with `calls <> 0`, ordered by root then start; `tokens` = all four
+    kinds. At most `OTEL_LIVE_ROOT_SERIES_ROWS` (1200 = 50 roots × 24 buckets) rows, keeping whole
+    roots in order of their 2 h cost. `[]` for an agent node or a node without roots.
+  - `view.editsByTool: { start, tool, count }[]` (`loadOtelLiveEditsByTool`) — `claude_code.tool`
+    spans in `otel_spans` with `tool_name` in `OTEL_LIVE_EDIT_TOOLS` (Edit, MultiEdit, Write,
+    NotebookEdit; no other name is ever returned), per 5-min bucket, filtered to the agent on an
+    agent node. **DD-11:** a root masked for the caller under any of its placements (another
+    member's session in a `team-no-prompts` team, even when also visible through a transparent
+    team) is left out at every node level (`maskedRootIds`), so a masked session / agent gets `[]`.
+- **KPI row** (`LiveKpiTiles`, non-agent nodes; client-only, `live-kpi-data.ts`): **Active users**
+  (`liveActiveUsers`, DISTINCT owners of the session roots under the node; not on session nodes),
+  **Cache hit %** (`OtelCacheRatioTile` over node totals), **Active hours** (`liveActiveHoursMs` =
+  the **sum of `runningMs`** of the DISTINCT session roots under the node — not the max that
+  "Running" shows), and a total + 24-point 2 h sparkline on the tokens tile (`liveTokenSpark` from
+  `view.buckets`, zero-filled; new optional `total` / `sparkline` props of `OtelTokensTile`). An
+  undefined value reads `n/a`, never 0.
+- **New chart pages** (`buildLiveChartPages`, after Share): **Over time by team** (`team-time`,
+  every non-agent node) and **Over time by user** (`user-time`, not on a session) fold
+  `rootSeries` into one series per team / user of each root's first placement (the
+  `rootsUnder` mapping of `live-share-data.ts`); roots not in `nodes`, and the per-bucket remainder
+  of `view.buckets` the listed roots do not cover, go to an "Other" series, so a stack never
+  under-reports. **Edits by tool** (`edits-by-tool`): span counts per tool; when `view.hasSpans`
+  is false (no span in the 2 h window) it is a "not reported" note instead of zeros, and with
+  spans but no edits it is hidden like any all-zero page.
+- **Tile mode** (`LiveCharts`): the page list is built once and shown as a grid of compact charts
+  (`LiveChartTiles`, the default; a `@container` grid of 1 / 2 / 3 / 4 columns, compact
+  `OtelCostChart` / `LiveLatencyChart` / `LiveSharePage` with no legend or controls) or as the
+  carousel (`LiveChartCarousel`), switched by a Tiles | Carousel toggle. A tile click enlarges
+  the page into the carousel view with "‹ All charts"; the enlarged page is kept by id across
+  polls and node changes and falls back to the grid when the id drops out. Esc while enlarged
+  returns to the grid (`LiveModal` asks the chart's escape handler before closing). The mode is
+  stored in `localStorage` `artisyn:liveChartMode` (`'tiles' | 'carousel'`, unknown or
+  unreadable = tiles; `live-chart-mode.ts`); the enlarged state is never stored.
 
 **Scope cuts.** No "API errors" series and no `api_error` / `user_prompt` events (not stored in any
 `otel_*` table); no Claude Code metrics (LOC, commits, active time); no "N updates since pause"
@@ -628,4 +669,4 @@ re-run `npm run perf` against a seeded database to fill them in.
   rows).
 - Scenario: `tests/scenarios/view/s-otel-01.spec.ts`, plus steps in `s-compat-01`, `s-hook-01`,
   `s-hook-07`, `s-inst-01`, `s-inst-04`, `s-slife-08`; Live view: `tests/scenarios/view/s-otel-02.spec.ts`
-  (`@S-OTEL-02`).
+  (`@S-OTEL-02`, incl. tile mode, the new KPIs, Over time by team / user and Edits by tool masking).

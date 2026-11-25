@@ -9,6 +9,14 @@ import * as path from 'path';
 import * as readline from 'readline';
 import * as zlib from 'zlib';
 import { extractTarGz, readTarEntry } from './tar';
+import {
+  compareHookVersions,
+  decideDowngrade,
+  fetchFreshInstaller,
+  fetchServerHookVersion,
+  REFRESHED_ENV,
+  rerunWithInstaller,
+} from './downgrade-guard';
 import { effectiveNodeVersion, nodeWarningText, targetVersionsText } from './node-version';
 import {
   OTEL_ENV_KEYS,
@@ -75,6 +83,8 @@ export type CliFlags = {
   otelPort?: number;
   otelTraces?: boolean;
   otelExisting?: ExistingChoice;
+  /** `--allow-downgrade`: install an older bundled hook over a newer one without asking. */
+  allowDowngrade?: boolean;
 };
 
 function checkServerConnection(serverUrl: string, apiKey: string): Promise<string> {
@@ -286,18 +296,63 @@ function installedHookVersion(claudeDir: string): string | null {
   }
 }
 
-// Numeric `MAJOR.MINOR.PATCH` compare: negative when `a` is older than `b`, 0 when equal, `null`
-// when either side is not a plain dotted version (e.g. `unknown`).
-export function compareHookVersions(a: string, b: string): number | null {
-  const parse = (v: string): number[] | null => (/^\d+(\.\d+)*$/.test(v) ? v.split('.').map(Number) : null);
-  const pa = parse(a);
-  const pb = parse(b);
-  if (!pa || !pb) return null;
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (diff !== 0) return diff;
+// Numeric `MAJOR.MINOR.PATCH` compare, now in downgrade-guard.ts; re-exported for existing importers.
+export { compareHookVersions };
+
+// The downgrade guard (see downgrade-guard.ts): when the bundled hook is older than the installed
+// one, a stale installer (the server serves a newer hook) fetches the current one and re-runs the
+// same command with it; a real downgrade needs a terminal "y" or `--allow-downgrade`. Runs before
+// anything is written, so a refused downgrade leaves the project untouched.
+async function guardDowngrade(
+  cwd: string,
+  action: 'install' | 'upgrade',
+  currentVersion: string | null,
+  newVersion: string,
+  serverUrl: string | null,
+  allowDowngrade: boolean,
+): Promise<void> {
+  if (decideDowngrade({ installed: currentVersion, bundled: newVersion, server: null, refreshed: true }) === 'none') return;
+  const refreshed = process.env[REFRESHED_ENV] === '1';
+  const serverVersion = serverUrl ? await fetchServerHookVersion(serverUrl) : null;
+  const decision = decideDowngrade({ installed: currentVersion, bundled: newVersion, server: serverVersion, refreshed });
+  const freshCommand = serverUrl && serverVersion
+    ? `npx "${serverUrl}/static/artisyn-hooks-installer.tgz?v=${serverVersion}" ${action}`
+    : null;
+
+  if (decision === 'refresh' && serverUrl && serverVersion) {
+    const text = `${action}: this installer bundles hooks v${newVersion} but ${serverUrl} serves v${serverVersion} — ` +
+      'a stale cached copy (npx); fetching the current installer and re-running';
+    console.log(`${text}...`);
+    logInstallerEvent(cwd, 'warn', text);
+    try {
+      rerunWithInstaller(await fetchFreshInstaller(serverUrl, serverVersion));
+    } catch (err) {
+      console.warn(`Warning: could not fetch the current installer: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
-  return 0;
+
+  console.warn(`Warning: this ${action} would DOWNGRADE the hooks v${currentVersion} → v${newVersion}` +
+    (serverVersion ? ` (${serverUrl} serves v${serverVersion})` : '') + '.');
+  if (refreshed && serverVersion && (compareHookVersions(serverVersion, newVersion) ?? 0) > 0) {
+    console.warn(`  The installer downloaded from the server still bundles v${newVersion}, though it reports v${serverVersion}.`);
+  }
+  if (freshCommand && (compareHookVersions(serverVersion!, currentVersion!) ?? -1) >= 0) {
+    console.warn(`  To get the server's current hooks instead, run: ${freshCommand}`);
+  }
+  if (allowDowngrade) {
+    console.warn('  --allow-downgrade given — continuing.');
+    return;
+  }
+  if (process.stdin.isTTY) {
+    const answer = (await prompt(`Are you sure you want to install the OLDER hooks v${newVersion}? [y/N] `)).toLowerCase();
+    if (answer === 'y' || answer === 'yes') return;
+  } else {
+    console.error('  Not a terminal: re-run with --allow-downgrade to confirm the downgrade.');
+  }
+  const text = `${action}: DOWNGRADE hooks v${currentVersion} → v${newVersion} not confirmed — nothing changed`;
+  console.error(`Aborted: ${text}.`);
+  logInstallerEvent(cwd, 'warn', text);
+  process.exit(1);
 }
 
 // Appends one line to `.artisyn/ai_work_dir/hook.log` in the hook's own line format, so an install
@@ -975,6 +1030,8 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
   // comments).
   const currentVersion = readPluginVersion(cwd) ?? installedHookVersion(claudeDir);
   const newVersion = peekBundledHookVersion();
+  await guardDowngrade(cwd, 'install', currentVersion, newVersion,
+    flags?.serverUrl ?? readInstalledServerUrl(cwd, claudeDir) ?? null, flags?.allowDowngrade === true);
 
   // Full-auto mode: check server connection before making any changes
   // Only in TTY mode — non-interactive environments skip the check and prompt.
@@ -1176,7 +1233,7 @@ function verifyHookInstallation(cwd: string): void {
   }
 }
 
-export async function runUpgrade(flags?: Pick<CliFlags, 'otelExisting'>): Promise<void> {
+export async function runUpgrade(flags?: Pick<CliFlags, 'otelExisting' | 'allowDowngrade'>): Promise<void> {
   const cwd = process.cwd();
 
   if (!fs.existsSync(path.join(cwd, '.git'))) {
@@ -1216,6 +1273,7 @@ export async function runUpgrade(flags?: Pick<CliFlags, 'otelExisting'>): Promis
   }
 
   const newVersion = peekBundledHookVersion();
+  await guardDowngrade(cwd, 'upgrade', currentVersion, newVersion, serverUrl, flags?.allowDowngrade === true);
   if (currentVersion === newVersion) {
     console.log(`Hooks already at latest version v${currentVersion}. Re-applying...`);
   } else {

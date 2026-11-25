@@ -54,6 +54,11 @@ export interface OtelCostChartProps {
   onToggleKey: (key: string) => void;
   /** Pixel height of the plot. */
   height?: number;
+  /**
+   * Compact mode (Live tile grid, 2026-11-21 cloudwatch-cai-parity): no legend, smaller axis
+   * ticks. Off by default, so every other call site looks as before.
+   */
+  compact?: boolean;
 }
 
 const HIGHLIGHT_STROKE = '#f59e0b';
@@ -85,7 +90,10 @@ export function OtelCostChart({
   hiddenKeys,
   onToggleKey,
   height = 280,
+  compact = false,
 }: OtelCostChartProps) {
+  const tickFont = compact ? 10 : 11;
+  const axisWidth = compact ? 44 : 64;
   const series = useMemo(
     () => buildOtelSeries(buckets, metric, stackBy),
     [buckets, metric, stackBy],
@@ -150,31 +158,36 @@ export function OtelCostChart({
         <ChartResponsiveContainer>
           <ComposedChart
             data={data}
-            margin={{ top: 8, right: cumulative ? 8 : 16, bottom: 0, left: 8 }}
+            margin={{
+              top: 8,
+              right: cumulative ? 8 : compact ? 8 : 16,
+              bottom: 0,
+              left: compact ? 0 : 8,
+            }}
             onMouseMove={onChartMove}
             onMouseLeave={() => setHover(null)}
           >
             <CartesianGrid strokeDasharray="4 3" vertical={false} />
             <XAxis
               dataKey="start"
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: tickFont }}
               tickFormatter={tickFormatter}
               minTickGap={24}
             />
             <YAxis
               yAxisId="left"
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: tickFont }}
               tickFormatter={valueTick}
               domain={view === 'percent' ? [0, 100] : [0, 'auto']}
-              width={64}
+              width={axisWidth}
             />
             {cumulative && (
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: tickFont }}
                 tickFormatter={(v: number) => formatOtelMetric(v, metric)}
-                width={64}
+                width={axisWidth}
               />
             )}
             <Tooltip
@@ -234,64 +247,66 @@ export function OtelCostChart({
           showCumulative={cumulative}
         />
       )}
-      <div
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
-        data-testid="otel-chart-legend"
-      >
-        {series.map((s) => {
-          const hidden = hiddenKeys.has(s.key);
-          const item = (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => onToggleKey(s.key)}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded px-1 hover:bg-accent',
-                hidden && 'text-muted-foreground line-through',
-              )}
-            >
-              <span
-                className="inline-block size-2.5 rounded-sm"
-                style={{ backgroundColor: hidden ? '#cbd5e1' : s.color }}
-              />
-              {s.label}
-            </button>
-          );
-          if (s.key !== '' || !notReportedHint) return item;
-          // The ⓘ is a sibling of the toggle button — a trigger button cannot nest inside it.
-          return (
-            <span key={s.key} className="inline-flex items-center">
-              {item}
-              <TooltipProvider>
-                <HintTooltip>
-                  <TooltipTrigger
-                    type="button"
-                    aria-label="What does not reported mean?"
-                    className="text-muted-foreground hover:text-foreground"
-                    data-testid="otel-legend-not-reported-hint"
-                  >
-                    ⓘ
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-[360px]">
-                    {OTEL_NOT_REPORTED_HINT}
-                  </TooltipContent>
-                </HintTooltip>
-              </TooltipProvider>
+      {!compact && (
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+          data-testid="otel-chart-legend"
+        >
+          {series.map((s) => {
+            const hidden = hiddenKeys.has(s.key);
+            const item = (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => onToggleKey(s.key)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded px-1 hover:bg-accent',
+                  hidden && 'text-muted-foreground line-through',
+                )}
+              >
+                <span
+                  className="inline-block size-2.5 rounded-sm"
+                  style={{ backgroundColor: hidden ? '#cbd5e1' : s.color }}
+                />
+                {s.label}
+              </button>
+            );
+            if (s.key !== '' || !notReportedHint) return item;
+            // The ⓘ is a sibling of the toggle button — a trigger button cannot nest inside it.
+            return (
+              <span key={s.key} className="inline-flex items-center">
+                {item}
+                <TooltipProvider>
+                  <HintTooltip>
+                    <TooltipTrigger
+                      type="button"
+                      aria-label="What does not reported mean?"
+                      className="text-muted-foreground hover:text-foreground"
+                      data-testid="otel-legend-not-reported-hint"
+                    >
+                      ⓘ
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[360px]">
+                      {OTEL_NOT_REPORTED_HINT}
+                    </TooltipContent>
+                  </HintTooltip>
+                </TooltipProvider>
+              </span>
+            );
+          })}
+          {cumulative && (
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <span className="inline-block w-4 border-t-2 border-dashed border-slate-900" />
+              Cumulative (right axis)
             </span>
-          );
-        })}
-        {cumulative && (
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <span className="inline-block w-4 border-t-2 border-dashed border-slate-900" />
-            Cumulative (right axis)
-          </span>
-        )}
-        {series.length > 0 && (
-          <span className="text-muted-foreground">
-            · click a legend item to hide / show it
-          </span>
-        )}
-      </div>
+          )}
+          {series.length > 0 && (
+            <span className="text-muted-foreground">
+              · click a legend item to hide / show it
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

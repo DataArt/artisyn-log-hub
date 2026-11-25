@@ -53,14 +53,17 @@ function shortRepoLabel(url: string): string {
   return last.replace(/\.git$/i, '') || url;
 }
 
-interface RootPlacement {
+export interface RootPlacement {
   session: OtelLiveNode;
   team: OtelLiveNode | null;
   repo: OtelLiveNode | null;
 }
 
-/** First in-tree placement of every DISTINCT root under `selectedKey`, in display order. */
-function rootsUnder(
+/**
+ * First in-tree placement of every DISTINCT root under `selectedKey`, in display order. Also the
+ * root set of the Live KPI helpers (`live-kpi-data.ts`).
+ */
+export function rootsUnder(
   nodes: readonly OtelLiveNode[],
   selectedKey: string,
 ): RootPlacement[] {

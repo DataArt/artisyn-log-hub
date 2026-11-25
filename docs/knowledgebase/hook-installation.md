@@ -5,7 +5,7 @@ description: "Install, upgrade, or uninstall the hook as a Claude Code plugin vi
 tags:
   - hooks
   - otel
-generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T14:00:00+04:00" }
 ---
 
 # Hook Installation Guide
@@ -713,7 +713,13 @@ the second and later sessions of a project — one receiver serves them all (bac
 `no-data` line at idle-exit means the receiver lived a whole idle period without a single OTLP request — Claude Code
 is not exporting to it (OTEL env not in `~/.claude/settings.json`, or Claude Code not restarted). Every install /
 upgrade (installer 1.0.91+) writes an `[installer]` line to `hook.log` (`upgrade: hooks v<old> → v<new> (server …)`),
-as a `warn` with `DOWNGRADE` when the bundled hook is older than the installed one. An `owner-mismatch` line means another
+as a `warn` with `DOWNGRADE` when the bundled hook is older than the installed one. Installer 1.1.6+ guards such a
+downgrade before changing anything (`artisyn-hooks-installer/src/downgrade-guard.ts`): if the server's
+`/static/installer-version.json` names a newer hook than the bundle, the run is a stale npx copy (npx caches one
+installer per command line, so a bare URL re-runs the first one it downloaded) — it downloads
+`/static/artisyn-hooks-installer.tgz?v=<server version>` into `~/.artisyn/installer/<version>/` and re-runs the same
+command with it once (`ARTISYN_INSTALLER_REFRESHED=1` stops a loop); any other downgrade needs a terminal `y` or
+`--allow-downgrade`, else exit 1 with a `warn` `… not confirmed — nothing changed` line. An `owner-mismatch` line means another
 project allocated the same port; re-install with `--otel-port <n>`.
 
 For the upload queue (hook `3.0.0`+): `~/.artisyn/upload/heartbeat.json` with a recent `ts` means an uploader is up;

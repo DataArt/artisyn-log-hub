@@ -632,6 +632,12 @@ test('@S-HOOK-07 the OTEL receiver refuses browsers, foreign projects, path tric
       const mirrorA = fs.readFileSync(path.join(repoA.otelDir, 'receiver.log'), 'utf8');
       expect(mirrorA).toMatch(ingest(keyA, 'logs'));
       expect(mirrorA).toMatch(ingest(keyA, 'metrics'));
+      // Hook 3.3.2+: one `first-record` line per session and signal names the producer (service and scope).
+      const firstRecords = mirrorA.split('\n').filter((l) => l.includes(`first-record repo=${keyA} session=sa `));
+      expect(firstRecords.map((l) => l.slice(l.indexOf('signal=')))).toEqual([
+        `signal=logs service=claude-code serviceVersion=- scope=${SCOPE.name}@${SCOPE.version}`,
+        `signal=metrics service=claude-code serviceVersion=- scope=${SCOPE.name}@${SCOPE.version}`,
+      ]);
       expect(mirrorA, 'repo A’s log carries only repo A').not.toContain(`repo=${keyB}`);
       expect(fs.readFileSync(path.join(repoB.otelDir, 'receiver.log'), 'utf8')).not.toContain(`repo=${keyA}`);
     });

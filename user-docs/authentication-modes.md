@@ -4,7 +4,7 @@
 
 | Value | Mode | Use it for |
 |---|---|---|
-| `none` | Mode 1, no password | One user on their own machine. A caller types an email and is signed in as that user, without verification. Only local callers are accepted (localhost and, in a container, the container's default gateway). **Never** for a shared or network-reachable installation. |
+| `none` | Mode 1, no password | One user on their own machine. A caller types an email and is signed in as that user, without verification. Only local callers are accepted (localhost and, in a container, the container's default gateway, plus any address listed in `AUTH_NONE_TRUSTED_PEERS` — the installer adds the one a runtime such as Rancher Desktop uses). **Never** for a shared or network-reachable installation. |
 | `password` | Mode 2, email and password | A small team on a trusted network. SMTP is optional; without it password reset is unavailable. |
 | `password-confirm` | Mode 3, email, password and emailed confirmation | Anything reachable from the internet. An account is usable only after an emailed confirmation link. Needs SMTP: the app refuses to start without a reachable relay. |
 | `azure-oauth` | Mode 4, Microsoft Entra ID sign-in | Organizations on Microsoft Entra ID, single tenant. No local passwords. Recommended for organizations that use Entra ID. |

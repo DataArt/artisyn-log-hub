@@ -586,6 +586,32 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     await expect(page.getByTestId('otel-kpi-cache-ratio')).toContainText('n/a');
   });
 
+  await test.step('OTEL Claude Code version: a «claude-code-desktop» line (Desktop Code tab; its service.version is the Desktop app version) takes the Claude Code version from the logs scope.version; a foreign service.name gives none — for the session and for each call', async () => {
+    const sid = `otel01-${run}-desktop`;
+    const at = plus(base, 95);
+    const call = (n: number) => ({ requestId: `dsk${run}-req-${n}`, querySource: 'repl_main_thread', model: MODEL_A, at, costUsd: 0.001, input: 10, output: 5 });
+    const desktopScope = { name: 'com.anthropic.claude_code.events', version: '2.1.325' };
+    await uploadTranscript(api, key.key, { sessionId: sid, prompt: `desktop ${run}`, repoUrls: [`https://git.arrakis.test/scn/${run}/otel-desktop`], branch: 'main', at: plus(base, 60), requestIds: [] }, queue, 'artisyn');
+    await uploadOtelChunk(api, key.key, sid, [
+      { ...apiRequestLine(sid, { ...call(1), resourceAttributes: { 'service.name': 'claude-code-desktop', 'service.version': '5.11492.5' } }), scope: desktopScope },
+      apiRequestLine(sid, { ...call(2), resourceAttributes: { 'service.name': 'some-other-agent', 'service.version': '9.9.9' } }),
+    ], queue);
+    await waitForOtelProjected(db, sid);
+    const { rows } = await db.query<{ v: string | null }>(
+      `SELECT st.claude_version_otel AS v FROM session_stats st JOIN sessions s ON s.id = st.session_id WHERE s.session_id = $1`,
+      [sid],
+    );
+    expect(rows[0]?.v).toBe('2.1.325');
+    const { rows: calls } = await db.query<{ request_id: string; v: string | null }>(
+      `SELECT c.request_id, c.claude_code_version AS v FROM otel_calls c JOIN sessions s ON s.id = c.session_id WHERE s.session_id = $1 ORDER BY c.request_id`,
+      [sid],
+    );
+    expect(calls).toEqual([
+      { request_id: `dsk${run}-req-1`, v: '2.1.325' },
+      { request_id: `dsk${run}-req-2`, v: null },
+    ]);
+  });
+
   await test.step('no OTEL, AC-C4 (0 of M), AC-C3 (no-status). a repository whose only session has no OTEL and no reported status: the «reason» empty state (0 of 1, the no-status message, Show 1 month) under the coverage banner with the «no status (older hook)» chip; the session tab shows the generic no-status panel without a status line; the session’s other tabs are unchanged', async () => {
     const noUrl = `https://git.arrakis.test/scn/${run}/otel-none`;
     const sid = `otel01-${run}-none`;

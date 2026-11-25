@@ -448,5 +448,59 @@
     "input": {"kind":"private","address":"170.254.0.1"},
     "expected": {"trusted":false},
     "note": "Rule 7: 254 as second octet counts only after 169."
+  },
+  {
+    "id": "LR-77",
+    "input": {"kind":"request","remoteAddress":"::ffff:192.168.127.1","trustedGateway":"172.19.0.1","trustedPeers":["192.168.127.1"]},
+    "expected": {"local":true},
+    "note": "Rule 4: Rancher Desktop on Windows delivers host traffic from 192.168.127.1 while the gateway is 172.19.0.1; the configured peer makes it local."
+  },
+  {
+    "id": "LR-78",
+    "input": {"kind":"request","remoteAddress":"::ffff:192.168.127.1","trustedGateway":"172.19.0.1"},
+    "expected": {"local":false},
+    "note": "Rule 4: the same Rancher request without AUTH_NONE_TRUSTED_PEERS is not local (the reported 403)."
+  },
+  {
+    "id": "LR-79",
+    "input": {"kind":"request","remoteAddress":"192.168.127.2","trustedGateway":null,"trustedPeers":["192.168.127.1"]},
+    "expected": {"local":false},
+    "note": "Rule 4: a configured peer is one exact address, not its subnet."
+  },
+  {
+    "id": "LR-80",
+    "input": {"kind":"request","remoteAddress":"127.0.0.1","trustedGateway":null,"trustedPeers":["192.168.127.1"]},
+    "expected": {"local":true},
+    "note": "Rule 3: configured peers add to loopback, they do not replace it."
+  },
+  {
+    "id": "LR-81",
+    "input": {"kind":"peers","raw":"192.168.127.1"},
+    "expected": {"peers":["192.168.127.1"],"rejected":[]},
+    "note": "Rule 9: the value the installer writes for Rancher Desktop."
+  },
+  {
+    "id": "LR-82",
+    "input": {"kind":"peers","raw":" 192.168.127.1, 10.0.0.7\t192.168.127.1 ,"},
+    "expected": {"peers":["192.168.127.1","10.0.0.7"],"rejected":[]},
+    "note": "Rule 9: commas and whitespace both separate, empty entries are skipped, a repeat is kept once, order is kept."
+  },
+  {
+    "id": "LR-83",
+    "input": {"kind":"peers","raw":"8.8.8.8,192.168.0.0/16,localhost,::ffff:192.168.127.1,::1"},
+    "expected": {"peers":[],"rejected":["8.8.8.8","192.168.0.0/16","localhost","::ffff:192.168.127.1","::1"]},
+    "note": "Rule 9: only plain private IPv4 (rule 7) is accepted; public addresses, subnets, names and IPv6 forms are rejected."
+  },
+  {
+    "id": "LR-84",
+    "input": {"kind":"peers","raw":null},
+    "expected": {"peers":[],"rejected":[]},
+    "note": "Rule 9: unset variable, nothing extra trusted."
+  },
+  {
+    "id": "LR-85",
+    "input": {"kind":"peers","raw":"10.1.2.3,8.8.4.4"},
+    "expected": {"peers":["10.1.2.3"],"rejected":["8.8.4.4"]},
+    "note": "Rule 9: a rejected entry does not drop the valid ones next to it."
   }
 ]

@@ -63,11 +63,19 @@ The same command installs a fresh copy and upgrades an existing one. It:
 4. copies the files into the install directory, keeping the previous compose file as
    `docker-compose.yml.prev`;
 5. on the first install only, generates `.env` from `.env.example` with a random
-   `POSTGRES_PASSWORD` and `SESSION_SECRET` and `NODE_ENV=production`. **An existing `.env` is never
-   changed** — your database password and settings survive every upgrade;
+   `POSTGRES_PASSWORD` and `SESSION_SECRET` and `NODE_ENV=production`. An existing `.env` keeps
+   your database password and settings on every upgrade — the only line the installer may ever add
+   to it is the one in step 7;
 6. runs `docker compose pull` (on failure it restores the previous compose file) and
    `docker compose up -d`;
-7. prints the install directory and the URL — `PUBLIC_BASE_URL` from `.env` when set, otherwise
+7. with `AUTH_MODE=none`, checks that the browser on this machine can sign in: it asks the app
+   (`http://127.0.0.1:5003/api/v1/auth/local-check`) which address it sees this machine as. Some
+   Docker runtimes — Rancher Desktop, for one — deliver your browser's requests from an address
+   the app does not recognise as local, and the login page would refuse every email. Then the
+   installer adds that address to `AUTH_NONE_TRUSTED_PEERS` in `.env`, restarts the app and checks
+   again. It prints `Passwordless sign-in works from this machine.` when all is well, or a warning
+   with the fix — the install itself never fails on this step;
+8. prints the install directory and the URL — `PUBLIC_BASE_URL` from `.env` when set, otherwise
    `http://localhost:5003`.
 
 Options, all optional, passed as environment variables:
@@ -181,7 +189,16 @@ Mode 1 accepts only local callers: localhost, plus the container's own default g
 the address your host's traffic to the published port arrives from (inside a container it never
 arrives from loopback, so without this Mode 1 could not be used at all). The container logs the
 gateway it trusts at startup — `docker compose logs app` shows a line reading
-`AUTH_MODE=none: container detected, also trusting default gateway ... as a local caller`. Read
+`AUTH_MODE=none: container detected, also trusting default gateway ... as a local caller`.
+
+Some Docker runtimes deliver your browser's requests from yet another address: Rancher Desktop on
+Windows, for example, uses `192.168.127.1`. The login page then says *"Passwordless sign-in is
+accepted only from the machine Log Hub runs on; this request came from …"*. The installer detects
+this and adds the address to `AUTH_NONE_TRUSTED_PEERS` in `.env` (see the install steps above), so
+**running the installer again fixes it**. By hand: add `AUTH_NONE_TRUSTED_PEERS=<the address from
+the message>` to `.env` and run `docker compose up -d`. Only exact private IPv4 addresses are
+accepted, and the startup log names them
+(`AUTH_MODE=none: also trusting AUTH_NONE_TRUSTED_PEERS ... as local callers`). Read
 [Authorization and Authentication](https://github.com/DataArt/artisyn-log-hub/blob/v{{VERSION}}/docs/knowledgebase/authorization-and-authentificaiton.md)
 before switching `AUTH_MODE` if you plan to expose the app beyond localhost.
 
@@ -300,6 +317,7 @@ that file on every upgrade. A setting that is not in `.env` keeps the app's buil
 | Setting | When you need it |
 |---|---|
 | `SESSION_SECRET` | Optional. The generated `.env` carries a random one. If you leave it empty, the app generates a secret on first start and keeps it in the database. |
+| `AUTH_NONE_TRUSTED_PEERS` | `AUTH_MODE=none` only. Extra addresses treated as this machine, comma-separated, exact private IPv4 only (e.g. `192.168.127.1` under Rancher Desktop). The installer adds it when needed — see "Access and authentication". |
 | `PUBLIC_BASE_URL` | **Required for `AUTH_MODE=password`, `password-confirm` and `strict-managed`.** The externally reachable URL of the app, e.g. `https://log-hub.example.com`. Confirmation, password-reset and set-password links are built only from it. In production the app refuses to start in those modes without it; `strict-managed` refuses to start without it in any environment. The installers also print it as the app URL. |
 | `ALLOWED_EMAIL_DOMAINS` | Recommended when `password-confirm` is reachable from the internet: comma-separated domains allowed to sign up, e.g. `example.com,example.org`. In `strict-managed` it limits the addresses an admin can create accounts for. A malformed value stops the app at startup. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Outgoing mail for confirmation, password-reset and set-password emails. **Required for `AUTH_MODE=password-confirm` and `strict-managed`:** the relay must also be reachable at startup, otherwise the app does not start. **Optional for `AUTH_MODE=password`:** when `SMTP_HOST` is set, `SMTP_PORT` and `SMTP_FROM` are required too and an unreachable relay only logs a warning; when it is unset, password reset is unavailable and "Forgot password?" is disabled. Not used by `none` and `azure-oauth`. |

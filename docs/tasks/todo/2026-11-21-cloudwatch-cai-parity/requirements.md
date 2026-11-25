@@ -66,8 +66,13 @@ What the Live view has today (2026-11-21):
     kinds, lifetime) and a sparkline from the node's 5-minute `view.buckets` (2 h).
   - Active users = distinct owners of the roots the node's totals cover (same team-scope row
     filter as every Live figure); hidden on session and agent nodes.
-  - Active hours — definition open (see Open Questions).
-  - No data or a zero denominator shows "—", never 0 % / 0 h. Agent nodes keep today's tiles.
+  - Active hours = the sum of each session's running time (`runningMs`, first to last call,
+    lifetime) over the DISTINCT sessions under the node (user, 2026-11-25). It is wall-clock time,
+    not Claude Code's `active_time`, so the gap table marks it "partial". The hint reads "sum of
+    session run time", which tells it apart from "Running" (the longest session).
+  - No data or a zero denominator shows `n/a`, never 0 % / 0 h. This is the existing
+    `OtelCacheRatioTile` / ui-principles convention (user, 2026-11-25). Agent nodes keep today's
+    tiles.
 - FR-3 **More realtime charts.** Candidates to confirm in review:
   - Cost / tokens over time by team and by user.
   - Developer productivity: lines added / removed, commits, PRs.
@@ -85,6 +90,38 @@ What the Live view has today (2026-11-21):
   - Cost / tokens by team and by user need a server change: new response fields are additive and
     optional, keep the 2 h / 5-minute grain and the team-scope row filter, and the changed
     `GET /api/v1/otel/live` gets its contract registry row. "By user" is hidden on session nodes.
+  - They are two separate pages (and tiles), "Over time by team" and "Over time by user", each
+    with Metric = Cost / Tokens / Calls. They are not By variants of the existing pages (user,
+    2026-11-25), so in tile mode the split is visible without a click.
+
+### Gap table (FR-1, 2026-11-25)
+
+CloudWatch Coding Agent Insights cards and charts (Claude Code tab) against the Live view.
+
+| CloudWatch card / chart | Live view today | Decision |
+|---|---|---|
+| Total Tokens card + sparkline | partial: "Tokens by type" tile, no total or sparkline | add the total and a 2 h sparkline (FR-2) |
+| Total Cost card | has: Cost tile ("since start") | — |
+| Active Users card | partial: `liveUsers` only in the details panel | add the KPI (FR-2) |
+| Sessions card | has: Live sessions / agents tile | — |
+| Cache Hit % card | partial: `OtelCacheRatioTile` exists on the OTEL tabs, not in Live | add the KPI (FR-2) |
+| Active Hours card | missing: no `active_time` ingest; only "Running" (the longest session) | add as "partial": the sum of session run time (FR-2) |
+| Token Usage Over Time | has: Tokens over time | — |
+| Token Usage by Department | partial: by team only in the Share doughnut, not over time | add "Over time by team" (FR-3); departments → Deferred |
+| Cost by Department (USD) | partial: Share doughnut, Sankey | add "Over time by team" / "by user" (FR-3); departments → Deferred |
+| Token Usage by Type | has: Tokens over time by kind, "Tokens by type" tile | — |
+| Lines of code added / removed | missing — not backed by OTEL data | left out |
+| Commits by Department | missing — not backed | left out |
+| Active Hours by Department | missing — not backed per department | left out (the KPI covers the node) |
+| Pull Requests by Department | missing — not backed | left out |
+| Code generation by language | missing — not backed | left out |
+| Edit decisions accept vs reject | missing — not backed | left out |
+| Edits by tool (Edit / NotebookEdit / Write) | missing, but backed by OTEL tool spans | add "Edits by tool" (FR-3), "not reported" without spans |
+| Filtering and grouping by org / department / cost center / location / role | partial: team / repo / user through the tree | Deferred (cost dimensions) |
+| Filter by Model | partial: Cost by model page, Sankey | — |
+| CSV export | missing | Deferred |
+| Alarms (PromQL) | missing; budgets are non-blocking | Deferred |
+| Codex / Copilot tabs | out of scope (Claude Code only) | — |
 - FR-4 **Tile mode.** A toggle in the Live view pane switches between carousel mode (today's
   behaviour) and tile mode. In tile mode:
   - every chart page shows at once as a small tile in a grid, with no paging;
@@ -143,13 +180,15 @@ What the Live view has today (2026-11-21):
   call) over the distinct sessions under the node, or the sum of LLM and tool span time from
   `otel_spans`. Lifetime or the last 2 h? How should it differ from the existing "Running" tile
   (or should it be marked "partial" in the gap table and dropped)?
+  **Answer (user, 2026-11-25):** the sum of each session's `runningMs` (lifetime) over the
+  DISTINCT sessions under the node, marked "partial". See FR-2.
 
 ## Common sense considerations
 
 - Cache hit % reuses `OtelCacheRatioTile` and its formula, over lifetime node totals.
 - Total tokens extends "Tokens by type" with a total and a sparkline from the per-node 5-minute buckets.
 - Active users = distinct owners of the node's roots, team-scope filtered; hidden on session and agent nodes.
-- No data or a zero denominator shows "—"; agent nodes keep today's tiles.
+- No data or a zero denominator shows `n/a` (existing convention); agent nodes keep today's tiles.
 - "Realtime data" in FR-3 = OTEL data only; transcript-derived productivity is "missing — not backed".
 - Edits by tool comes from OTEL tool spans, "not reported" without them.
 - Team / user time series: additive optional response fields, shape chosen in the plan; "by user" hidden on session nodes.

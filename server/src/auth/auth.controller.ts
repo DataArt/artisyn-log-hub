@@ -36,7 +36,7 @@ import { AutoIdentifyGuard } from './guards/auto-identify.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { SessionAuthGuard } from './guards/session-auth.guard';
 import { TooManyRequestsException } from './exceptions/too-many-requests.exception';
-import { isLocalhostRequest } from './utils/localhost.util';
+import { isLocalhostRequest, peerAddress } from './utils/localhost.util';
 import { passwordRequirement } from './utils/password-policy';
 import { clientIp } from './client-ip';
 import { EmailSendRateLimitService } from './email-send-rate-limit.service';
@@ -103,13 +103,32 @@ export class AuthController {
   @UseGuards(AuthModeGuard)
   async identify(@Req() req: Request, @Body() dto: IdentifyDto) {
     if (!isLocalhostRequest(req)) {
-      throw new ForbiddenException();
+      // The peer address is the caller's own, so naming it leaks nothing — and it is the one fact
+      // needed to fix a runtime that delivers host traffic from an unexpected address
+      // (AUTH_NONE_TRUSTED_PEERS). The exception filter logs the message too.
+      throw new ForbiddenException({
+        message: `Passwordless sign-in is accepted only from the machine Log Hub runs on; this request came from ${peerAddress(req) || 'an unknown address'}`,
+        error: 'not_local',
+      });
     }
     const user = await this.authService.identify(dto.email);
     await new Promise<void>((resolve, reject) =>
       req.logIn(user, (err) => (err ? reject(err as Error) : resolve())),
     );
     return this.authService.generatePublicProfile(user);
+  }
+
+  /**
+   * Mode 1 self-check for the release installer: does this server treat the caller as local, and
+   * which peer address did it see? The installer calls it from the host right after
+   * `docker compose up -d`; on `local: false` it writes `peer` into `AUTH_NONE_TRUSTED_PEERS` and
+   * restarts the app. Reveals only the caller's own address; mutates nothing.
+   */
+  @Get('local-check')
+  @AllowedAuthModes('none')
+  @UseGuards(AuthModeGuard)
+  localCheck(@Req() req: Request): { local: boolean; peer: string } {
+    return { local: isLocalhostRequest(req), peer: peerAddress(req) };
   }
 
   @Post('signup')
