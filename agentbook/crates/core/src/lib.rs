@@ -12,6 +12,7 @@ pub mod openssh;
 pub mod override_config;
 pub mod paths;
 pub mod pins;
+pub mod ports;
 pub mod sessions;
 pub mod ssh_user;
 pub mod state;

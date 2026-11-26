@@ -24,9 +24,11 @@ use std::path::Path;
 use std::time::Duration;
 
 use agentbook_core::paths::{claude_link, ssh_alias};
+use agentbook_core::state::PortForward;
 use agentbook_engine::docker::containers;
 use agentbook_engine::{
-    ActionView, Command, Engine, GivenInput, LaptopView, RunState, Secret, VarEdit, VarInput,
+    ActionView, Command, Engine, GivenInput, LaptopView, PortState, RunState, Secret, VarEdit,
+    VarInput,
 };
 use agentbook_platform::Platform;
 use serde_json::Value;
@@ -880,5 +882,176 @@ pub fn run_wsl_owner(stand: &Stand) -> StepResult {
     ensure(
         names.split_whitespace().all(|n| n == "claude"),
         format!("the uid is not named claude everywhere: {names}"),
+    )
+}
+
+/// GET `/` from `127.0.0.1:<port>` of this computer; the response body.
+fn http_get(port: u16) -> Result<String, String> {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port))
+        .map_err(|e| format!("cannot connect to localhost:{port}: {e}"))?;
+    s.set_read_timeout(Some(Duration::from_secs(10)))
+        .map_err(|e| e.to_string())?;
+    s.write_all(b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+        .map_err(|e| e.to_string())?;
+    let mut out = String::new();
+    s.read_to_string(&mut out).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+fn port_state(engine: &Engine, laptop: &str, host: u16) -> Option<PortState> {
+    engine.snapshot().laptop(laptop).and_then(|l| {
+        l.ports
+            .iter()
+            .find(|p| p.host == host)
+            .map(|p| p.state.clone())
+    })
+}
+
+/// Forwarded ports: a server listening only on `localhost` inside the laptop opens on this
+/// computer through the tunnel, `ws ports` gives its address, a port another program holds is
+/// reported as taken, and removing the forward frees the port again.
+pub fn run_ports(stand: &Stand) -> StepResult {
+    let data = ac17::data_dir(stand);
+    ensure_dependencies(stand, &data)?;
+    let engine = stand.engine(&data)?;
+    let shared = stand.root.join("proj-ports");
+    stand.write_files(&shared, &[("index.js", "console.log('ports');\n")])?;
+    let folder = add_folder(stand, &engine, &shared)?;
+    let id = get_laptop(stand, &engine, &folder, "Ports", Vec::new(), T)?;
+    let container = stand.running_container(&id)?.id;
+
+    println!("  ports: a localhost-only server in the laptop opens here");
+    let host = stand.free_port();
+    stand.act_ok(
+        &engine,
+        Command::SetPorts {
+            laptop: id.clone(),
+            ports: Some(vec![PortForward::new(5173, host)]),
+        },
+        T,
+    )?;
+    let (code, out) = stand.exec(
+        &container,
+        "claude",
+        "nohup /usr/local/bin/node -e \"require('http').createServer((q, r) => r.end('agentbook-port-ok')).listen(5173, '127.0.0.1')\" >/dev/null 2>&1 &",
+    )?;
+    ensure(code == 0, format!("starting the server: {out}"))?;
+    stand.wait_snapshot(
+        &engine,
+        Duration::from_secs(30),
+        "the tunnel to open",
+        |_| port_state(&engine, &id, host) == Some(PortState::Forwarding),
+    )?;
+    let mut body = String::new();
+    for _ in 0..20 {
+        body = http_get(host).unwrap_or_else(|e| e);
+        if body.contains("agentbook-port-ok") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    ensure(
+        body.contains("agentbook-port-ok"),
+        format!("localhost:{host} did not reach the laptop's server: {body}"),
+    )?;
+    let (_, ws) = stand.exec(&container, "claude", "ws ports")?;
+    ensure(
+        ws.contains(&format!("5173 here -> http://localhost:{host}"))
+            && ws.contains("a server listens on it now"),
+        format!("ws ports: {ws}"),
+    )?;
+
+    println!("  ports: a port another program holds is reported as taken");
+    let held = std::net::TcpListener::bind(("127.0.0.1", 0)).map_err(|e| e.to_string())?;
+    let held_port = held.local_addr().map_err(|e| e.to_string())?.port();
+    stand.act_ok(
+        &engine,
+        Command::SetPorts {
+            laptop: id.clone(),
+            ports: Some(vec![PortForward::new(5173, held_port)]),
+        },
+        T,
+    )?;
+    ensure(
+        port_state(&engine, &id, held_port) == Some(PortState::Taken),
+        format!("held port: {:?}", port_state(&engine, &id, held_port)),
+    )?;
+    drop(held);
+
+    println!("  ports: removing the forwards frees the port");
+    stand.act_ok(
+        &engine,
+        Command::SetPorts {
+            laptop: id.clone(),
+            ports: Some(Vec::new()),
+        },
+        T,
+    )?;
+    let mut free = false;
+    for _ in 0..20 {
+        if std::net::TcpListener::bind(("127.0.0.1", host)).is_ok() {
+            free = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    ensure(
+        free,
+        format!("localhost:{host} is still held after the forward was removed"),
+    )?;
+    let (_, ws) = stand.exec(&container, "claude", "ws ports")?;
+    ensure(
+        ws.contains("No ports"),
+        format!("ws ports after removing: {ws}"),
+    )?;
+
+    println!("  ports: a devcontainer added later is offered; its forwardPorts are the defaults");
+    let config = ".devcontainer/devcontainer.json";
+    stand.write_files(
+        &shared,
+        &[(
+            config,
+            r#"{ "image": "debian:bookworm-slim", "forwardPorts": [5173, "db:5432"] }"#,
+        )],
+    )?;
+    stand.wait_snapshot(
+        &engine,
+        Duration::from_secs(30),
+        "the devcontainer to be offered",
+        |s| {
+            s.folder(&folder)
+                .is_some_and(|f| f.config_choices == vec![config.to_string()])
+        },
+    )?;
+    if stand.wsl {
+        // A project devcontainer is refused on a Docker engine inside WSL (see ac6).
+        return Ok(());
+    }
+    stand.act_ok(
+        &engine,
+        Command::ChooseEquipment {
+            folder: folder.clone(),
+            config: Some(config.to_string()),
+        },
+        T,
+    )?;
+    stand.act_ok(
+        &engine,
+        Command::SetPorts {
+            laptop: id.clone(),
+            ports: None,
+        },
+        T,
+    )?;
+    stand.wait_snapshot(
+        &engine,
+        Duration::from_secs(120),
+        "the devcontainer ports",
+        |s| {
+            s.laptop(&id).is_some_and(|l| {
+                l.ports.len() == 1 && l.ports[0].port == 5173 && l.ports[0].host == 5173
+            })
+        },
     )
 }

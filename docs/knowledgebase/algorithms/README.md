@@ -82,6 +82,7 @@ format where the two differ).
 | [agentbook-autocrlf](agentbook-autocrlf.md) | `agentbook/crates/core/src/autocrlf.rs` (`effective`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
 | [agentbook-docker-endpoint](agentbook-docker-endpoint.md) | `agentbook/crates/core/src/docker_endpoint.rs` (`resolve`, `parse_host`, `context_dir_name`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
 | [agentbook-session-count](agentbook-session-count.md) | `agentbook/crates/core/src/sessions.rs` (`count_established`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-forward-ports](agentbook-forward-ports.md) | `agentbook/crates/core/src/ports.rs` (`devcontainer_ports`, `effective`, `check`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
 | [agentbook-openssh-version](agentbook-openssh-version.md) | `agentbook/crates/core/src/openssh.rs` (`parse_version`, `meets_floor`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |

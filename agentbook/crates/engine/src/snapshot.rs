@@ -148,6 +148,8 @@ pub struct FolderEquipment {
     pub error: Option<String>,
     /// The project's variable defaults (`containerEnv`, then `remoteEnv`), in order.
     pub defaults: Vec<(String, String)>,
+    /// The devcontainer's `forwardPorts`: the default forwarded ports of the folder's laptops.
+    pub forward_ports: Vec<u16>,
 }
 
 /// A variable value as the UI shows it: hidden values are never in the snapshot.
@@ -180,7 +182,8 @@ pub struct FolderView {
     /// Several `.claude/` folders were found and none chosen yet: ask once (relative paths,
     /// `""` = the root).
     pub claude_choices: Vec<String>,
-    /// The devcontainer configs found in the folder, when there are several (relative paths).
+    /// The devcontainer configs found in the folder (relative paths), when there is a choice:
+    /// several, or one the folder does not use (it was added on the standard Equipment).
     pub config_choices: Vec<String>,
     /// The Variables dialog rows (editable variables only).
     pub variables: Vec<FolderVariable>,
@@ -232,6 +235,33 @@ pub struct LaptopView {
     /// CLI into `~/.claude/remote` over SFTP the first time it connects): the KB copied so far.
     /// From the poller; `None` otherwise.
     pub claude_setup_kb: Option<u64>,
+    /// The forwarded ports (the user's list, else the devcontainer's) and how each one is.
+    pub ports: Vec<PortView>,
+}
+
+/// A forwarded port on a laptop card.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortView {
+    /// The port inside the laptop.
+    pub port: u16,
+    /// The port on this computer (`localhost:<host>`).
+    pub host: u16,
+    pub state: PortState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum PortState {
+    /// The laptop is not working, so nothing is forwarded.
+    #[default]
+    Off,
+    /// The tunnel is being opened.
+    Starting,
+    /// `localhost:<host>` reaches the laptop.
+    Forwarding,
+    /// Another program on this computer already listens on the port.
+    Taken,
+    /// The tunnel ended; the message says why. It is tried again.
+    Failed(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

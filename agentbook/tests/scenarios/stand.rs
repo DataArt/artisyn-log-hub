@@ -469,6 +469,7 @@ impl Stand {
             libc: None,
             generation: 0,
             laptop_vars: Vec::new(),
+            ports: None,
             extra: Default::default(),
         }
     }

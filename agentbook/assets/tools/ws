@@ -7,6 +7,7 @@
 #               local branches, worktrees, uncommitted changes), the other laptops of the folder
 #               and the Variable names
 #   ws mounts   the folders from the user's computer this laptop sees, with their modes
+#   ws ports    the ports forwarded to the user's computer (a server here opens there)
 #   ws env      the Variables as they are now (ls / get NAME / run CMD...): a session reads them
 #               only when it starts, `ws env` re-reads the env file on every call
 #
@@ -409,6 +410,47 @@ cmd_mounts() {
   echo "Nothing else on the user's computer is visible from this laptop. Changes in these folders appear on the computer at once."
 }
 
+# --- Ports ------------------------------------------------------------------------------------
+# The tool forwards some ports of this laptop to the user's computer (an SSH tunnel to localhost
+# here, while the laptop works and AgentBook is open). laptops/<id>.json lists them.
+
+# port_lines FLAT: one line per forwarded port: "port<TAB>host".
+port_lines() {
+  printf '%s\n' "$1" | awk -F '\t' '
+    $1 ~ /^ports\.[0-9]+\.(port|host)$/ {
+      split($1, a, "."); i = a[2] + 0; v = substr($0, length($1) + 2)
+      if (a[3] == "port") p[i] = v; else h[i] = v
+      if (i + 1 > n) n = i + 1
+    }
+    END { for (i = 0; i < n; i++) if (p[i] != "") print p[i] "\t" (h[i] != "" ? h[i] : p[i]) }'
+}
+
+# listening PORT: whether something in this laptop listens on TCP PORT (any address).
+listening() {
+  hex=$(printf '%04X' "$1")
+  cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk -v h="$hex" '
+    NR > 1 && $4 == "0A" { split($2, a, ":"); if (toupper(a[length(a)]) == h) { found = 1; exit } }
+    END { exit found ? 0 : 1 }'
+}
+
+cmd_ports() {
+  load_state || return 1
+  ports=$(port_lines "$LAPTOP_FLAT")
+  if [ -z "$ports" ]; then
+    echo "No ports of laptop \"$LAPTOP_NAME\" are forwarded to the user's computer."
+    echo "A server you start here is not reachable from the user's browser. Ask the user to add its"
+    echo "port in AgentBook: Ports... on this laptop's card (then it opens at http://localhost:<port>)."
+    return 0
+  fi
+  printf 'Ports of laptop "%s" forwarded to the user'"'"'s computer (while the laptop works and AgentBook is open):\n' "$LAPTOP_NAME"
+  printf '%s\n' "$ports" | while IFS="$(printf '\t')" read -r p h; do
+    if listening "$p"; then now="a server listens on it now"; else now="nothing listens on it yet"; fi
+    printf '  %s here -> http://localhost:%s on the user'"'"'s computer  (%s)\n' "$p" "$h" "$now"
+  done
+  echo "Give the user that http://localhost:<port> address. A server may listen on localhost only."
+  echo "Another port is not reachable: ask the user to add it in AgentBook (Ports... on the laptop card)."
+}
+
 # --- Variables --------------------------------------------------------------------------------
 # The tool rewrites the env file of a running laptop whenever the user changes its Variables, but a
 # session reads it only when it starts. `ws env` reads the file again on every call, so a Variable
@@ -568,6 +610,7 @@ ws: AgentBook laptop helper
   ws whoami   this laptop, its shared folder, git repos (branches, worktrees, uncommitted
               changes), the other laptops of the folder and the Variable names
   ws mounts   folders from the user's computer this laptop sees, and their modes
+  ws ports    ports of this laptop forwarded to the user's computer (http://localhost:...)
   ws env [ls]          the Variable names, marking those added or changed after this
                        session started
   ws env get NAME      the current value of one Variable
@@ -578,6 +621,7 @@ EOF
 case ${1:-} in
   whoami) cmd_whoami ;;
   mounts) cmd_mounts ;;
+  ports) cmd_ports ;;
   env)
     shift
     cmd_env "$@"

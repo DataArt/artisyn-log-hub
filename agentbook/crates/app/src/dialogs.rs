@@ -79,10 +79,29 @@ pub enum Dialog {
     Update { laptop: String, action: u64 },
     ClaudeDir { folder: String, choice: String },
     Rename { laptop: String, name: String },
+    Ports(PortsDraft),
     About,
 }
 
 impl Dialog {
+    /// "Ports…" with the laptop's current forwards.
+    pub fn ports(lv: &agentbook_engine::LaptopView) -> Dialog {
+        let mut rows: Vec<(String, String)> = lv
+            .ports
+            .iter()
+            .map(|p| (p.port.to_string(), p.host.to_string()))
+            .collect();
+        if rows.is_empty() {
+            rows.push((String::new(), String::new()));
+        }
+        Dialog::Ports(PortsDraft {
+            laptop: lv.laptop.id.clone(),
+            rows,
+            defaults: false,
+            error: None,
+        })
+    }
+
     pub fn get_laptop(app: &App, folder: &str) -> Option<Dialog> {
         let name = app.engine()?.suggest_name(folder);
         Some(Dialog::GetLaptop(Draft {
@@ -292,6 +311,7 @@ pub fn show(app: &mut App, ctx: &egui::Context, snap: &Snapshot, dialog: &mut Di
         Dialog::Update { laptop, action } => update(app, ctx, snap, laptop, action),
         Dialog::ClaudeDir { folder, choice } => claude_dir(app, ctx, snap, folder, choice),
         Dialog::Rename { laptop, name } => rename(app, ctx, snap, laptop, name),
+        Dialog::Ports(d) => ports(app, ctx, snap, d),
         Dialog::About => about(ctx),
     }
 }
@@ -1368,4 +1388,159 @@ fn disconnects(sessions: u32) -> String {
     } else {
         format!("{sessions} Claude Desktop sessions disconnect")
     }
+}
+
+/// "Ports…": the laptop's forwarded ports as text rows (port in the laptop, port here).
+#[derive(Debug, Clone)]
+pub struct PortsDraft {
+    pub laptop: String,
+    pub rows: Vec<(String, String)>,
+    /// "Use the devcontainer's" was pressed: saving clears the laptop's own list.
+    pub defaults: bool,
+    pub error: Option<String>,
+}
+
+/// The rows as forwards: an empty "on this computer" means the same port. The plain message
+/// names the first row that is not a port.
+fn parse_ports(
+    rows: &[(String, String)],
+) -> Result<Vec<agentbook_core::state::PortForward>, String> {
+    let mut out = Vec::new();
+    for (port, host) in rows {
+        let (port, host) = (port.trim(), host.trim());
+        if port.is_empty() && host.is_empty() {
+            continue;
+        }
+        let p: u16 = port
+            .parse()
+            .map_err(|_| format!("\"{port}\" is not a port (1 to 65535)."))?;
+        let h: u16 = if host.is_empty() {
+            p
+        } else {
+            host.parse()
+                .map_err(|_| format!("\"{host}\" is not a port (1 to 65535)."))?
+        };
+        out.push(agentbook_core::state::PortForward::new(p, h));
+    }
+    agentbook_core::ports::check(&out)?;
+    Ok(out)
+}
+
+fn ports(app: &mut App, ctx: &egui::Context, snap: &Snapshot, d: &mut PortsDraft) -> bool {
+    let Some(lv) = snap.laptop(&d.laptop) else {
+        return false;
+    };
+    let defaults: Vec<u16> = snap
+        .folder(&lv.laptop.folder_id)
+        .map(|f| f.equipment.forward_ports.clone())
+        .unwrap_or_default();
+    let mut save = false;
+    let mut cancel = false;
+    let (_, closed) = modal(
+        ctx,
+        "ports",
+        480.0,
+        title(format!("Ports of \"{}\"", lv.laptop.name)),
+        |ui| {
+            ui.label(theme::small(
+                "A server the agent starts in the laptop (a dev server, an API) opens in your \
+                 browser at localhost:<port on this computer>. AgentBook forwards these while the \
+                 laptop works and AgentBook is open. The server may listen on localhost.",
+            ));
+            ui.add_space(8.0);
+            egui::Grid::new("ports-grid")
+                .num_columns(3)
+                .spacing([10.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label(theme::caption("In the laptop"));
+                    ui.label(theme::caption("On this computer"));
+                    ui.label("");
+                    ui.end_row();
+                    let mut remove = None;
+                    for (i, (port, host)) in d.rows.iter_mut().enumerate() {
+                        let a = ui.add(
+                            egui::TextEdit::singleline(port)
+                                .desired_width(110.0)
+                                .hint_text("5173"),
+                        );
+                        let b = ui.add(
+                            egui::TextEdit::singleline(host)
+                                .desired_width(110.0)
+                                .hint_text("same"),
+                        );
+                        if a.changed() || b.changed() {
+                            d.defaults = false;
+                            d.error = None;
+                        }
+                        if ui
+                            .small_button("✕")
+                            .on_hover_text("Stop forwarding")
+                            .clicked()
+                        {
+                            remove = Some(i);
+                        }
+                        ui.end_row();
+                    }
+                    if let Some(i) = remove {
+                        d.rows.remove(i);
+                        d.defaults = false;
+                    }
+                });
+            if theme::link(ui, "+ Add a port").clicked() {
+                d.rows.push((String::new(), String::new()));
+                d.defaults = false;
+            }
+            if !defaults.is_empty() {
+                ui.add_space(6.0);
+                ui.horizontal_wrapped(|ui| {
+                    let list: Vec<String> = defaults.iter().map(u16::to_string).collect();
+                    ui.label(theme::small(format!(
+                        "The devcontainer forwards: {}.",
+                        list.join(", ")
+                    )));
+                    if theme::link(ui, "Use these").clicked() {
+                        d.rows = defaults
+                            .iter()
+                            .map(|p| (p.to_string(), p.to_string()))
+                            .collect();
+                        d.defaults = true;
+                        d.error = None;
+                    }
+                });
+            }
+            if let Some(e) = &d.error {
+                ui.add_space(6.0);
+                ui.label(RichText::new(e).color(theme::RED));
+            }
+            ui.add_space(10.0);
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if theme::primary(ui, "Save").clicked() {
+                    save = true;
+                }
+                if theme::secondary(ui, "Cancel").clicked() {
+                    cancel = true;
+                }
+            });
+        },
+    );
+    if save {
+        if d.defaults {
+            app.run(Command::SetPorts {
+                laptop: d.laptop.clone(),
+                ports: None,
+            });
+            return false;
+        }
+        match parse_ports(&d.rows) {
+            Ok(list) => {
+                app.run(Command::SetPorts {
+                    laptop: d.laptop.clone(),
+                    ports: Some(list),
+                });
+                return false;
+            }
+            Err(e) => d.error = Some(e),
+        }
+    }
+    !(closed || cancel)
 }

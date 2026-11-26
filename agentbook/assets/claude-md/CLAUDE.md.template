@@ -29,6 +29,7 @@ that happened.
   Variable names. Answer "where am I?" from it.
 - `ws mounts`: the connected folders, each with its path here, its folder on the user's computer
   and its mode.
+- `ws ports`: the ports of this laptop forwarded to the user's computer (see below).
 - `ws env`: the Variables as they are now (see below): `ws env ls`, `ws env get NAME`,
   `ws env run <command>`.
 
@@ -50,6 +51,16 @@ The user decides how to work; this is advice.
 - A part of the shared folder that is not a git repo has no worktrees. Say so and let the user
   decide.
 - Commit when the user asks. Do not push unless the user asks and credentials are available here.
+
+## Servers and ports
+
+The user's browser reaches this laptop only through the ports AgentBook forwards (an SSH tunnel
+to `localhost` here, while the laptop works and AgentBook is open). Before you give the user a URL
+for a server you started (a dev server, an API), run `ws ports`: it lists each forwarded port with
+its `http://localhost:<port>` address on the user's computer and whether a server listens on it.
+The server may listen on `localhost` only. Never offer a Docker network address (`172.17…`) or
+an SSH tunnel of your own. If the port is not forwarded, ask the user to add it in AgentBook
+(**Ports…** on this laptop's card), or start the server on a port that is.
 
 ## What survives
 

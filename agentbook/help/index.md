@@ -17,6 +17,7 @@ of your computer.
 | **Give a folder** | Lets one laptop also see another folder of your computer. |
 | **View only** | A given folder the agent can read but not change. |
 | **Equipment** | The programs on a laptop: from the project (its `.devcontainer`), or the standard Equipment. |
+| **Ports** | A server the agent starts on a laptop, opened in your browser at `localhost:<port>`. |
 | **Variables** | Values that programs on the laptops read, such as a project's address or token. A secret value is **Hidden**. |
 | **Remove laptop** | Deletes the laptop and what the agent installed on it. Your folders are never touched. |
 
@@ -32,7 +33,7 @@ The laptop picture is helpful, but two things work differently from a real lapto
 ## Help pages
 
 - [Getting started](help:getting-started) — install, the SmartScreen step, the first laptop
-- [Laptops](help:laptops) — Open, Sleep, Wake up, rename, remove
+- [Laptops](help:laptops) — Open, Sleep, Wake up, ports, rename, remove
 - [Folders](help:folders) — shared and given folders, View only, a moved folder
 - [Equipment](help:equipment) — what is on a laptop, builds, "Equipment changed"
 - [Variables](help:variables) — values for programs on the laptops, Hidden values

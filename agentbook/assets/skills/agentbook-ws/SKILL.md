@@ -1,6 +1,6 @@
 ---
 name: agentbook-ws
-description: Use whenever you need to know where you are on this AgentBook laptop - which laptop this is, its shared folder, the git repos with their branches, worktrees and uncommitted changes, the other laptops working on the same files, or which folders from the user's computer you can see and whether they are View only - and whenever an environment variable (a Variable the user set, such as a token) is missing or was just added. Run `ws whoami`, `ws mounts` or `ws env` instead of guessing.
+description: Use whenever you need to know where you are on this AgentBook laptop - which laptop this is, its shared folder, the git repos with their branches, worktrees and uncommitted changes, the other laptops working on the same files, or which folders from the user's computer you can see and whether they are View only, or the URL a server you started has on the user's computer - and whenever an environment variable (a Variable the user set, such as a token) is missing or was just added. Run `ws whoami`, `ws mounts`, `ws ports` or `ws env` instead of guessing.
 ---
 
 # Where am I? (`ws`)
@@ -35,6 +35,12 @@ computer` with its mode:
 - **View only**: writing fails; do not try to work around it, ask the user.
 
 Nothing else on the user's computer is visible from the laptop.
+
+## `ws ports`
+
+The ports of this laptop the user's computer reaches (`http://localhost:<port>` there), each with
+whether a server listens on it now. Run it before giving the user a URL for a server you started;
+if the port is missing, ask the user to add it in AgentBook (**Ports…** on the laptop card).
 
 ## `ws env`
 

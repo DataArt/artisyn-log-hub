@@ -246,8 +246,34 @@ pub struct Laptop {
     /// "Only for one laptop" variable settings.
     #[serde(default)]
     pub laptop_vars: Vec<VarSetting>,
+    /// Forwarded ports as the user set them in "Ports…"; `None` (never set) means the folder
+    /// devcontainer's `forwardPorts`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ports: Option<Vec<PortForward>>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// A port of the laptop forwarded to this computer: `localhost:<host>` here reaches
+/// `localhost:<port>` inside the laptop (an SSH tunnel AgentBook keeps while the laptop works).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortForward {
+    /// The port inside the laptop.
+    pub port: u16,
+    /// The port on this computer.
+    pub host: u16,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl PortForward {
+    pub fn new(port: u16, host: u16) -> Self {
+        Self {
+            port,
+            host,
+            extra: Map::new(),
+        }
+    }
 }
 
 /// A given (extra host) folder of a laptop.
@@ -375,6 +401,20 @@ pub struct LaptopInfo {
     /// Variable names only, never values.
     #[serde(default)]
     pub vars: Vec<String>,
+    /// Forwarded ports (`ws ports`).
+    #[serde(default)]
+    pub ports: Vec<PortInfo>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// A forwarded port as `ws ports` shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PortInfo {
+    /// The port inside the laptop.
+    pub port: u16,
+    /// The port on the user's computer.
+    pub host: u16,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }

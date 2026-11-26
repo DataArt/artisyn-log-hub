@@ -167,7 +167,7 @@ Fixed from version 1, so a laptop created by an older tool keeps working:
   `~/.claude/settings.json` whose command is exactly `/opt/agentbook/bin/prompt-hook` (the merge
   key), host `~/.claude/{skills,agents,commands}` replaced by name, and the reserved
   `~/.claude/skills/agentbook-ws/`. `.credentials.json` is never copied.
-- `ws whoami`, `ws mounts`, `ws env`: plain text in the UI vocabulary (`ws env get` prints one raw value).
+- `ws whoami`, `ws mounts`, `ws ports` (forwarded ports from `laptops/<id>.json` `ports`, each with whether something listens on it, from `/proc/net/tcp`), `ws env`: plain text in the UI vocabulary (`ws env get` prints one raw value).
 - The laptop's host key is generated with the comment `agentbook-laptop-<id>`
   (`assets::host_key_comment`): the state directory is shared by every laptop of a folder, so
   `ws` reads which laptop it is on from that comment of `/opt/agentbook/key/ssh_host_ed25519_key.pub`
@@ -191,7 +191,7 @@ of these files (`layer::version()`, `standard::version()`), so any change marks 
 | `layer/session.sh` | `ForceCommand`: sources `base.env` (keeping the session's HOME/USER/LOGNAME/SHELL), then `env/session.env` with `set -a`, then runs `$SSH_ORIGINAL_COMMAND` or a login shell. |
 | `standard/Dockerfile` | `agentbook-std`: `ubuntu:24.04@sha256:…` (the only place the digest is named; `standard::base_image()` reads it), git, ca-certificates, curl, xz-utils from apt, Node from the host-downloaded `node-linux.tar.xz` checked against build arg `NODE_SHA256` (pins in `agentbook_core::pins`), `CMD sleep infinity`. |
 | `tools/ws`, `tools/prompt-hook` | The `/opt/agentbook/bin` files. `ws` has a small awk JSON flattener, so it needs no `jq` and ignores unknown fields; it finds repos up to 4 levels below the shared folder (skipping `node_modules`, `.worktrees` and linked worktrees). `prompt-hook` runs `ws __prompt-hook`: branch from `.git/HEAD`, `git status --porcelain -uno` under `timeout 1` (`?` on timeout), cached 5 s per repo in `~/.cache/agentbook/`, plus a "Connected folders changed" line when the given folders differ from its last run (the first run only records them). |
-| `skills/agentbook-ws/SKILL.md` | The `agentbook-ws` skill: when and how to use `ws whoami` / `ws mounts` / `ws env`. |
+| `skills/agentbook-ws/SKILL.md` | The `agentbook-ws` skill: when and how to use `ws whoami` / `ws mounts` / `ws ports` / `ws env`. |
 | `claude-md/CLAUDE.md.template` | `~/.claude/CLAUDE.md`, rendered by `assets::claude_md::render` (`{{laptop_name}}`, `{{shared_folder_name}}`, `{{shared_path}}`, `{{shared_host_path}}`, `{{home}}`, `{{connected_folders}}`, `{{variables}}`; names only, substituted text is not re-scanned). |
 
 A failed layer build whose log has the `AGENTBOOK-LAYER-UNSUPPORTED` marker (shell but no apt-get /
@@ -318,6 +318,19 @@ apk) or a `/bin/sh` "no such file" error (scratch, distroless) is mapped by
   `LaptopView::needs_value`, and `deliver`: the env file written over `docker exec` stdin as root
   (`umask 077`, owned by the SSH user, renamed into place). `Secret`'s `Debug` never shows the
   value.
+- `tunnels.rs` (forwarded ports): `Laptop.ports` (`None` = the folder devcontainer's
+  `forwardPorts`, read into `FolderEquipment.forward_ports` at the Equipment check; rules in
+  `agentbook-forward-ports`). One `ssh -F ~/.ssh/agentbook/config -N -o ExitOnForwardFailure=yes
+  -L 127.0.0.1:<host>:localhost:<port> sbx-<id>` per port of a Working laptop, like VS Code's
+  `forwardPorts`: it arrives at `localhost` in the laptop, so a dev server bound to localhost
+  (Vite) works and the container is never recreated (a Docker `-p` publish would reach only
+  the container's external interface and need a recreate). The poller reconciles every laptop
+  each tick (ends tunnels of a laptop that is not Working or of a removed port, restarts an ended
+  one at most every 15 s, reports a host port another program holds as `PortState::Taken`);
+  `SetPorts` stores the list and reconciles at once. Tunnels end with AgentBook (kill on drop).
+  `LaptopView.ports` / `PortView` feed the card's Ports section and the Ports… dialog;
+  `LaptopInfo.ports` feeds `ws ports`. A folder on the standard Equipment that later gets one
+  devcontainer offers it (`FolderView.config_choices`). Scenario step `ports`.
 - `poller.rs`: every 5 s (`POLL_INTERVAL`), for each laptop whose lock it can take (a laptop an
   action holds is skipped: the action sets its state, and a look taken meanwhile would overwrite
   a fresh Working with a stale Sleeping), lists that laptop's containers by label (Working /
@@ -458,7 +471,7 @@ particular no font exception, so egui's bundled OFL / Ubuntu-font fonts must sta
   `agentbook-variables` (Hidden-by-name, resolution, env file), `agentbook-ssh-user`,
   `agentbook-equipment` (config hash, libc switch), `agentbook-host-exposure`,
   `agentbook-override-config`, `agentbook-autocrlf`, `agentbook-docker-endpoint`,
-  `agentbook-session-count`, `agentbook-openssh-version`.
+  `agentbook-session-count`, `agentbook-openssh-version`, `agentbook-forward-ports`.
 - **API contract** — none (no routes).
 - **Scenario** — the Rust suite in `agentbook/tests/scenarios/` (the `scenarios` test target of
   `agentbook-engine`, `harness = false`), driven by `scripts/scenarios.mjs`. It drives `Engine` with

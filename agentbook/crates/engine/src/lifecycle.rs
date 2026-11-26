@@ -595,6 +595,7 @@ pub(crate) async fn get_laptop(
         libc: None,
         generation: 0,
         laptop_vars: Vec::new(),
+        ports: None,
         extra: Map::new(),
     };
     check_sources(&folder, &laptop)?;
@@ -766,6 +767,35 @@ pub(crate) fn rename(ctx: &Ctx, laptop_id: &str, name: &str) -> EngineResult<()>
         }
     })?;
     context::write_folder_state(ctx, &folder.id)
+}
+
+/// "Ports…": stores the laptop's forwarded ports (`None`: the devcontainer's again) and brings
+/// its tunnels in line at once; the container is not touched.
+pub(crate) async fn set_ports(
+    ctx: &Arc<Ctx>,
+    laptop_id: &str,
+    ports: Option<Vec<agentbook_core::state::PortForward>>,
+) -> EngineResult<()> {
+    if let Some(list) = &ports {
+        agentbook_core::ports::check(list).map_err(EngineError)?;
+    }
+    let lock = ctx.laptop_lock(laptop_id);
+    let _guard = lock.lock().await;
+    let (folder, _) = equipment::find_laptop(ctx, laptop_id)?;
+    ctx.modify_state(|s| {
+        if let Some(l) = s.laptops.iter_mut().find(|l| l.id == laptop_id) {
+            l.ports = ports.clone();
+        }
+    })?;
+    let (_, laptop) = equipment::find_laptop(ctx, laptop_id)?;
+    let working = ctx.read_snapshot(|s| {
+        s.laptop(laptop_id)
+            .is_some_and(|l| l.run == RunState::Working)
+    });
+    crate::tunnels::reconcile(ctx, laptop_id, &ctx.forwards_of(&laptop), working);
+    context::write_folder_state(ctx, &folder.id)?;
+    ctx.refresh_views();
+    Ok(())
 }
 
 /// Give a folder, change its mode or remove it (FR-8): the container is recreated with the new

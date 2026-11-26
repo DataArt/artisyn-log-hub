@@ -27,6 +27,7 @@ const STEPS: &[Step] = &[
     ("ac6", ac6::run),
     ("ac6-compose", ac6::run_compose),
     ("laptops", laptops::run),
+    ("ports", laptops::run_ports),
     ("wsl-keep-alive", laptops::run_wsl_keep_alive),
     ("wsl-owner", laptops::run_wsl_owner),
     ("given", given::run),

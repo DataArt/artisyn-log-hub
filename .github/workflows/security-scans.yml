@@ -389,6 +389,9 @@ jobs:
             GPL-1.0-only, GPL-1.0-or-later, GPL-2.0-only, GPL-2.0-or-later,
             GPL-3.0-only, GPL-3.0-or-later, AGPL-1.0-only, AGPL-1.0-or-later,
             AGPL-3.0-only, AGPL-3.0-or-later
+          # Dual-licensed, used under the non-GPL option (the action flags any OR expression that
+          # names a denied licence). self_cell (egui, AgentBook): "Apache-2.0 OR GPL-2.0-only".
+          allow-dependencies-licenses: pkg:cargo/self_cell
 
       - name: Write row
         if: always()

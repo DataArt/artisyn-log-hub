@@ -151,6 +151,15 @@ pub(crate) fn write_folder_state(ctx: &Ctx, folder_id: &str) -> EngineResult<()>
                 .to_string(),
             given,
             vars: vars::names(&vars::effective(&defaults, folder, Some(l))),
+            ports: ctx
+                .forwards_of(l)
+                .into_iter()
+                .map(|f| agentbook_core::state::PortInfo {
+                    port: f.port,
+                    host: f.host,
+                    extra: Map::new(),
+                })
+                .collect(),
             extra: Map::new(),
         };
         write(

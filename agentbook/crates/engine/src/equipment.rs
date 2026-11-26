@@ -74,6 +74,8 @@ pub(crate) struct Prepared {
     pub ssh_user: SshUser,
     /// The project's variable defaults (`containerEnv`, then `remoteEnv`).
     pub defaults: Vec<(String, String)>,
+    /// The devcontainer's `forwardPorts` (the default forwarded ports of its laptops).
+    pub forward_ports: Vec<u16>,
 }
 
 /// One generation's record (`laptops/<id>/gen/<n>/meta.json`): what the container was created
@@ -199,6 +201,7 @@ pub(crate) async fn prepare(
             exposures: Vec::new(),
             ssh_user: ssh_user::resolve(None, None),
             defaults: Vec::new(),
+            forward_ports: Vec::new(),
         }),
         EquipmentKind::Project => {
             let rel = folder.equipment.config.as_deref().ok_or_else(|| {
@@ -236,6 +239,7 @@ pub(crate) async fn prepare(
                 folder: folder.clone(),
                 exposures: host_exposure::detect(&rc.merged),
                 defaults: crate::vars::project_defaults(&rc.merged),
+                forward_ports: agentbook_core::ports::devcontainer_ports(&rc.merged),
                 project: Some(project),
                 hash,
                 ssh_user,
@@ -258,12 +262,14 @@ fn folder_equipment(result: &EngineResult<Prepared>) -> FolderEquipment {
                 .collect(),
             error: None,
             defaults: p.defaults.clone(),
+            forward_ports: p.forward_ports.clone(),
         },
         Err(e) => FolderEquipment {
             hash: None,
             exposures: Vec::new(),
             error: Some(e.0.clone()),
             defaults: Vec::new(),
+            forward_ports: Vec::new(),
         },
     }
 }

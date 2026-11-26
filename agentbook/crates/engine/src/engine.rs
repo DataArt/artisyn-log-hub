@@ -17,8 +17,8 @@ use crate::layout::DataLayout;
 use crate::lifecycle::{GivenChange, GivenInput, LaptopDraft};
 use crate::lock::{InstanceLock, LockError};
 use crate::snapshot::{
-    ActionView, DockerStatus, FolderEquipment, FolderView, LaptopView, OpensshStatus, RunState,
-    Snapshot,
+    ActionView, DockerStatus, FolderEquipment, FolderView, LaptopView, OpensshStatus, PortView,
+    RunState, Snapshot,
 };
 use crate::vars::VarEdit;
 use crate::{context, deps, equipment, lifecycle, poller, vars};
@@ -127,6 +127,12 @@ pub enum Command {
         laptop: String,
         name: String,
     },
+    /// "Ports…": the laptop's forwarded ports (`None`: back to the devcontainer's `forwardPorts`).
+    /// Tunnels change at once; the container is not recreated.
+    SetPorts {
+        laptop: String,
+        ports: Option<Vec<agentbook_core::state::PortForward>>,
+    },
     /// "Give a folder" on the go (recreates the container, volume kept).
     GiveFolder {
         laptop: String,
@@ -230,6 +236,8 @@ pub(crate) struct Ctx {
     next_action: AtomicU64,
     /// Folders whose `.claude/` question is open, with the choices.
     claude_choices: Mutex<HashMap<String, Vec<String>>>,
+    /// The SSH tunnels of the forwarded ports.
+    pub(crate) tunnels: crate::tunnels::Tunnels,
 }
 
 impl Ctx {
@@ -296,11 +304,14 @@ impl Ctx {
             .map(|f| {
                 let root = Path::new(&f.path);
                 let configs = lifecycle::devcontainer_configs(root);
-                let configs = if configs.len() > 1 {
-                    configs
-                } else {
-                    Vec::new()
-                };
+                // A choice exists with several configs, or with one the folder does not use (a
+                // devcontainer added after the folder was, on the standard Equipment).
+                let configs =
+                    if configs.len() > 1 || (configs.len() == 1 && f.equipment.config.is_none()) {
+                        configs
+                    } else {
+                        Vec::new()
+                    };
                 (
                     f.id.clone(),
                     (!root.is_dir(), configs, crate::repos::scan(root)),
@@ -390,10 +401,36 @@ impl Ctx {
                         missing_sources: missing.get(&l.id).cloned().unwrap_or_default(),
                         note,
                         claude_setup_kb,
+                        ports: agentbook_core::ports::effective(
+                            l.ports.as_deref(),
+                            folder
+                                .map(|f| f.equipment.forward_ports.as_slice())
+                                .unwrap_or_default(),
+                        )
+                        .into_iter()
+                        .map(|f| PortView {
+                            state: self.tunnels.state(&l.id, f.port, f.host),
+                            port: f.port,
+                            host: f.host,
+                        })
+                        .collect(),
                     }
                 })
                 .collect();
         });
+    }
+
+    /// A laptop's forwarded ports: its own list, else its folder devcontainer's `forwardPorts`.
+    pub(crate) fn forwards_of(
+        &self,
+        laptop: &agentbook_core::state::Laptop,
+    ) -> Vec<agentbook_core::state::PortForward> {
+        let defaults = self.read_snapshot(|s| {
+            s.folder(&laptop.folder_id)
+                .map(|f| f.equipment.forward_ports.clone())
+                .unwrap_or_default()
+        });
+        agentbook_core::ports::effective(laptop.ports.as_deref(), &defaults)
     }
 
     /// Records a laptop's run state (and session count, when known).
@@ -572,6 +609,7 @@ impl Engine {
             laptop_locks: Mutex::new(HashMap::new()),
             next_action: AtomicU64::new(1),
             claude_choices: Mutex::new(HashMap::new()),
+            tunnels: crate::tunnels::Tunnels::default(),
         });
         ctx.refresh_views();
         let engine = Engine {
@@ -616,6 +654,7 @@ impl Engine {
             Command::Sleep { laptop } => ("sleep", some(laptop), None),
             Command::WakeUp { laptop } => ("wake-up", some(laptop), None),
             Command::Rename { laptop, .. } => ("rename", some(laptop), None),
+            Command::SetPorts { laptop, .. } => ("ports", some(laptop), None),
             Command::GiveFolder { laptop, .. } => ("give-folder", some(laptop), None),
             Command::SetGivenMode { laptop, .. } => ("given-mode", some(laptop), None),
             Command::RemoveGiven { laptop, .. } => ("remove-given", some(laptop), None),
@@ -680,6 +719,9 @@ impl Engine {
                 Command::WakeUp { laptop } => lifecycle::open(&ctx, &laptop, false, &action).await,
                 Command::Sleep { laptop } => lifecycle::sleep(&ctx, &laptop).await,
                 Command::Rename { laptop, name } => lifecycle::rename(&ctx, &laptop, &name),
+                Command::SetPorts { laptop, ports } => {
+                    lifecycle::set_ports(&ctx, &laptop, ports).await
+                }
                 Command::GiveFolder {
                     laptop,
                     path,

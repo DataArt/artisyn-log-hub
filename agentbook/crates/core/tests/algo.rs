@@ -14,7 +14,7 @@ use serde_json::{Map, Value, json};
 use agentbook_core::state::{Libc, VarOrigin, VarSetting, VarValue};
 use agentbook_core::{
     autocrlf, broad_folder, claude_dir, docker_endpoint, equipment, host_exposure, openssh,
-    override_config, paths, sessions, ssh_user, state, variables,
+    override_config, paths, ports, sessions, ssh_user, state, variables,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -607,5 +607,46 @@ fn agentbook_openssh_version() {
             "version": v.map(|(a, b)| format!("{a}.{b}")),
             "ok": v.is_some_and(openssh::meets_floor),
         }))
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
+// agentbook-forward-ports
+// ---------------------------------------------------------------------------------------------
+
+fn forwards(v: Option<&Value>) -> Result<Vec<state::PortForward>, String> {
+    serde_json::from_value(v.cloned().unwrap_or(Value::Array(Vec::new())))
+        .map_err(|e| e.to_string())
+}
+
+fn forwards_json(list: &[state::PortForward]) -> Value {
+    Value::Array(
+        list.iter()
+            .map(|f| json!({"port": f.port, "host": f.host}))
+            .collect(),
+    )
+}
+
+#[test]
+fn agentbook_forward_ports() {
+    run_table("agentbook-forward-ports", |input| match op(input) {
+        "devcontainer" => Ok(json!({
+            "ports": ports::devcontainer_ports(input.get("merged").unwrap_or(&Value::Null))
+        })),
+        "effective" => {
+            let set = match input.get("set") {
+                Some(v) => Some(forwards(Some(v))?),
+                None => None,
+            };
+            let dc: Vec<u16> =
+                serde_json::from_value(input.get("devcontainer").cloned().unwrap_or(json!([])))
+                    .map_err(|e| e.to_string())?;
+            Ok(json!({"ports": forwards_json(&ports::effective(set.as_deref(), &dc))}))
+        }
+        "check" => Ok(match ports::check(&forwards(input.get("list"))?) {
+            Ok(()) => json!({"ok": true}),
+            Err(e) => json!({"ok": false, "error": e}),
+        }),
+        other => Err(format!("unknown op {other:?}")),
     });
 }

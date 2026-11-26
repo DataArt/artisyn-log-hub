@@ -6,7 +6,7 @@ use agentbook_core::equipment::EquipmentState;
 use agentbook_core::paths::host_basename;
 use agentbook_core::state::EquipmentKind;
 use agentbook_engine::{
-    ActionState, ActionView, Command, FolderView, LaptopView, RunState, Snapshot,
+    ActionState, ActionView, Command, FolderView, LaptopView, PortState, RunState, Snapshot,
 };
 use egui::{Align, Layout, RichText, Ui};
 
@@ -71,6 +71,9 @@ fn menu(app: &mut App, ui: &mut Ui, lv: &LaptopView) {
         }
         if ui.button("🔑 Variables…").clicked() {
             app.dialog = Some(Dialog::variables(app, &lv.laptop.folder_id));
+        }
+        if ui.button("🔌 Ports…").clicked() {
+            app.dialog = Some(Dialog::ports(lv));
         }
         if ui.button("⧉ Another laptop like this").clicked() {
             app.dialog = Dialog::like_this(app, id, None);
@@ -139,6 +142,54 @@ fn open_button(app: &mut App, ui: &mut Ui, lv: &LaptopView, building: bool, size
     }
     if building {
         ui.label(theme::small("opens when ready"));
+    }
+}
+
+/// The forwarded ports: `localhost:<host>` (opens in the browser) → the laptop's port, and how
+/// the tunnel is; "Ports…" changes them.
+fn ports_section(app: &mut App, ui: &mut Ui, lv: &LaptopView) {
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        ui.label(theme::caption("Ports"));
+        if theme::link(ui, "🔌 Ports…").clicked() {
+            app.dialog = Some(Dialog::ports(lv));
+        }
+    });
+    if lv.ports.is_empty() {
+        ui.label(theme::small(
+            "None. Add one to open a server the agent starts here (e.g. a dev server) in your browser.",
+        ));
+    }
+    for p in &lv.ports {
+        ui.horizontal(|ui| {
+            let url = format!("http://localhost:{}", p.host);
+            let (color, words) = match &p.state {
+                PortState::Forwarding => (theme::GREEN, String::new()),
+                PortState::Starting => (theme::ACCENT, "opening…".to_string()),
+                PortState::Off => (theme::MUTED, "while the laptop works".to_string()),
+                PortState::Taken => (
+                    theme::RED,
+                    "another program on this computer uses this port; pick another one in Ports…"
+                        .to_string(),
+                ),
+                PortState::Failed(why) => (theme::RED, format!("not forwarded: {why}")),
+            };
+            theme::dot(ui, color);
+            if p.state == PortState::Forwarding {
+                if theme::link(ui, format!("localhost:{}", p.host))
+                    .on_hover_text(format!("Open {url}"))
+                    .clicked()
+                {
+                    let _ = app.platform.open_url(&url);
+                }
+            } else {
+                ui.label(RichText::new(format!("localhost:{}", p.host)).size(12.5));
+            }
+            ui.label(theme::small(format!("→ {} in the laptop", p.port)));
+            if !words.is_empty() {
+                ui.label(RichText::new(words).size(12.0).color(color));
+            }
+        });
     }
 }
 
@@ -723,6 +774,7 @@ pub fn card(app: &mut App, ui: &mut Ui, snap: &Snapshot, fv: &FolderView, lv: &L
                 });
             });
         }
+        ports_section(app, ui, lv);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             match &activity {

@@ -123,9 +123,11 @@ fn header(app: &mut App, ui: &mut Ui, fv: &FolderView) {
     // Several devcontainer configs: the folder's choice (FR-7).
     if !fv.config_choices.is_empty() {
         ui.horizontal(|ui| {
-            ui.label(theme::small(
-                "This folder has several devcontainer setups. Use:",
-            ));
+            ui.label(theme::small(if fv.config_choices.len() > 1 {
+                "This folder has several devcontainer setups. Use:"
+            } else {
+                "This folder has a devcontainer setup. Use:"
+            }));
             let current = fv.folder.equipment.config.clone();
             let shown = current
                 .clone()

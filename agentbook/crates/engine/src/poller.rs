@@ -139,7 +139,15 @@ pub(crate) async fn tick(ctx: &Arc<Ctx>) {
         }
         ctx.set_run(&laptop.id, run, Some(sessions));
         ctx.set_claude_setup(&laptop.id, setup);
+        crate::tunnels::reconcile(
+            ctx,
+            &laptop.id,
+            &ctx.forwards_of(laptop),
+            run == RunState::Working,
+        );
     }
+    let ids: Vec<&str> = state.laptops.iter().map(|l| l.id.as_str()).collect();
+    ctx.tunnels.keep_laptops(&ids);
     for folder in changed_folders {
         let _ = context::write_folder_state(ctx, &folder);
     }

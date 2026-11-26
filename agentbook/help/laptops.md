@@ -40,6 +40,23 @@ their modes, and Equipment. It copies the setup only — the new laptop starts f
 agent installed, no sessions and no chat history. Variables set "Only for one laptop" are copied
 too; the dialog names them before you confirm.
 
+## Ports
+
+A server the agent starts on a laptop (a dev server, an API) opens in your browser only through a
+**forwarded port**: `localhost:5173` on your computer reaches port 5173 inside the laptop. The
+**Ports** part of the laptop card lists them; click an address to open it.
+
+- A project whose `.devcontainer` lists `forwardPorts` gets those by default.
+- **Ports…** adds, changes or removes them. Leave "On this computer" empty to use the same port.
+  Two laptops cannot use the same port of your computer at once: give the second one another
+  port (for example 15173 for 5173).
+- Ports are forwarded while the laptop works and AgentBook is open. Changing them does not restart
+  the laptop.
+- "Another program on this computer uses this port" means something else on your computer already
+  listens there; pick another port.
+
+The agent sees the same list with `ws ports` and gives you the right address.
+
 ## What a laptop keeps
 
 The laptop's home folder is kept for its whole life (also when it sleeps, is updated or gets a new

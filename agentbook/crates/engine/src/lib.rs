@@ -18,6 +18,7 @@ mod poller;
 pub mod repos;
 pub mod snapshot;
 pub mod ssh;
+mod tunnels;
 pub mod vars;
 
 pub use engine::{
