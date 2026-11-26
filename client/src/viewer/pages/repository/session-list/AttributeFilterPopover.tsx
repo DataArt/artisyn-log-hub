@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Filter, X } from 'lucide-react';
-import type { SessionAttributionAttributeDef } from '../../../../models/repositories';
+import type {
+  SessionAttributionAttributeDef,
+  SessionTagValues,
+} from '../../../../models/repositories';
 import { fetchSessionAttributionValues } from '../../../api';
 import { Button } from '../../../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/popover';
 import { cn } from '../../../lib/cn';
+import { describeTagFilters, type TagFilter } from '../../../lib/session-tags';
 import type { AttributeFilterSelection } from './session-list-helpers';
+import { TagFilterSection } from './TagFilterSection';
 
 export interface AttributeFilterPopoverProps {
   repoId: number;
@@ -16,6 +21,11 @@ export interface AttributeFilterPopoverProps {
   definitions: SessionAttributionAttributeDef[];
   value: AttributeFilterSelection | null;
   onChange: (next: AttributeFilterSelection | null) => void;
+  /** FR-8 tag discovery of the view; the TAGS section lists its keys (otel-session-tags). */
+  tagValues?: SessionTagValues;
+  /** Active session tag filters (URL `tag=`). */
+  tagFilters?: readonly TagFilter[];
+  onTagFiltersChange?: (next: TagFilter[]) => void;
 }
 
 function formatBucketValue(value: string | number | boolean): string {
@@ -47,6 +57,10 @@ function selectionsEqual(
  * active bucket again clears it. `isnull`/`unattributed` render as their own always-present
  * buckets per attribute (`isnull`) or once at the bottom (`unattributed`, session-wide),
  * independent of whether the values endpoint returned any concrete buckets at all.
+ *
+ * Under the attributes, a TAGS section (2026-11-24 otel-session-tags, FR-6) filters by session
+ * tag; it combines with the attribute selection (AND). The popover renders when either the team
+ * declares attributes or the view has tagged sessions (or an active tag filter).
  */
 export function AttributeFilterPopover({
   repoId,
@@ -54,6 +68,9 @@ export function AttributeFilterPopover({
   definitions,
   value,
   onChange,
+  tagValues,
+  tagFilters = [],
+  onTagFiltersChange,
 }: AttributeFilterPopoverProps) {
   const [open, setOpen] = useState(false);
 
@@ -64,7 +81,15 @@ export function AttributeFilterPopover({
     staleTime: 30_000,
   });
 
-  if (definitions.length === 0) return null;
+  const hasTagSection =
+    onTagFiltersChange !== undefined &&
+    (Object.keys(tagValues?.tags ?? {}).length > 0 || tagFilters.length > 0);
+  if (definitions.length === 0 && !hasTagSection) return null;
+
+  const activeParts: string[] = [];
+  if (value) activeParts.push('attribute');
+  if (tagFilters.length > 0) activeParts.push(describeTagFilters(tagFilters));
+  const anyActive = activeParts.length > 0;
 
   function isActive(next: AttributeFilterSelection): boolean {
     return value !== null && selectionsEqual(value, next);
@@ -95,19 +120,28 @@ export function AttributeFilterPopover({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant={value ? 'default' : 'outline'}
+          data-testid="session-list-filter"
+          variant={anyActive ? 'default' : 'outline'}
           size="sm"
-          className="h-7 gap-1.5 text-xs"
+          className="h-7 max-w-full gap-1.5 text-xs"
+          title={anyActive ? `Filter: ${activeParts.join(', ')}` : undefined}
         >
-          <Filter className="size-3.5" />
-          {value ? 'Attribute filter active' : 'Filter by attribute'}
+          <Filter className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate">
+            {anyActive
+              ? `Filter: ${activeParts.join(', ')}`
+              : 'Filter: all sessions'}
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-h-96 w-80 overflow-y-auto" align="start">
         <div className="flex flex-col gap-3">
-          {value && (
+          {anyActive && (
             <button
-              onClick={() => onChange(null)}
+              onClick={() => {
+                onChange(null);
+                onTagFiltersChange?.([]);
+              }}
               className="flex items-center gap-1 self-start text-xs text-muted-foreground hover:text-foreground"
             >
               <X className="size-3.5" />
@@ -119,6 +153,11 @@ export function AttributeFilterPopover({
             <p className="text-xs text-muted-foreground">Loading values…</p>
           )}
 
+          {definitions.length > 0 && (
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              Session attributes
+            </p>
+          )}
           {definitions.map((def) => {
             const buckets = data?.[def.key] ?? [];
             return (
@@ -140,12 +179,24 @@ export function AttributeFilterPopover({
             );
           })}
 
-          <div className="flex flex-col gap-1 border-t border-border pt-2">
-            {bucketButton(
-              { kind: 'unattributed' },
-              'Unattributed (no evaluation yet)',
-            )}
-          </div>
+          {definitions.length > 0 && (
+            <div className="flex flex-col gap-1 border-t border-border pt-2">
+              {bucketButton(
+                { kind: 'unattributed' },
+                'Unattributed (no evaluation yet)',
+              )}
+            </div>
+          )}
+
+          {hasTagSection && onTagFiltersChange && (
+            <div className="border-t border-border pt-2">
+              <TagFilterSection
+                tagValues={tagValues}
+                value={tagFilters}
+                onChange={onTagFiltersChange}
+              />
+            </div>
+          )}
         </div>
       </PopoverContent>
     </Popover>

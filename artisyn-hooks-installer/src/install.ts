@@ -505,14 +505,11 @@ function convertLegacyEnvToConfigParts(claudeDir: string): {
   assignBase('jsonCompact', bool('JSON_COMPACT'));
   assignBase('sendLogsTimeoutMs', num('SEND_LOGS_TIMEOUT_MS'));
 
-  const context: Array<{ key: string; value: string }> = [];
-  for (const [key, value] of Object.entries(merged)) {
-    if (key.startsWith('CTX_')) {
-      const ctxKey = key.slice(4).toLowerCase();
-      if (ctxKey) context.push({ key: ctxKey, value });
-    }
+  // `CTX_*` used to become the `context` array; the hook stopped reading it (3.4.0) — session
+  // labels are now OTEL resource attributes. Not mapped any more, just named once.
+  if (Object.keys(merged).some((key) => key.startsWith('CTX_'))) {
+    console.log('  Note: CTX_* variables in .env are no longer used — put session labels into OTEL_RESOURCE_ATTRIBUTES (e.g. feature=checkout,team.name=payments) instead.');
   }
-  if (context.length > 0) base['context'] = context;
 
   const local: Record<string, unknown> = {};
   const apiKey = str('API_KEY');
@@ -613,7 +610,7 @@ function printDataCollectionNotice(serverUrl: string | undefined): void {
   console.log(`  The hook uploads to ${serverUrl ?? '(server URL not set yet)'}:`);
   console.log('  - full Claude Code transcripts of this project (prompts, tool inputs/results, file contents,');
   console.log('    command output), including earlier sessions still on disk; transcripts are not redacted');
-  console.log('  - git metadata (remote URL without credentials, user.name, branch) and project context');
+  console.log('  - git metadata (remote URL without credentials, user.name, branch)');
   console.log('  - Claude Code OpenTelemetry records: OTEL export is enabled through the "env" block in');
   console.log('    ~/.claude/settings.json (mirrored in .claude/settings.local.json) and sent to a local');
   console.log('    receiver shared by your repos, which the hook uploads per repo');
@@ -1436,7 +1433,6 @@ async function resolveOtelTracesAnswer(
 export type LogHubConfig = {
   telemetryDir: string;
   jsonCompact: boolean;
-  context: Array<{ key: string; value: string }>;
   serverUrl: string;
   sendLogsTimeoutMs: number;
   // OTEL receiver keys. `otelReceiverPort` is written by the installer from the per-project

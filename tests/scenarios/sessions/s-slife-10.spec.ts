@@ -32,6 +32,8 @@ import type { ScenarioUser } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { ownRepoId, rangeAround, uploadPromptSession, type PromptSession } from '../helpers/prompt-session';
 import { addTeamRepo, createTeam, inviteAndAccept } from '../helpers/teams';
+import { uploadOtelChunk, waitForOtelProjected } from '../helpers/otel';
+import { callLines, otelTurn, withResource } from '../fixtures/otel/otel-lines';
 
 interface SessionRow {
   sessionId: string;
@@ -57,7 +59,6 @@ test('@S-SLIFE-10 team members: transparent shows everyone, restricted only own,
     sessionId: `sl10-${run}-${who}`,
     prompt: `${who} prompt ${run}`,
     repoUrl,
-    context: { owner: `ctx-${who}-${run}` },
   });
   const SA = session('a');
   const SB = session('b');
@@ -72,6 +73,13 @@ test('@S-SLIFE-10 team members: transparent shows everyone, restricted only own,
     ] as Array<[ScenarioUser, PromptSession]>) {
       const key = await createApiKey(user.api);
       await uploadPromptSession(api, key.key, s, { db, userId: user.id });
+      // A session tag from an OTEL resource attribute (2026-11-24 otel-session-tags).
+      const turn = otelTurn(`sl10${s.sessionId.slice(-1)}${run}`, new Date(Date.now() - 60 * 60 * 1000));
+      await uploadOtelChunk(api, key.key, s.sessionId, withResource(callLines(s.sessionId, turn), { owner: `ctx-${s.sessionId.slice(-1)}-${run}` }), {
+        db,
+        userId: user.id,
+      });
+      await waitForOtelProjected(db, s.sessionId);
     }
     const X = await createTeam(userA, `X-${run}`);
     expect((await userA.api.patch(`/api/v1/teams/${X}`, { data: { accessMode: 'transparent' } })).status()).toBe(200);

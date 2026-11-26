@@ -6,7 +6,6 @@ import type {
 } from '../../../models/repositories';
 import {
   ApiError,
-  fetchRepositoryContexts,
   fetchRepositoryDetail,
   fetchRepositorySessions,
   fetchRepositorySummary,
@@ -16,6 +15,8 @@ import { SESSION_POLL_INTERVAL_MS } from '../../lib/settings';
 import { parseSessionLogs } from './session-log/log-parser';
 import { useSessionLogParts } from './session-parts/useSessionLogParts';
 import type { ViewMode } from './session-list/SessionListPanel';
+import { isTagViewMode } from './session-list/tag-view-mode';
+import { useSessionTagValues } from './useSessionTagValues';
 
 interface BranchSelectedSession {
   sessionId: string;
@@ -31,6 +32,8 @@ interface UseRepositoryDataParams {
   branchSelectedSession: BranchSelectedSession | null;
   /** The sessions list `otelReason` filter (2026-10-30 otel-shared-receiver, DD-33). */
   otelReason?: OtelReasonKey | null;
+  /** The personal-repo "my sessions only" user filter; scopes the header tag chips (FR-5). */
+  tagScopeUserEmail?: string;
 }
 
 export function useRepositoryData({
@@ -41,6 +44,7 @@ export function useRepositoryData({
   sessionId,
   branchSelectedSession,
   otelReason = null,
+  tagScopeUserEmail,
 }: UseRepositoryDataParams) {
   const queryClient = useQueryClient();
 
@@ -58,6 +62,7 @@ export function useRepositoryData({
       (viewMode === 'plain' ||
         viewMode === 'date' ||
         viewMode === 'user' ||
+        isTagViewMode(viewMode) ||
         !!sessionId),
     retry: false,
   });
@@ -131,11 +136,13 @@ export function useRepositoryData({
     retry: false,
   });
 
-  const repoContextsQuery = useQuery({
-    queryKey: ['repo-contexts', repoId, teamId],
-    queryFn: () => fetchRepositoryContexts(repoId, teamId),
-    enabled: !isInvalidId,
-  });
+  // The repository-header tag chips (FR-5 / FR-8): discovery over the sessions this view shows.
+  const repoTagValuesQuery = useSessionTagValues(
+    repoId,
+    teamId,
+    tagScopeUserEmail,
+    !isInvalidId,
+  );
 
   // `teamId` in the key and the request: a team member reads a teammate's repo through the
   // team's access (D4.8). The `['repo-detail', repoId]` prefix invalidations still match.
@@ -344,7 +351,7 @@ export function useRepositoryData({
       queryKey: ['repo-summary', repoId, teamId],
     });
     void queryClient.invalidateQueries({
-      queryKey: ['repo-contexts', repoId, teamId],
+      queryKey: ['repo-tag-values', repoId, teamId],
     });
     void queryClient.invalidateQueries({
       queryKey: ['repo-branches', repoId, teamId],
@@ -361,7 +368,7 @@ export function useRepositoryData({
     selectedSession,
     isSessionNotFound,
     summaryQuery,
-    repoContextsQuery,
+    repoTagValuesQuery,
     repoDetailQuery,
     /** The manifest plus loaded parts, in the legacy `SessionLogsData` shape. */
     logsQuery,

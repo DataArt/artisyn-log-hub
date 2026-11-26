@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="850" viewBox="0 0 1040 850" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+  <!-- Wireframe: AgentBook laptop card Equipment states (FR-7, AC-6): first build, failed build, Equipment changed, and a failed "Update laptop" that leaves the old laptop working. Light theme. Laptop icons: the kawaii character from agentbook-laptop-icons.svg. -->
+  <defs>
+    <symbol id="lt-work" viewBox="0 0 72 48">
+      <rect x="8" y="3" width="48" height="33" rx="6" fill="#eef1fb" stroke="#3358cc" stroke-width="2.5"/>
+      <ellipse cx="24" cy="18" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <ellipse cx="40" cy="18" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <circle cx="25.2" cy="16.3" r="1.3" fill="#fff"/>
+      <circle cx="41.2" cy="16.3" r="1.3" fill="#fff"/>
+      <ellipse cx="17.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <ellipse cx="46.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <path d="M28.5 25 Q32 29.5 35.5 25" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>
+      <rect x="2" y="36" width="60" height="7" rx="3.5" fill="#3358cc"/>
+      <rect x="26" y="36" width="12" height="2.5" rx="1.2" fill="#c7d2fe"/>
+    </symbol>
+    <symbol id="lt-build" viewBox="0 0 72 48">
+      <rect x="8" y="3" width="48" height="33" rx="6" fill="#eef1fb" stroke="#3358cc" stroke-width="2.5"/>
+      <ellipse cx="24" cy="17" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <ellipse cx="40" cy="17" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <circle cx="25.2" cy="15.3" r="1.3" fill="#fff"/>
+      <circle cx="41.2" cy="15.3" r="1.3" fill="#fff"/>
+      <ellipse cx="17.5" cy="25" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <ellipse cx="46.5" cy="25" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <ellipse cx="32" cy="27" rx="2.2" ry="2.6" fill="#1e293b"/>
+      <rect x="2" y="36" width="60" height="7" rx="3.5" fill="#3358cc"/>
+      <rect x="26" y="36" width="12" height="2.5" rx="1.2" fill="#c7d2fe"/>
+      <path d="M64 1 l1.8 5 l5 1.8 l-5 1.8 l-1.8 5 l-1.8 -5 l-5 -1.8 l5 -1.8 z" fill="#facc15"/>
+    </symbol>
+    <symbol id="lt-fail" viewBox="0 0 72 48">
+      <rect x="8" y="3" width="48" height="33" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2.5"/>
+      <path d="M19.5 12.5 L27.5 10" fill="none" stroke="#475569" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M36.5 10 L44.5 12.5" fill="none" stroke="#475569" stroke-width="1.8" stroke-linecap="round"/>
+      <ellipse cx="24" cy="18" rx="2.6" ry="3.2" fill="#475569"/>
+      <ellipse cx="40" cy="18" rx="2.6" ry="3.2" fill="#475569"/>
+      <ellipse cx="17.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.6"/>
+      <ellipse cx="46.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.6"/>
+      <path d="M28.5 29 Q32 25.5 35.5 29" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round"/>
+      <path d="M44.5 21.5 q2.2 3.4 0 5 q-2.2 -1.6 0 -5 z" fill="#93c5fd"/>
+      <rect x="2" y="36" width="60" height="7" rx="3.5" fill="#94a3b8"/>
+      <rect x="26" y="36" width="12" height="2.5" rx="1.2" fill="#e2e8f0"/>
+    </symbol>
+  </defs>
+  <rect width="1040" height="850" fill="#ffffff"/>
+
+  <text x="24" y="36" font-size="18" font-weight="600" fill="#09090b">Laptop card — Equipment from the project (.devcontainer)</text>
+  <text x="24" y="58" fill="#52525b">States of the same card on the folder view and on the home screen, plus a failed "Update laptop".</text>
+
+  <!-- ===== Card A: first build in progress ===== -->
+  <text x="24" y="92" font-size="11" font-weight="600" fill="#71717a">A · FIRST BUILD</text>
+  <rect x="24" y="102" width="320" height="380" rx="8" fill="#fff" stroke="#3358cc"/>
+  <use href="#lt-build" x="40" y="116" width="54" height="36"/>
+  <text x="102" y="136" font-size="15" font-weight="600" fill="#09090b">Laptop 1</text>
+  <circle cx="106" cy="152" r="5" fill="#3358cc"/>
+  <text x="116" y="157" fill="#3358cc" font-weight="600">Getting equipment…</text>
+  <line x1="44" y1="172" x2="324" y2="172" stroke="#e4e4e7"/>
+  <text x="44" y="196" fill="#09090b">Building the project's Equipment</text>
+  <text x="44" y="214" font-size="12" fill="#71717a">First time only — next start is quick.</text>
+  <rect x="44" y="228" width="280" height="8" rx="4" fill="#e4e4e7"/>
+  <rect x="44" y="228" width="168" height="8" rx="4" fill="#3358cc"/>
+  <text x="44" y="256" font-size="12" fill="#52525b">Step 3 of 5 · installing extra tools</text>
+  <rect x="44" y="268" width="280" height="92" rx="6" fill="#18181b"/>
+  <text x="54" y="288" font-size="11" font-family="Consolas, monospace" fill="#d4d4d8">#7 RUN apt-get install -y jq</text>
+  <text x="54" y="304" font-size="11" font-family="Consolas, monospace" fill="#d4d4d8">#7 Unpacking jq (1.7.1) ...</text>
+  <text x="54" y="320" font-size="11" font-family="Consolas, monospace" fill="#d4d4d8">#7 Setting up jq (1.7.1) ...</text>
+  <text x="54" y="336" font-size="11" font-family="Consolas, monospace" fill="#a1a1aa">#8 adding laptop layer (sshd, ws)</text>
+  <text x="54" y="352" font-size="11" font-family="Consolas, monospace" fill="#71717a">▌</text>
+  <text x="44" y="380" font-size="12" fill="#3358cc" text-decoration="underline">Show full log</text>
+  <line x1="44" y1="400" x2="324" y2="400" stroke="#e4e4e7"/>
+  <rect x="44" y="416" width="146" height="34" rx="6" fill="#a5b4e8"/>
+  <text x="62" y="438" fill="#fff" font-weight="600">Open laptop  ↗</text>
+  <text x="200" y="438" font-size="12" fill="#71717a">opens when ready</text>
+
+  <!-- ===== Card B: build failed ===== -->
+  <text x="360" y="92" font-size="11" font-weight="600" fill="#71717a">B · BUILD OR LIFECYCLE COMMAND FAILED</text>
+  <rect x="360" y="102" width="320" height="380" rx="8" fill="#fff" stroke="#fecaca"/>
+  <use href="#lt-fail" x="376" y="116" width="54" height="36"/>
+  <text x="438" y="136" font-size="15" font-weight="600" fill="#09090b">Laptop 1</text>
+  <circle cx="442" cy="152" r="5" fill="#dc2626"/>
+  <text x="452" y="157" fill="#991b1b" font-weight="600">Not started</text>
+  <line x1="380" y1="172" x2="660" y2="172" stroke="#e4e4e7"/>
+  <rect x="380" y="184" width="280" height="50" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="392" y="204" fill="#991b1b" font-weight="600">✕ The project's Equipment did not build.</text>
+  <text x="392" y="222" font-size="12" fill="#b91c1c">The laptop was not started. Last lines of the log:</text>
+  <rect x="380" y="244" width="280" height="92" rx="6" fill="#18181b"/>
+  <text x="390" y="264" font-size="11" font-family="Consolas, monospace" fill="#d4d4d8">#6 RUN apt-get install -y jqq</text>
+  <text x="390" y="280" font-size="11" font-family="Consolas, monospace" fill="#fca5a5">E: Unable to locate package jqq</text>
+  <text x="390" y="296" font-size="11" font-family="Consolas, monospace" fill="#fca5a5">ERROR: process "/bin/sh -c apt-get</text>
+  <text x="390" y="312" font-size="11" font-family="Consolas, monospace" fill="#fca5a5">  install -y jqq" exit code: 100</text>
+  <text x="390" y="328" font-size="11" font-family="Consolas, monospace" fill="#a1a1aa">.devcontainer/Dockerfile:6</text>
+  <text x="380" y="356" font-size="12" fill="#3358cc" text-decoration="underline">Show full log</text>
+  <text x="480" y="356" font-size="12" fill="#3358cc" text-decoration="underline">Copy log</text>
+  <text x="380" y="380" font-size="12" fill="#52525b">Fix .devcontainer in the shared folder, then Retry.</text>
+  <line x1="380" y1="400" x2="660" y2="400" stroke="#e4e4e7"/>
+  <rect x="380" y="416" width="100" height="34" rx="6" fill="#3358cc"/>
+  <text x="408" y="438" fill="#fff" font-weight="600">↻ Retry</text>
+  <rect x="620" y="416" width="40" height="34" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="632" y="438" fill="#09090b">⋯</text>
+
+  <!-- ===== Card C: Equipment changed + host exposure warning ===== -->
+  <text x="696" y="92" font-size="11" font-weight="600" fill="#71717a">C · EQUIPMENT CHANGED</text>
+  <rect x="696" y="102" width="320" height="380" rx="8" fill="#fff" stroke="#3358cc"/>
+  <use href="#lt-work" x="712" y="116" width="54" height="36"/>
+  <text x="774" y="136" font-size="15" font-weight="600" fill="#09090b">Q3 reports</text>
+  <rect x="928" y="118" width="68" height="24" rx="5" fill="#fff" stroke="#d4d4d8"/>
+  <text x="941" y="134" font-size="12" fill="#09090b">⏾ Sleep</text>
+  <circle cx="778" cy="152" r="5" fill="#16a34a"/>
+  <text x="788" y="157" fill="#166534" font-weight="600">Working</text>
+  <text x="848" y="157" fill="#52525b">· 1 session</text>
+  <line x1="716" y1="172" x2="996" y2="172" stroke="#e4e4e7"/>
+  <rect x="716" y="184" width="280" height="96" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="728" y="204" fill="#92400e" font-weight="600">⚠ Equipment changed — Update laptop</text>
+  <text x="728" y="224" font-size="12" fill="#92400e">.devcontainer was edited. This laptop</text>
+  <text x="728" y="240" font-size="12" fill="#92400e">keeps its own; new laptops get the new.</text>
+  <rect x="728" y="248" width="120" height="26" rx="6" fill="#fff" stroke="#d97706"/>
+  <text x="740" y="266" fill="#92400e" font-weight="600">Update laptop…</text>
+  <text x="858" y="266" font-size="11" fill="#92400e">keeps its home</text>
+  <rect x="716" y="290" width="280" height="62" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="728" y="310" fill="#92400e" font-weight="600">⚠ Equipment opens your computer</text>
+  <text x="728" y="328" font-size="12" fill="#92400e">It gives the agent /var/run/docker.sock</text>
+  <text x="728" y="344" font-size="12" fill="#92400e">(Docker on your computer). Your project's choice.</text>
+  <text x="716" y="376" font-size="12" fill="#52525b">Update laptop shows the same consequences list</text>
+  <text x="716" y="392" font-size="12" fill="#52525b">as "Give a folder now" before it restarts.</text>
+  <line x1="716" y1="400" x2="996" y2="400" stroke="#e4e4e7"/>
+  <rect x="716" y="416" width="146" height="34" rx="6" fill="#3358cc"/>
+  <text x="734" y="438" fill="#fff" font-weight="600">Open laptop  ↗</text>
+  <rect x="956" y="416" width="40" height="34" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="968" y="438" fill="#09090b">⋯</text>
+
+  <!-- ===== State D: Update laptop failed — old laptop keeps working ===== -->
+  <text x="24" y="522" font-size="11" font-weight="600" fill="#71717a">D · "UPDATE LAPTOP" FAILED — THE OLD LAPTOP KEEPS WORKING</text>
+  <rect x="200" y="536" width="640" height="248" rx="10" fill="#fff" stroke="#d4d4d8"/>
+  <use href="#lt-work" x="224" y="552" width="30" height="20"/>
+  <text x="262" y="568" font-size="16" font-weight="600" fill="#09090b">Update "Q3 reports"</text>
+  <text x="812" y="568" fill="#71717a">✕</text>
+  <rect x="224" y="584" width="592" height="50" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="236" y="604" fill="#991b1b" font-weight="600">✕ The new Equipment did not build. Nothing was changed.</text>
+  <text x="236" y="623" font-size="12" fill="#166534">✓ "Q3 reports" keeps its current Equipment and keeps working. Sessions were not touched.</text>
+  <rect x="224" y="644" width="592" height="62" rx="6" fill="#18181b"/>
+  <text x="234" y="664" font-size="11" font-family="Consolas, monospace" fill="#d4d4d8">#4 FROM node:24-alpine</text>
+  <text x="234" y="680" font-size="11" font-family="Consolas, monospace" fill="#fca5a5">ERROR: failed to resolve source metadata for docker.io/library/node:24-alpinee</text>
+  <text x="234" y="696" font-size="11" font-family="Consolas, monospace" fill="#a1a1aa">.devcontainer/Dockerfile:1</text>
+  <text x="224" y="726" font-size="12" fill="#52525b">Fix .devcontainer in the shared folder, then Retry.</text>
+  <text x="560" y="726" font-size="12" fill="#3358cc" text-decoration="underline">Show full log</text>
+  <text x="656" y="726" font-size="12" fill="#3358cc" text-decoration="underline">Copy log</text>
+  <rect x="624" y="740" width="84" height="32" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="648" y="761" fill="#09090b">Close</text>
+  <rect x="716" y="740" width="100" height="32" rx="6" fill="#3358cc"/>
+  <text x="742" y="761" fill="#fff" font-weight="600">↻ Retry</text>
+
+  <text x="24" y="812" font-size="12" fill="#71717a">Wireframe — FR-7, AC-6. A: first build shows progress. B: a failed build or lifecycle command leaves the laptop unstarted with the log tail and Retry.</text>
+  <text x="24" y="830" font-size="12" fill="#71717a">C: any Equipment change marks existing laptops "Equipment changed — Update laptop"; host exposure gets a warning, never a block. D: a failed update keeps the old laptop.</text>
+</svg>

@@ -1,6 +1,7 @@
 import type { SessionAttributionAttributeDef } from '../../database/schema';
 import type { HarnessSnapshotBody } from '../harness-snapshot';
 import type { OtelLiveness } from '../otel/otel-facts.reader';
+import type { SessionTag, SessionTagNoise } from '../session-tags.reader';
 import type { TreeLogType } from '../session-tree-logs-meta';
 import type { WorkflowRun } from '../workflow-extractor';
 import type { SubagentStatsRow } from './session-logs-delta.dto';
@@ -81,6 +82,13 @@ export interface SessionLogPartsManifest {
   /** Same object as `/logs`. */
   sessionAttribution: SessionAttribution;
   harnessSnapshot: HarnessSnapshot | null;
+  /**
+   * The root session's tags (2026-11-24 otel-session-tags), deduped across sources; a
+   * sub-agent gets its root's tags. Same array as `/logs`. Absent from an older server.
+   */
+  tags: SessionTag[];
+  /** FR-10 junk-tag verdict of the root session. Same object as `/logs`. */
+  tagNoise: SessionTagNoise;
   /** DD-14: derived figures may lag behind the latest upload (a backlog older than 30 s). */
   derivedLagging: boolean;
   /**

@@ -27,6 +27,13 @@
 // a chip filtering the Sessions list, the 0-of-M variant and no banner at full coverage (AC-C4).
 // Test 3 adds the team coverage banner.
 //
+// Task 2026-11-24 otel-session-tags adds session tags from OTEL resource attributes: test 1's
+// S1 / no-branch chunks carry `feature` / `team.name` (AC-2, AC-3: tags on the root, the list,
+// discovery, `contexts`, `tag=`; AC-5 / AC-6: the header TAGS row, the list's TAGS filter mirrored
+// in the URL and «By tag» grouping), the re-projection step proves the backfill (AC-4) and a
+// session with 12 `build.sha` values the noise warning (AC-9a); test 2's realtime batch 1
+// carries a tag (AC-2, realtime channel).
+//
 // Task 2026-11-24 traffic-optimization (FR-11 / FR-12) ends tests 1 and 3 with a step that adds
 // 200 spans and 60 zero-cost calls to a session and reads the session / repository (test 1) and team (test 3) OTEL
 // answers on the wire: gzip + Vary to a gzip client, identity without Accept-Encoding.
@@ -56,6 +63,7 @@ import {
   spanLines,
   transcriptBodies,
   UNKNOWN_QUERY_SOURCE,
+  withResource,
   type OtelLine,
   type TranscriptSpec,
 } from '../fixtures/otel/otel-lines';
@@ -90,6 +98,32 @@ const HOUR_MS = 60 * 60 * 1000;
 const ATTR = { skill: 'scn-review', mcpServer: 'scn-mcp', effort: 'high', speed: 'fast' } as const;
 /** The account S1 reports; the base URL is sent with userinfo, query and fragment (DD-6). */
 const ACCOUNT = { plan: 'max', seatType: 'individual', provider: 'firstParty', customBaseUrl: 'https://proxy.arrakis.test:8443/anthropic' } as const;
+/** S1's user resource attributes — its session tags (2026-11-24 otel-session-tags). */
+const TAGS_S1 = { feature: 'checkout', 'team.name': 'payments' } as const;
+
+/** A session's `tags` / `tagNoise` as the session detail (`…/sessions/:id/logs`) returns them. */
+interface SessionTagDetail {
+  tags: Array<{ key: string; value: string; source: 'otel' | 'config' }>;
+  tagNoise: { noisyKeys: Array<{ key: string; values: number }>; atLimit: boolean };
+}
+
+async function sessionTagDetail(user: ScenarioUser, repoId: number, sessionId: string): Promise<SessionTagDetail> {
+  const res = await user.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/logs`);
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as SessionTagDetail;
+  return { tags: body.tags, tagNoise: body.tagNoise };
+}
+
+/** `GET …/session-tags/values` (FR-8 discovery). */
+async function tagValues(
+  user: ScenarioUser,
+  repoId: number,
+): Promise<{ tags: Record<string, Array<{ value: string; sessionCount: number }>>; noisyKeys: string[] }> {
+  const res = await user.api.get(`/api/v1/repositories/${repoId}/session-tags/values`);
+  expect(res.status()).toBe(200);
+  return res.json();
+}
+
 /** `OTEL_NOT_REPORTED_HINT` (client `otel-chart-data.ts`, DD-17). */
 const NOT_REPORTED_HINT = 'Calls without this attribute: not sent by this Claude Code version or left at the default value; skill / MCP names also need OTEL_LOG_TOOL_DETAILS=1.';
 /** `OTEL_PLAN_NOTE(plan)` (client `otel.constants.ts`, DD-18). */
@@ -243,10 +277,22 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
       'anthropic.seat_type': ACCOUNT.seatType,
       'anthropic.provider': ACCOUNT.provider,
       'anthropic.custom_base_url': 'https://scn:secret@proxy.arrakis.test:8443/anthropic?token=scn#frag',
+      // 2026-11-24 otel-session-tags: what `OTEL_RESOURCE_ATTRIBUTES=feature=checkout,team.name=payments`
+      // adds; `team.name` is a user tag (not on the deny-list), `anthropic.*` / `service.*` are not.
+      ...TAGS_S1,
     },
   };
   const nb = `otel01-${run}-nobranch`;
-  const nbCall = { requestId: `nb${run}-req-1`, querySource: 'repl_main_thread', model: MODEL_B, at: plus(base, 12 * 60), costUsd: 0.01, input: 400, output: 40 };
+  const nbCall = {
+    requestId: `nb${run}-req-1`,
+    querySource: 'repl_main_thread',
+    model: MODEL_B,
+    at: plus(base, 12 * 60),
+    costUsd: 0.01,
+    input: 400,
+    output: 40,
+    resourceAttributes: { feature: 'billing' },
+  };
   const s1Spec: TranscriptSpec = { sessionId: s1, prompt: `otel main session ${run}`, repoUrls: [repoUrl], branch: 'feature/otel', at: plus(base, 20), requestIds: turn1.transcriptRequestIds };
   const totalMain = turn1.totalMicros + micros(nbCall.costUsd);
 
@@ -260,6 +306,113 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     await uploadOtelChunk(api, key.key, nb, [apiRequestLine(nb, nbCall)], queue);
     await waitForOtelProjected(db, nb);
     return ownRepoId(owner.api, repoUrl);
+  });
+
+  await test.step('AC-2, AC-3 (2026-11-24 otel-session-tags). the chunk’s user resource attributes become the root’s tags (`team.name` kept, `anthropic.*` / `service.*` dropped); list rows, discovery and the legacy contexts route agree', async () => {
+    const s1Tags = await sessionTagDetail(owner, repoId, s1);
+    expect(s1Tags.tags).toEqual([
+      { key: 'feature', value: 'checkout', source: 'otel' },
+      { key: 'team.name', value: 'payments', source: 'otel' },
+    ]);
+    expect(s1Tags.tagNoise).toEqual({ noisyKeys: [], atLimit: false });
+    expect((await sessionTagDetail(owner, repoId, nb)).tags).toEqual([{ key: 'feature', value: 'billing', source: 'otel' }]);
+    const list = (await (await owner.api.get(`/api/v1/repositories/${repoId}/sessions`)).json()) as Array<{
+      sessionId: string;
+      tags: SessionTagDetail['tags'];
+    }>;
+    expect(list.find((r) => r.sessionId === s1)?.tags).toEqual(s1Tags.tags);
+    expect(await tagValues(owner, repoId)).toEqual({
+      tags: {
+        feature: [
+          { value: 'billing', sessionCount: 1 },
+          { value: 'checkout', sessionCount: 1 },
+        ],
+        'team.name': [{ value: 'payments', sessionCount: 1 }],
+      },
+      noisyKeys: [],
+    });
+    expect(await (await owner.api.get(`/api/v1/repositories/${repoId}/contexts`)).json()).toEqual([
+      { key: 'feature', value: 'billing' },
+      { key: 'feature', value: 'checkout' },
+      { key: 'team.name', value: 'payments' },
+    ]);
+    // tag= on the list: a value, and a key with any value.
+    const ids = async (query: string) =>
+      ((await (await owner.api.get(`/api/v1/repositories/${repoId}/sessions?${query}`)).json()) as Array<{ sessionId: string }>)
+        .map((r) => r.sessionId)
+        .sort();
+    expect(await ids('tag=feature:checkout')).toEqual([s1]);
+    expect(await ids('tag=team.name')).toEqual([s1]);
+    expect(await ids('tag=feature')).toEqual([nb, s1].sort());
+    expect((await owner.api.get(`/api/v1/repositories/${repoId}/sessions?tag=:x`)).status()).toBe(400);
+  });
+
+  await test.step('AC-5, AC-6 (2026-11-24 otel-session-tags, UI). the session header’s TAGS row; the list filter’s TAGS section narrows the list and lands in the URL as tag=; «By tag: feature» groups by value', async () => {
+    await openSession(page, owner, repoId, s1);
+    const tagsRow = page.getByTestId('session-tags-row');
+    await expect(tagsRow).toBeVisible({ timeout: 20_000 });
+    await expect(tagsRow.getByTestId('session-tag-chip')).toHaveText(['feature=checkout', 'team.name=payments']);
+    await expect(tagsRow.getByTestId('session-tag-noisy-warning')).toHaveCount(0);
+
+    const viewMode = page.getByTestId('session-list-view-mode');
+    const originalMode = await viewMode.inputValue();
+    await viewMode.selectOption('plain');
+    await expect(page.getByTestId('session-item')).toHaveCount(2);
+    await page.getByTestId('session-list-filter').click();
+    const filter = page.getByTestId('session-tag-filter');
+    await expect(filter).toBeVisible();
+    await filter.getByTestId('session-tag-filter-value').filter({ hasText: 'billing (1)' }).click();
+    await expect(page).toHaveURL(/[?&]tag=feature(%3A|:)billing/);
+    await page.keyboard.press('Escape');
+    const items = page.getByTestId('session-item');
+    await expect(items).toHaveCount(1);
+    await expect(items.first()).toContainText(`no branch ${run}`);
+
+    // Clear the filter, then group by the tag key.
+    await page.getByTestId('session-list-filter').click();
+    await filter.getByTestId('session-tag-filter-value').filter({ hasText: 'billing (1)' }).click();
+    await page.keyboard.press('Escape');
+    await expect(page).not.toHaveURL(/[?&]tag=/);
+    await viewMode.selectOption('tag:feature');
+    const groups = page.getByTestId('session-tag-group');
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(0)).toContainText('billing');
+    await expect(groups.nth(1)).toContainText('checkout');
+    await viewMode.selectOption(originalMode);
+  });
+
+  await test.step('AC-9a (2026-11-24 otel-session-tags, FR-10). a volatile value as a label (12 build.sha values in one session, its own repository) is kept, not capped: tagNoise names the key with its value count, discovery lists it in noisyKeys, the header shows the warning with the fix', async () => {
+    const noisyRepoUrl = `https://git.arrakis.test/scn/${run}/otel-noisy`;
+    const noisy = `otel01-${run}-noisy`;
+    const shas = Array.from({ length: 12 }, (_, i) => `sha${String(i).padStart(2, '0')}${run}`);
+    const calls = shas.map((sha, i) =>
+      apiRequestLine(noisy, {
+        requestId: `ns${run}-req-${i}`,
+        querySource: 'repl_main_thread',
+        model: MODEL_A,
+        at: plus(base, 30 + i),
+        costUsd: 0.001,
+        input: 10,
+        output: 1,
+        resourceAttributes: { 'build.sha': sha, feature: 'noise' },
+      }),
+    );
+    await uploadTranscript(api, key.key, { sessionId: noisy, prompt: `noisy ${run}`, repoUrls: [noisyRepoUrl], branch: 'main', at: plus(base, 20), requestIds: [] }, queue);
+    await uploadOtelChunk(api, key.key, noisy, calls, queue);
+    await waitForOtelProjected(db, noisy);
+    const noisyRepoId = await ownRepoId(owner.api, noisyRepoUrl);
+    const detail = await sessionTagDetail(owner, noisyRepoId, noisy);
+    expect(detail.tags.filter((t) => t.key === 'build.sha').map((t) => t.value)).toEqual(shas);
+    expect(detail.tagNoise).toEqual({ noisyKeys: [{ key: 'build.sha', values: 12 }], atLimit: false });
+    const discovery = await tagValues(owner, noisyRepoId);
+    expect(discovery.noisyKeys).toEqual(['build.sha']);
+    expect(discovery.tags['build.sha']).toHaveLength(12);
+    await openSession(page, owner, noisyRepoId, noisy);
+    const warning = page.getByTestId('session-tag-noisy-warning');
+    await expect(warning).toHaveCount(1, { timeout: 20_000 });
+    await expect(warning).toContainText('Tag key "build.sha" has 12 values in this session');
+    await expect(warning).toContainText('remove it from OTEL_RESOURCE_ATTRIBUTES');
+    await expect(page.getByTestId('session-tags-row').getByTestId('session-tag-chip')).toHaveCount(13);
   });
 
   await test.step('AC-1 (API). the facts route: OTEL present, total = Σ cost_usd of every call, buckets keyed by structure', async () => {
@@ -523,7 +676,7 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     await expect(banner).toContainText('(hook 2.28.0)');
   });
 
-  await test.step('AC-12, AC-13 (upgrade half). S1’s OTEL facts dropped and its chunks unprojected (the state migration 0078 leaves): the drain rebuilds the same buckets, calls and waterfall by event time, nothing re-uploaded', async () => {
+  await test.step('AC-12, AC-13 (upgrade half), AC-4 (session tags). S1’s OTEL facts and tags dropped and its chunks unprojected (the state migration 0078 leaves): the drain rebuilds the same buckets, calls, waterfall and tags by event time, nothing re-uploaded', async () => {
     const before = await sessionOtel(owner, repoId, s1);
     const factsBefore = await repoFacts(owner, repoId, { interval: '5m', from: new Date(base.getTime() - HOUR_MS).toISOString(), to: new Date(Date.now() + 60_000).toISOString() });
     await resetOtelProjection(db, s1);
@@ -535,19 +688,51 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     const factsAfter = await repoFacts(owner, repoId, { interval: '5m', from: new Date(base.getTime() - HOUR_MS).toISOString(), to: new Date(Date.now() + 60_000).toISOString() });
     const shape = (f: typeof factsAfter) => f.buckets.map((x) => `${x.start}|${x.key}|${x.calls}|${x.costUsdMicros}`).sort();
     expect(shape(factsAfter)).toEqual(shape(factsBefore));
-    // AC-7 (2026-11-03 otel-cost-attribution): the re-projection under projection version 2 fills
-    // the new grain and the account from the stored chunks — nothing re-uploaded.
+    // AC-7 (2026-11-03 otel-cost-attribution): the re-projection under the current projection
+    // version (3 since 2026-11-24 otel-session-tags) fills the new grain and the account from the
+    // stored chunks — nothing re-uploaded.
     const { rows: versions } = await db.query<{ v: number | null }>(
       `SELECT DISTINCT lo.otel_projection_version AS v FROM logs_otel lo JOIN sessions s ON s.id = lo.session_id WHERE s.session_id = $1`,
       [s1],
     );
-    expect(versions.map((r) => r.v)).toEqual([2]);
+    expect(versions.map((r) => r.v)).toEqual([3]);
+    // AC-4 (2026-11-24 otel-session-tags): the same re-projection is the tag backfill — the
+    // session's tags come back from the stored chunks.
+    expect((await sessionTagDetail(owner, repoId, s1)).tags).toEqual([
+      { key: 'feature', value: 'checkout', source: 'otel' },
+      { key: 'team.name', value: 'payments', source: 'otel' },
+    ]);
     const bySkill = await repoFacts(owner, repoId, { stackBy: 'skill' });
     const skillMicros = sumMicros(bySkill.buckets.filter((b) => b.key === ATTR.skill));
     expect(skillMicros, 'non-empty stackBy=skill buckets after re-projection').toBe(micros(turn1.calls.main1.costUsd));
     expect((await sessionOtel(owner, repoId, s1)).plan).toEqual(ACCOUNT);
     await openSession(page, owner, repoId, s1, { tab: 'otel' });
     await expect(row(page, `${tag1}t1`)).toBeVisible();
+  });
+
+  await test.step('AC-4 (2026-11-24 otel-session-tags, light backfill). S1’s chunks stamped v2 with its OTEL tags and cost buckets gone (a pre-tags upgrade): the drain’s tag-only upgrade re-stamps them v3 and brings the tags back WITHOUT a full re-projection — the buckets stay empty; a full re-projection then restores them', async () => {
+    const { rows: ids } = await db.query<{ id: number }>('SELECT id FROM sessions WHERE session_id = $1', [s1]);
+    const s1Id = ids[0].id;
+    await db.query(`DELETE FROM session_tags WHERE session_id = $1 AND source = 'otel'`, [s1Id]);
+    await db.query('DELETE FROM otel_cost_buckets WHERE session_id = $1', [s1Id]);
+    await db.query('UPDATE logs_otel SET otel_projection_version = 2 WHERE session_id = $1', [s1Id]);
+    await expect
+      .poll(
+        async () => (await db.query<{ v: number | null }>('SELECT DISTINCT otel_projection_version AS v FROM logs_otel WHERE session_id = $1', [s1Id])).rows.map((r) => r.v),
+        { timeout: 30_000 },
+      )
+      .toEqual([3]);
+    expect((await sessionTagDetail(owner, repoId, s1)).tags).toEqual([
+      { key: 'feature', value: 'checkout', source: 'otel' },
+      { key: 'team.name', value: 'payments', source: 'otel' },
+    ]);
+    const { rows: buckets } = await db.query<{ n: string }>('SELECT count(*) AS n FROM otel_cost_buckets WHERE session_id = $1', [s1Id]);
+    expect(Number(buckets[0].n), 'the tag-only upgrade must not re-project calls / buckets').toBe(0);
+    // Restore S1's facts for the steps below: the full re-projection rebuilds the buckets.
+    await resetOtelProjection(db, s1);
+    await waitForOtelProjected(db, s1);
+    const { rows: rebuilt } = await db.query<{ n: string }>('SELECT count(*) AS n FROM otel_cost_buckets WHERE session_id = $1', [s1Id]);
+    expect(Number(rebuilt[0].n)).toBeGreaterThan(0);
   });
 
   await test.step('AC-23. Sankey: each column sums to the total; the no-branch session is «(unknown)»; the private repository has no user column', async () => {
@@ -851,7 +1036,9 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
   const sp = (name: keyof typeof turn.spans): OtelLine => spanLine(live, turn.spans[name]);
   const call = (name: keyof typeof turn.calls): OtelLine => apiRequestLine(live, turn.calls[name]);
   // What Claude Code exports, in the order spans end: the root arrives last.
-  const batch1 = [sp('llm1'), call('main1'), sp('suggestion'), call('suggestion')];
+  // Batch 1 carries a user resource attribute (2026-11-24 otel-session-tags): the realtime
+  // channel writes session tags too.
+  const batch1 = withResource([sp('llm1'), call('main1'), sp('suggestion'), call('suggestion')], { feature: 'live-tags' });
   const batch2 = [sp('tool'), sp('toolExec')];
   const batch3 = [sp('llm2'), call('main2'), call('title'), call('unknown'), sp('interaction')];
   const allLines = [...batch1, ...batch2, ...batch3];
@@ -872,6 +1059,8 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
     const byReq = new Map(snap.calls.map((c) => [c.requestId, c]));
     expect(byReq.get(`${tag}-req-1`)).toMatchObject({ structure: 'main', provisional: true, confirmed: false, changeKind: 'new' });
     expect(byReq.get(`${tag}-req-3`)).toMatchObject({ structure: 'hidden', confirmed: false });
+    // AC-2 (2026-11-24 otel-session-tags): the realtime batch's resource attribute is a tag at once.
+    expect((await sessionTagDetail(owner, repoId, live)).tags).toEqual([{ key: 'feature', value: 'live-tags', source: 'otel' }]);
   });
 
   const polls = countOtelPolls(page, live);

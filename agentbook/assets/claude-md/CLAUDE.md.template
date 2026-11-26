@@ -1,0 +1,91 @@
+# You are on an AgentBook laptop
+
+This file is written by AgentBook every time the user opens this laptop; edits here are lost.
+
+## This laptop
+
+- You work on the laptop **"{{laptop_name}}"**: a container on the user's computer, reached over SSH.
+- Its **shared folder** "{{shared_folder_name}}" is at `{{shared_path}}` (on the user's computer:
+  `{{shared_host_path}}`). It is live: you and the user both see it, and every change appears on the
+  user's computer at once.
+- Every prompt starts with one line from AgentBook, for example
+  `{{laptop_name}} · repo-a: main (3 uncommitted)`: the laptop, each git repo's branch and its
+  uncommitted changes. A second line appears when the connected folders change.
+
+## Connected folders
+
+Only these folders from the user's computer are visible here; nothing else is.
+
+{{connected_folders}}
+
+**View only** folders cannot be written to; do not try to work around it. Run `ws mounts` for the
+current list: the user can connect, change or remove folders, and the prompt line tells you when
+that happened.
+
+## The `ws` command
+
+- `ws whoami`: this laptop, the shared folder, every git repo in it (current branch, local
+  branches, worktrees, uncommitted changes), the other laptops of this shared folder and the
+  Variable names. Answer "where am I?" from it.
+- `ws mounts`: the connected folders, each with its path here, its folder on the user's computer
+  and its mode.
+- `ws ports`: the ports of this laptop forwarded to the user's computer (see below).
+- `ws env`: the Variables as they are now (see below): `ws env ls`, `ws env get NAME`,
+  `ws env run <command>`.
+
+They re-read the laptop's state on every call; run them again rather than trusting an old answer.
+
+## Working in parallel
+
+The user decides how to work; this is advice.
+
+- The shared folder is live and shared with the user's IDE and with the other laptops of this
+  shared folder. Another laptop or the user may change the same files at the same time. When a line
+  of work is likely to collide with someone else's, warn the user before editing.
+- For a separate line of work in one of the git repos, prefer a branch in a git worktree. Create it
+  in an ignored folder inside the repo (for example `.worktrees/<name>`, ignored through
+  `.git/info/exclude` or `.gitignore`) and remove it when the work is done. The worktree is for use
+  inside this laptop only: git records laptop paths (`{{shared_path}}/...`), so the user's git does
+  not see it as a valid worktree. The user reviews the branch on their computer once it is
+  committed.
+- A part of the shared folder that is not a git repo has no worktrees. Say so and let the user
+  decide.
+- Commit when the user asks. Do not push unless the user asks and credentials are available here.
+
+## Servers and ports
+
+The user's browser reaches this laptop only through the ports AgentBook forwards (an SSH tunnel
+to `localhost` here, while the laptop works and AgentBook is open). Before you give the user a URL
+for a server you started (a dev server, an API), run `ws ports`: it lists each forwarded port with
+its `http://localhost:<port>` address on the user's computer and whether a server listens on it.
+The server may listen on `localhost` only. Never offer a Docker network address (`172.17…`) or
+an SSH tunnel of your own. If the port is not forwarded, ask the user to add it in AgentBook
+(**Ports…** on this laptop's card), or start the server on a port that is.
+
+## What survives
+
+Only the home folder `{{home}}` and the connected folders survive when the laptop is recreated
+(when the user gives it a folder, updates its Equipment or the tool reallocates its port).
+Anything installed or written elsewhere (system packages, `/usr`, `/etc`, `/tmp`) may be lost, so
+keep nothing there but temporary files. Install your own tools under the home folder.
+
+## Variables
+
+{{variables}}
+
+Variables are environment variables the user set for programs on this laptop. Never print, log or
+copy a value somewhere else.
+
+The user can add or change a Variable while you work, but this session's environment keeps the
+values from when it started. Do not ask the user to restart the session for a Variable:
+
+- `ws env ls` lists the current Variable names and marks the ones added or changed after this
+  session started.
+- `ws env run <command>` runs a program with the current values, for example
+  `ws env run node jira-projects.js`. Use it whenever a Variable is missing or marked by `ws env ls`.
+- `ws env get NAME` prints one current value, for a program that takes it as an argument; prefer
+  `ws env run` so the value never shows up in the output.
+
+When a needed Variable does not exist at all, ask the user to add it in AgentBook (the laptop's
+**Variables…**), then use `ws env run`; no new session is needed. The prompt line also says when
+the Variables changed.

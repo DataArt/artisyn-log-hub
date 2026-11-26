@@ -537,3 +537,35 @@ export async function loadSliceParts(
   }));
   return { subagents, otel };
 }
+
+// ── Session tags (2026-11-24 otel-session-tags) ──────────────────────────────────────────────
+
+/**
+ * The tags of each given ROOT session, one `{ key, value }` per distinct pair (deduped across
+ * `otel` / `config` sources), sorted by key then value. Roots without tags get no entry.
+ * Feeds `SpendView.tagKeys` and the `tag` slice.
+ */
+export async function loadTreeTags(
+  db: DrizzleDb,
+  rootIds: readonly number[],
+): Promise<Map<number, { key: string; value: string }[]>> {
+  const out = new Map<number, { key: string; value: string }[]>();
+  if (rootIds.length === 0) return out;
+  const result = await db.execute(sql`
+    SELECT DISTINCT st.session_id AS root_id, st.key, st.value
+    FROM session_tags st
+    WHERE st.session_id = ANY(${intArray(rootIds)})
+    ORDER BY st.session_id, st.key, st.value
+  `);
+  for (const r of result.rows as {
+    root_id: unknown;
+    key: string;
+    value: string;
+  }[]) {
+    const id = toNumber(r.root_id);
+    const list = out.get(id) ?? [];
+    list.push({ key: r.key, value: r.value });
+    out.set(id, list);
+  }
+  return out;
+}

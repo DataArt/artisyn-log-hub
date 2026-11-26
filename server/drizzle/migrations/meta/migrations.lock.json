@@ -1000,6 +1000,16 @@
         "65cb1dc24d04c649c7e6b94d21dbd1f0679dadab0788c7ddf9fe08aa08517818",
         "a5a459deae4b2f361b5a5a9154495184ec6939681f60bfc97859ea0204b5ca0b"
       ]
+    },
+    {
+      "idx": 99,
+      "tag": "0099_session_tags",
+      "when": 1792627500000,
+      "sha256": "7f641aa329281dc59623bbf89a4e7eacc1a5c9275c3d2b819aa92c827b5c6884",
+      "acceptedHashes": [
+        "7f641aa329281dc59623bbf89a4e7eacc1a5c9275c3d2b819aa92c827b5c6884",
+        "81d6002ea879944c18b89c528d3f343b608dfe0a4c11b2f7df86dc45eb4cb015"
+      ]
     }
   ]
 }

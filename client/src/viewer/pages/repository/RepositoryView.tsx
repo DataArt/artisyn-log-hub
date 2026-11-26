@@ -160,7 +160,7 @@ export function RepositoryView() {
     selectedSession,
     isSessionNotFound,
     summaryQuery,
-    repoContextsQuery,
+    repoTagValuesQuery,
     repoDetailQuery,
     logsQuery,
     isFavorite,
@@ -186,6 +186,7 @@ export function RepositoryView() {
     sessionId,
     branchSelectedSession,
     otelReason: otelReasonFilter,
+    tagScopeUserEmail: filterByUserEmail,
   });
 
   // On-demand part loading for the session views (impl-plan DD-30a).
@@ -324,7 +325,6 @@ export function RepositoryView() {
   }
 
   const summary = summaryQuery.data;
-  const repoContexts = repoContextsQuery.data ?? [];
 
   const sessionCountDisplay = summaryQuery.error ? (
     <span>—</span>
@@ -357,7 +357,7 @@ export function RepositoryView() {
         repoUrl={repoUrl}
         sessionCountDisplay={sessionCountDisplay}
         userCountDisplay={userCountDisplay}
-        repoContexts={repoContexts}
+        repoTagValues={repoTagValuesQuery.data}
         repoId={repoId}
         teamId={teamId}
       />

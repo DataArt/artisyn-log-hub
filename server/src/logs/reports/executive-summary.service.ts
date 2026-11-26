@@ -13,6 +13,7 @@ import {
   type ParsedAttributeFilter,
 } from '../attribute-filter.sql';
 import { descendantSessionsCte } from '../session-tree.sql';
+import { tagFilterSql, type TagFilter } from '../tag-filter.sql';
 import {
   readTreeCost,
   TREE_COST_COLUMNS_SQL,
@@ -151,6 +152,8 @@ export interface ExecutiveSummaryOptions {
   users: string[];
   /** Applied to Phase A only (both windows). */
   attributeFilters?: ParsedAttributeFilter[];
+  /** `tag=` filters (otel-session-tags); applied to Phase A only (both windows), like `attr=`. */
+  tagFilters?: TagFilter[];
 }
 
 // Raw Phase A row shape, straight off the eligibility SELECT. The cost comes from
@@ -708,7 +711,16 @@ export class ExecutiveSummaryService {
       opts.attributeFilters ?? [],
       sql`s.id`,
     );
-    const attrFilter = attrCondition ? sql`AND ${attrCondition}` : sql``;
+    // `tag=` (otel-session-tags) rides along in the same Phase A fragment — same windows,
+    // same "a root excluded here has no descendants rolled up" rule.
+    const tagFilters = opts.tagFilters ?? [];
+    const tagFilter =
+      tagFilters.length > 0
+        ? sql`AND ${tagFilterSql(tagFilters, sql`s.id`)}`
+        : sql``;
+    const attrFilter = attrCondition
+      ? sql`AND ${attrCondition} ${tagFilter}`
+      : tagFilter;
 
     const {
       aggRows,

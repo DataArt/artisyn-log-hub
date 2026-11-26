@@ -16,6 +16,7 @@ import {
 import { cn } from '../../lib/cn';
 import { formatCost, formatLocalTimestamp } from '../../lib/format';
 import { computeSessionInfoDerived } from './session-log/session-info-derive';
+import { SessionTagsRow } from './SessionTagsRow';
 
 /**
  * One of the 5 mutually-exclusive states the session detail
@@ -119,6 +120,10 @@ export interface SessionDetailHeaderProps {
   /** `null`/`undefined` renders no attribution row, same as
    * `enabled: false` (a repo that predates the feature, or a fetch still in flight). */
   sessionAttribution?: SessionLogsData['sessionAttribution'] | null;
+  /** The root session's tags (otel-session-tags); absent/empty renders no TAGS row. */
+  tags?: SessionLogsData['tags'];
+  /** FR-10 junk-tag verdict; drives the noisy-key / limit warnings under the TAGS row. */
+  tagNoise?: SessionLogsData['tagNoise'];
 }
 
 export function SessionDetailHeader({
@@ -127,6 +132,8 @@ export function SessionDetailHeader({
   sessionCost,
   pricing,
   sessionAttribution,
+  tags,
+  tagNoise,
 }: SessionDetailHeaderProps) {
   const { workflowEstimatedCost, workflowSubagentTokens, showWorkflowCostRow } =
     computeSessionInfoDerived(session, parsedLogs, pricing ?? undefined);
@@ -309,6 +316,7 @@ export function SessionDetailHeader({
           )}
         </>
       )}
+      <SessionTagsRow tags={tags} tagNoise={tagNoise} />
       {attributionState !== 'off' && (
         <div className="flex w-full flex-wrap items-center gap-1.5">
           {attributionChips.map((chip) => (

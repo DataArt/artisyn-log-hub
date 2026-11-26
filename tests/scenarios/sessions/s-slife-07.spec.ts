@@ -1,6 +1,7 @@
-// S-SLIFE-07. Deleting a root session removes its sub-agents and grandchildren, their data and the
-// contexts nobody else holds (docs/qaa-overview/scenarios/02-repos-sessions.md §S-SLIFE-07; no
-// mode in the design → A and C, DD SC4).
+// S-SLIFE-07. Deleting a root session removes its sub-agents and grandchildren, their data and its
+// session tags (docs/qaa-overview/scenarios/02-repos-sessions.md §S-SLIFE-07; no mode in the
+// design → A and C, DD SC4). Tags come from OTEL resource attributes (2026-11-24
+// otel-session-tags): R's OTEL chunk carries `feature` + `shared`, X's carries `shared`.
 //
 // Uploads go through POST /api/v2/logs (impl-plan DD SC3). Sub-agents are uploaded the way the
 // hook does (`type=claude-subagent` with `parentSessionId`); the grandchild G hangs under C1.
@@ -10,7 +11,7 @@
 // 400 in / 200 out.
 //
 // What the design leaves to internal state is read from the stand schema (`db`): no `logs` rows
-// for any of the four sessions, the orphaned context row gone while the shared one stays, and the
+// for any of the four sessions, R's `session_tags` rows gone while X's stay, and the
 // favourite row of R removed (the design's «user_favorite_sessions для R снесены»).
 //
 // Tombstones (2026-11-23-session-logs-streaming, DD-27/28/29), steps 1b, 3b, 5b, 5c and 7–9:
@@ -46,7 +47,7 @@ import { logRowCount, sessionRowCount } from '../helpers/ingest';
 import { sendRealtime, uploadOtelChunk, waitForOtelProjected } from '../helpers/otel';
 import { addTeamRepo, createTeam, removeTeamRepo } from '../helpers/teams';
 import { buildToolCallsLog, uploadToolCallsLog } from '../helpers/tool-monitoring';
-import { apiRequestLine, callLines, otelTurn, spanLines } from '../fixtures/otel/otel-lines';
+import { apiRequestLine, callLines, otelTurn, spanLines, withResource } from '../fixtures/otel/otel-lines';
 
 /**
  * The tables `purgeSessionChildData` empties for a deleted session (DD-28 survivors, plus `logs`
@@ -69,12 +70,14 @@ const SURVIVOR_TABLES = [
   'session_attribution',
   'session_attribution_runs',
   'session_prompt_watermark',
+  // 2026-11-24 otel-session-tags: the root's tags.
+  'session_tags',
 ];
 
 const ROOT_COST = (10 * 3 + 5 * 15) / 1e6;
 const AGENT_COST = (400 * 3 + 200 * 15) / 1e6;
 
-test('@S-SLIFE-07 deleting a root removes sub-agents, grandchildren, their data and orphaned contexts @mode-a @mode-c', async ({
+test('@S-SLIFE-07 deleting a root removes sub-agents, grandchildren, their data and its tags @mode-a @mode-c', async ({
   api,
   db,
   users,
@@ -85,20 +88,15 @@ test('@S-SLIFE-07 deleting a root removes sub-agents, grandchildren, their data 
   const owner = await users.user('user', { label: 'sl07-owner' });
   const sharedCtx = `ctx-shared-${run}`;
   const onlyRCtx = `ctx-only-R-${run}`;
-  const R: PromptSession = {
-    sessionId: `sl07-${run}-r`,
-    prompt: `root R ${run}`,
-    repoUrl,
-    context: { claudeMd: sharedCtx, feature: onlyRCtx },
-  };
-  const X: PromptSession = { sessionId: `sl07-${run}-x`, prompt: `other X ${run}`, repoUrl, context: { claudeMd: sharedCtx } };
+  const R: PromptSession = { sessionId: `sl07-${run}-r`, prompt: `root R ${run}`, repoUrl };
+  const X: PromptSession = { sessionId: `sl07-${run}-x`, prompt: `other X ${run}`, repoUrl };
   const C1 = `agent-sl07-${run}-c1`;
   const C2 = `agent-sl07-${run}-c2`;
   const G = `agent-sl07-${run}-g`;
   const tree = [R.sessionId, C1, C2, G];
   const queue = { db, userId: owner.id };
 
-  const { key, repoId } = await test.step('setup: R with C1, C2 and G under C1; X shares one context of R', async () => {
+  const { key, repoId } = await test.step('setup: R with C1, C2 and G under C1; X beside it', async () => {
     const key = await createApiKey(owner.api);
     await uploadPromptSession(api, key.key, R, queue);
     await uploadSubagent(api, key.key, { sessionId: C1, parentSessionId: R.sessionId, prompt: `c1 ${run}` }, queue);
@@ -124,8 +122,8 @@ test('@S-SLIFE-07 deleting a root removes sub-agents, grandchildren, their data 
         )
       ).rows[0].n,
     );
-  const contextRows = async (value: string) =>
-    Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM contexts WHERE context_value = $1', [value])).rows[0].n);
+  const tagRows = async (value: string) =>
+    Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM session_tags WHERE value = $1', [value])).rows[0].n);
   /** Rows per survivor table (only the non-zero ones) held by the tree's sessions. */
   const survivorRows = async (sessionIds: readonly string[]): Promise<Record<string, number>> => {
     const out: Record<string, number> = {};
@@ -151,9 +149,9 @@ test('@S-SLIFE-07 deleting a root removes sub-agents, grandchildren, their data 
   };
   const toolCallsBody = (callId: string) =>
     buildToolCallsLog([{ callId, sessionId: R.sessionId, tool: 'ce', args: ['list'], startedAt: new Date(), exitCode: 0, stdout: `out ${callId}` }]);
-  const otelLines = (tag: string) => {
+  const otelLines = (tag: string, sessionId: string = R.sessionId) => {
     const turn = otelTurn(`${tag}${run}`, new Date(Date.now() - 60 * 60 * 1000));
-    return [...callLines(R.sessionId, turn), ...spanLines(R.sessionId, turn)];
+    return [...callLines(sessionId, turn), ...spanLines(sessionId, turn)];
   };
 
   await test.step('1. before: R’s logs carry subagentStats for C1, C2 and G (G under C1); the timeline cost of R is all three levels; R is a favourite', async () => {
@@ -172,14 +170,18 @@ test('@S-SLIFE-07 deleting a root removes sub-agents, grandchildren, their data 
     expect(timeline.map((r) => r.sessionId).sort()).toEqual([R.sessionId, X.sessionId].sort());
     expect(timeline.find((r) => r.sessionId === R.sessionId)?.totalCost).toBeCloseTo(ROOT_COST + 3 * AGENT_COST, 9);
     expect(await sessionCount()).toBe(2);
-    expect(await repoContexts()).toEqual(expect.arrayContaining([sharedCtx, onlyRCtx]));
     const fav = await owner.api.post(`${base}/sessions/${R.sessionId}/favorite`, { data: { favorite: true } });
     expect(fav.ok(), `favorite ${fav.status()}`).toBe(true);
   });
 
-  await test.step('1b. R also owns survivor rows: a projected OTEL chunk, a Turn-End Advisor run, a `tool-calls` log', async () => {
-    await uploadOtelChunk(api, key.key, R.sessionId, otelLines('before'), queue);
+  await test.step('1b. R also owns survivor rows: a projected OTEL chunk (with tags), a Turn-End Advisor run, a `tool-calls` log', async () => {
+    await uploadOtelChunk(api, key.key, R.sessionId, withResource(otelLines('before'), { shared: sharedCtx, feature: onlyRCtx }), queue);
     await waitForOtelProjected(db, R.sessionId);
+    await uploadOtelChunk(api, key.key, X.sessionId, withResource(otelLines('x', X.sessionId), { shared: sharedCtx }), queue);
+    await waitForOtelProjected(db, X.sessionId);
+    expect((await repoContexts()).sort()).toEqual([onlyRCtx, sharedCtx].sort());
+    expect(await tagRows(onlyRCtx)).toBe(1);
+    expect(await tagRows(sharedCtx)).toBe(2);
     expect((await advisorRun(key.key, R.sessionId)).status()).toBe(200);
     await uploadToolCallsLog(api, key.key, R.sessionId, toolCallsBody('c-before'), queue);
     expect(await survivorRows(tree)).toMatchObject({
@@ -206,12 +208,16 @@ test('@S-SLIFE-07 deleting a root removes sub-agents, grandchildren, their data 
     expect(await survivorRows(tree)).toEqual({});
   });
 
-  await test.step('4. contexts: ctx-only-R is gone (also from the contexts table), ctx-shared stays (X holds it)', async () => {
+  await test.step('4. tags: R’s rows are gone from session_tags and the repository’s tag reads; X keeps its shared tag', async () => {
     const values = await repoContexts();
     expect(values).toContain(sharedCtx);
     expect(values).not.toContain(onlyRCtx);
-    expect(await contextRows(onlyRCtx)).toBe(0);
-    expect(await contextRows(sharedCtx)).toBe(1);
+    expect(await tagRows(onlyRCtx)).toBe(0);
+    expect(await tagRows(sharedCtx)).toBe(1);
+    const discovery = (await (await owner.api.get(`${base}/session-tags/values`)).json()) as {
+      tags: Record<string, Array<{ value: string; sessionCount: number }>>;
+    };
+    expect(discovery.tags).toEqual({ shared: [{ value: sharedCtx, sessionCount: 1 }] });
   });
 
   await test.step('5. the hook re-uploads G and C2 (with parentSessionId) → 201, ignored: still not listed, no logs rows', async () => {

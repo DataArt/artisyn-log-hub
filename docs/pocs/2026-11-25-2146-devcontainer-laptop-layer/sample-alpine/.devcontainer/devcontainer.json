@@ -1,0 +1,10 @@
+// Alpine image-based devcontainer with an explicit root remote user and a custom workspace folder.
+{
+  "name": "sample-alpine",
+  "image": "alpine:3.20",
+  "remoteUser": "root",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/src/project,type=bind",
+  "workspaceFolder": "/src/project",
+  "containerEnv": { "JIRA_URL": "https://jira.example.invalid" },
+  "postCreateCommand": "echo postcreate >> /tmp/postcreate.ok"
+}

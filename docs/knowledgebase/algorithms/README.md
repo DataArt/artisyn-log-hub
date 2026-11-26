@@ -70,6 +70,20 @@ format where the two differ).
 | [workhub-git-providers](workhub-git-providers.md) | `work-hub/server/src/connections/providers.rs` (`all`, `get`, `git_header`, `api_request`, `token_page_url`, `ssh_keys_page_url`, `greeting_user`, `base64_encode`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
 | [workhub-connection-fields](workhub-connection-fields.md) | `work-hub/server/src/connections/fields.rs` (`validate_base_url`, `validate_remote_name`, `validate_pat`, `validate_private_key`, `validate_expose_env`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
 | [workhub-terminal-replay](workhub-terminal-replay.md) | `work-hub/web/src/terminal/replay.ts` (`replaySegments`) | vitest (`work-hub/web`) |
+| [agentbook-state-file](agentbook-state-file.md) | `agentbook/crates/core/src/state.rs` (`parse_state`, `write_state`, `id_from_bytes`, `is_valid_id`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-claude-dir](agentbook-claude-dir.md) | `agentbook/crates/core/src/claude_dir.rs` (`scan_descends`, `candidates`, `decide`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-container-paths](agentbook-container-paths.md) | `agentbook/crates/core/src/paths.rs` (`host_basename`, `shared_container_path`, `given_container_paths`, `ssh_alias`, `claude_link`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-broad-folder](agentbook-broad-folder.md) | `agentbook/crates/core/src/broad_folder.rs` (`classify`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-variables](agentbook-variables.md) | `agentbook/crates/core/src/variables.rs` (`starts_hidden`, `is_valid_name`, `credential_target`, `resolve_container_env_refs`, `resolve`, `render_env_file`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-ssh-user](agentbook-ssh-user.md) | `agentbook/crates/core/src/ssh_user.rs` (`resolve`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-equipment](agentbook-equipment.md) | `agentbook/crates/core/src/equipment.rs` (`config_hash`, `equipment_state`, `clears_ccd_cli`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-host-exposure](agentbook-host-exposure.md) | `agentbook/crates/core/src/host_exposure.rs` (`detect`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-override-config](agentbook-override-config.md) | `agentbook/crates/core/src/override_config.rs` (`generate`, `mount_string`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-autocrlf](agentbook-autocrlf.md) | `agentbook/crates/core/src/autocrlf.rs` (`effective`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-docker-endpoint](agentbook-docker-endpoint.md) | `agentbook/crates/core/src/docker_endpoint.rs` (`resolve`, `parse_host`, `context_dir_name`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-session-count](agentbook-session-count.md) | `agentbook/crates/core/src/sessions.rs` (`count_established`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-forward-ports](agentbook-forward-ports.md) | `agentbook/crates/core/src/ports.rs` (`devcontainer_ports`, `effective`, `check`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
+| [agentbook-openssh-version](agentbook-openssh-version.md) | `agentbook/crates/core/src/openssh.rs` (`parse_version`, `meets_floor`) | `cargo test` (`agentbook/crates/core/tests/algo.rs`) |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
 | [sysctx-anatomy](sysctx-anatomy.md) | `client/.../session-log/sysctx-anatomy/sysctx-anatomy.ts` | vitest |
@@ -117,6 +131,9 @@ format where the two differ).
   - Work Hub web (vitest): `<module>.algo.test.ts` under `work-hub/web/src/`, importing the rows
     file as JSON (that package has no Node types for the shared loader).
   Both Work Hub runners are `npm run test:algo` from `work-hub/`.
+  - AgentBook (Rust): one `#[test]` per `agentbook-*` doc in `agentbook/crates/core/tests/algo.rs`,
+    which reads the rows file from `CARGO_MANIFEST_DIR/../../../docs/algorithm-examples`; run by
+    `npm run test:algo` from `agentbook/`.
 - Loader: `scripts/algo-docs/load-examples.cjs` (types: `load-examples.d.cts`), tested by
   `scripts/__tests__/algo-docs.test.js` (`npm run test:scripts`). That test also loads the rows of
   every doc in this directory except this README, checks that every rows file has its doc, and

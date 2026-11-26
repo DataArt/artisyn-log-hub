@@ -1,6 +1,35 @@
-export interface RepositoryContext {
+/**
+ * One session tag (2026-11-24 otel-session-tags): a `key=value` pair on the root session, read
+ * from the OTEL resource attributes (`otel`) or migrated from the old hook-config context
+ * (`config`). Mirrors the server's `SessionTag` (`server/src/logs/session-tags.reader.ts`).
+ * Deduped server-side: a pair with both sources is reported once, as `otel`.
+ */
+export interface SessionTag {
   key: string;
   value: string;
+  source: 'otel' | 'config';
+}
+
+/**
+ * FR-10 junk-tag verdict of one session, derived at read time by the server: keys with more than
+ * 10 distinct values in the session, and whether the session hit the 500-pair cap.
+ */
+export interface SessionTagNoise {
+  noisyKeys: { key: string; values: number }[];
+  atLimit: boolean;
+}
+
+/** One value bucket of a tag key, as `GET :repoId/session-tags/values` returns it. */
+export interface SessionTagValueBucket {
+  value: string;
+  sessionCount: number;
+}
+
+/** Response of `GET :repoId/session-tags/values` (FR-8 tag discovery). */
+export interface SessionTagValues {
+  tags: Record<string, SessionTagValueBucket[]>;
+  /** Keys noisy on at least one session in scope (FR-10). */
+  noisyKeys: string[];
 }
 
 export interface FileCategory {
@@ -192,6 +221,11 @@ export interface RepositorySession {
    * built client-side (exports, test fixtures) need not set it.
    */
   claudeVersion?: string | null;
+  /**
+   * The root session's tags (2026-11-24 otel-session-tags); a sub-agent row carries its root's
+   * tags. `[]` when untagged; absent from an older server.
+   */
+  tags?: SessionTag[];
 }
 
 export interface RepositorySummary {

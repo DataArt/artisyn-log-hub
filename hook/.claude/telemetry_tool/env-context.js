@@ -28,7 +28,6 @@ const READ_RETRY_DELAY_MS = 50;
 // |---------------------------------|-----------|----------|
 // | telemetryDir                    | ''        | string   |
 // | jsonCompact                     | false     | boolean  |
-// | context                         | []        | array    |
 // | serverUrl                       | ''        | string   |
 // | sendLogsTimeoutMs               | 10000     | number   |
 // | sendLogsOnPromptEnabled         | true      | boolean  |
@@ -79,6 +78,9 @@ const READ_RETRY_DELAY_MS = 50;
 //
 // The `guardrail*` keys of hooks before 2.19.0 (the removed PreToolUse guardrail) are no longer
 // listed: an old config that still carries them gets them merged through as unknown keys, unused.
+// The same holds for `context` (session key/value labels) since hook 3.4.0: session tags now come
+// from `OTEL_RESOURCE_ATTRIBUTES`, `prompt_start` no longer carries `context`, and an old config
+// that still has the key is merged through silently, unused (no warning).
 //
 // `apiKey` and any other key not listed above are not subject to this table:
 // they are merged through unchanged (no default, no type coercion).
@@ -92,7 +94,6 @@ const READ_RETRY_DELAY_MS = 50;
 const CONFIG_DEFAULTS = {
   telemetryDir: '',
   jsonCompact: false,
-  context: [],
   serverUrl: '',
   sendLogsTimeoutMs: 10000,
   sendLogsOnPromptEnabled: true,
@@ -120,7 +121,6 @@ const CONFIG_DEFAULTS = {
 const CONFIG_TYPES = {
   telemetryDir: 'string',
   jsonCompact: 'boolean',
-  context: 'array',
   serverUrl: 'string',
   sendLogsTimeoutMs: 'number',
   sendLogsOnPromptEnabled: 'boolean',
@@ -582,29 +582,6 @@ function resolveOtelNumber(config, key) {
 }
 
 // ---------------------------------------------------------------------------
-// context extraction
-// ---------------------------------------------------------------------------
-function getEnvContext(config) {
-  const entries = config && Array.isArray(config.context) ? config.context : null;
-  if (!entries || entries.length === 0) return null;
-
-  const ctx = {};
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue;
-    const rawKey = entry.key;
-    if (typeof rawKey !== 'string' || !rawKey.trim()) {
-      hookLog(HOOK_FILE, null, 'warn', 'context entry skipped: missing or blank "key"', null);
-      continue;
-    }
-    const key = rawKey.trim().toLowerCase();
-    const rawValue = entry.value;
-    const value = typeof rawValue === 'string' ? rawValue : String(rawValue);
-    ctx[key] = value; // last entry wins on duplicate keys
-  }
-  return Object.keys(ctx).length ? ctx : null;
-}
-
-// ---------------------------------------------------------------------------
 // JSON formatting
 // ---------------------------------------------------------------------------
 function isCompactJson(config) {
@@ -617,7 +594,6 @@ module.exports = {
   resolveOtelDir,
   resolveOtelPort,
   resolveOtelNumber,
-  getEnvContext,
   isCompactJson,
   CONFIG_DEFAULTS,
   coerceConfigValue,

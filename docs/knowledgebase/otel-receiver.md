@@ -5,7 +5,7 @@ description: "Why the hook runs its own loopback OTLP/JSON receiver, why it is o
 tags:
   - hooks
   - otel
-generated: { by: "claude-code", at: "2026-11-25T13:30:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T18:00:00+04:00" }
 ---
 
 # OTEL Receiver
@@ -584,6 +584,17 @@ One line per log record / per metric datapoint / per span (hook `2.29.0`+), so e
 ```
 
 Since hook `2.29.0` every line also carries `hookVersion` (see "Traces" below).
+
+**User resource keys become session tags** (2026-11-24 otel-session-tags). The receiver copies the
+whole `resource` map onto every line and filters nothing, so whatever the user puts into
+`OTEL_RESOURCE_ATTRIBUTES` (e.g. `feature=checkout,team.name=payments`) reaches the server
+unchanged. The server's OTEL projection (`extractOtelTags` → `applyOtelLines`) turns every resource
+attribute whose key is outside its deny-list (`artisyn.`, `service.`, `telemetry.`, `host.`,
+`os.`, `user.`, `session.`, …) into a tag of the root session in `session_tags`
+(`source='otel'`) — see [algorithms/otel-facts.md](algorithms/otel-facts.md) rule 13 for the full
+list and limits. This replaces the hook's old `log-hub.json` `context` (dropped in hook `3.4.0`);
+nothing in the receiver or the hook changed for it, so any hook version that uploads OTEL lines
+feeds tags.
 
 `receivedAt` is receive time and is **never** substituted for the record's own `timeUnixNano` /
 `event.timestamp`, which survive verbatim inside `record`/`dataPoint`.

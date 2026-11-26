@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="656" viewBox="0 0 1040 656" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+  <!-- Wireframe: FR-12 Variables. Left: the shared folder's Variables dialog (devcontainer defaults, user overrides, hidden values, added variables, one exceptional "Only for one laptop" value). Right: laptop card with a "needs a value" note and the "⋯" menu entry. Light theme. -->
+  <defs>
+    <symbol id="lt-work" viewBox="0 0 72 48">
+      <rect x="8" y="3" width="48" height="33" rx="6" fill="#eef1fb" stroke="#3358cc" stroke-width="2.5"/>
+      <ellipse cx="24" cy="18" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <ellipse cx="40" cy="18" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <circle cx="25.2" cy="16.3" r="1.3" fill="#fff"/>
+      <circle cx="41.2" cy="16.3" r="1.3" fill="#fff"/>
+      <ellipse cx="17.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <ellipse cx="46.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <path d="M28.5 25 Q32 29.5 35.5 25" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>
+      <rect x="2" y="36" width="60" height="7" rx="3.5" fill="#3358cc"/>
+      <rect x="26" y="36" width="12" height="2.5" rx="1.2" fill="#c7d2fe"/>
+    </symbol>
+  </defs>
+  <rect width="1040" height="656" fill="#ffffff"/>
+
+  <!-- ===== Dialog: Variables for the shared folder ===== -->
+  <rect x="24" y="24" width="600" height="592" rx="10" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="48" y="60" font-size="16" font-weight="600" fill="#09090b">🔑 Variables — q3-analysis</text>
+  <text x="596" y="60" fill="#71717a">✕</text>
+  <text x="48" y="84" fill="#52525b">Programs on every laptop of this shared folder see these values.</text>
+  <text x="48" y="102" fill="#52525b">Defaults come from the project (.devcontainer → containerEnv / remoteEnv).</text>
+
+  <!-- Table header -->
+  <text x="48" y="136" font-size="12" font-weight="600" fill="#71717a">NAME</text>
+  <text x="208" y="136" font-size="12" font-weight="600" fill="#71717a">VALUE</text>
+  <text x="456" y="136" font-size="12" font-weight="600" fill="#71717a">FROM</text>
+  <line x1="48" y1="144" x2="600" y2="144" stroke="#e4e4e7"/>
+
+  <!-- Row: project default, untouched -->
+  <text x="48" y="172" font-family="Consolas, monospace" fill="#09090b">APP_MODE</text>
+  <rect x="200" y="154" width="240" height="26" rx="5" fill="#fff" stroke="#e4e4e7"/>
+  <text x="210" y="172" fill="#09090b">development</text>
+  <text x="456" y="172" fill="#71717a">project default</text>
+
+  <!-- Row: project default, untouched -->
+  <text x="48" y="208" font-family="Consolas, monospace" fill="#09090b">JIRA_URL</text>
+  <rect x="200" y="190" width="240" height="26" rx="5" fill="#fff" stroke="#e4e4e7"/>
+  <text x="210" y="208" fill="#09090b">https://jira.example.com</text>
+  <text x="456" y="208" fill="#71717a">project default</text>
+
+  <!-- Row: overridden, hidden (folder-wide value) -->
+  <text x="48" y="244" font-family="Consolas, monospace" fill="#09090b">JIRA_PAT</text>
+  <rect x="200" y="226" width="240" height="26" rx="5" fill="#fff" stroke="#e4e4e7"/>
+  <text x="210" y="244" fill="#09090b">••••••••••••••••</text>
+  <text x="378" y="244" font-size="12" fill="#52525b">🔒 Hidden</text>
+  <text x="456" y="244" fill="#09090b">you</text>
+  <text x="490" y="244" font-size="12" fill="#3358cc">↺ project default</text>
+
+  <!-- Sub-row: exceptional per-laptop value of the same variable -->
+  <text x="56" y="280" font-size="12" fill="#52525b">↳ Only for one laptop</text>
+  <rect x="200" y="262" width="240" height="26" rx="5" fill="#fafafa" stroke="#e4e4e7" stroke-dasharray="4 3"/>
+  <text x="210" y="280" fill="#09090b">••••••••••••••••</text>
+  <text x="378" y="280" font-size="12" fill="#52525b">🔒 Hidden</text>
+  <use href="#lt-work" x="456" y="268" width="21" height="14"/>
+  <text x="482" y="280" fill="#09090b">Q3 reports</text>
+  <text x="588" y="280" fill="#991b1b">✕</text>
+
+  <!-- Row: needs a value -->
+  <text x="48" y="316" font-family="Consolas, monospace" fill="#09090b">CONFLUENCE_PAT</text>
+  <rect x="200" y="298" width="240" height="26" rx="5" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="210" y="316" fill="#991b1b">needs a value</text>
+  <text x="378" y="316" font-size="12" fill="#52525b">🔒 Hidden</text>
+  <text x="456" y="316" fill="#71717a">project (empty)</text>
+
+  <!-- Row: added by the user -->
+  <text x="48" y="352" font-family="Consolas, monospace" fill="#09090b">MY_REPORT_DIR</text>
+  <rect x="200" y="334" width="240" height="26" rx="5" fill="#fff" stroke="#e4e4e7"/>
+  <text x="210" y="352" fill="#09090b">/work/given/q3</text>
+  <text x="456" y="352" fill="#09090b">added by you</text>
+  <text x="588" y="352" fill="#991b1b">✕</text>
+
+  <rect x="48" y="372" width="160" height="28" rx="6" fill="#fff" stroke="#d4d4d8" stroke-dasharray="4 3"/>
+  <text x="62" y="391" fill="#09090b">+ Add a variable</text>
+  <text x="224" y="391" font-size="12" fill="#71717a">Names with TOKEN, PAT, SECRET, PASSWORD or KEY start as Hidden.</text>
+  <text x="48" y="420" font-size="12" fill="#71717a">Values apply to all laptops. Exception: on a value, tick "Only for one laptop" to give one laptop its own.</text>
+
+  <!-- Warnings -->
+  <rect x="48" y="436" width="552" height="58" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="64" y="460" font-size="12" fill="#92400e">⚠ The agent and every program on these laptops can read all values, hidden ones too.</text>
+  <text x="64" y="480" font-size="12" fill="#92400e">Hidden values are kept in Windows Credential Manager and are not shown again.</text>
+
+  <rect x="48" y="504" width="552" height="38" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="64" y="528" font-size="12" fill="#1e40af">Changes apply to new Desktop sessions. 2 open sessions keep the old values. No restart.</text>
+
+  <line x1="24" y1="560" x2="624" y2="560" stroke="#e4e4e7"/>
+  <rect x="424" y="572" width="84" height="32" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="444" y="593" fill="#09090b">Cancel</text>
+  <rect x="516" y="572" width="84" height="32" rx="6" fill="#3358cc"/>
+  <text x="541" y="593" fill="#fff" font-weight="600">Save</text>
+
+  <!-- ===== Right: laptop card with needs-a-value note and the ⋯ menu ===== -->
+  <rect x="656" y="24" width="360" height="184" rx="10" fill="#ffffff" stroke="#3358cc"/>
+  <use href="#lt-work" x="672" y="38" width="42" height="28"/>
+  <text x="722" y="56" font-size="15" font-weight="600" fill="#09090b">Q3 reports</text>
+  <rect x="972" y="38" width="30" height="26" rx="6" fill="#eef1fb" stroke="#3358cc"/>
+  <text x="981" y="56" fill="#09090b">⋯</text>
+  <circle cx="727" cy="74" r="4" fill="#16a34a"/>
+  <text x="736" y="78" font-size="12" fill="#166534">Working · 2 sessions</text>
+  <rect x="896" y="64" width="68" height="22" rx="5" fill="#fff" stroke="#d4d4d8"/>
+  <text x="909" y="79" font-size="12" fill="#09090b">⏾ Sleep</text>
+  <text x="676" y="104" font-size="12" fill="#71717a">Equipment: from the project</text>
+  <rect x="676" y="114" width="320" height="30" rx="6" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="688" y="134" font-size="12" fill="#991b1b">⚠ 1 variable needs a value: CONFLUENCE_PAT</text>
+  <text x="958" y="134" font-size="12" fill="#3358cc">Set…</text>
+  <rect x="676" y="158" width="140" height="34" rx="6" fill="#3358cc"/>
+  <text x="696" y="180" fill="#fff" font-weight="600">Open laptop  ↗</text>
+  <text x="828" y="180" font-size="12" fill="#71717a">opens anyway</text>
+
+  <!-- ⋯ menu -->
+  <rect x="816" y="218" width="200" height="178" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="836" y="246" fill="#09090b">✎ Rename</text>
+  <text x="836" y="274" fill="#09090b">📁 Give a folder now…</text>
+  <rect x="824" y="286" width="184" height="26" rx="5" fill="#eff6ff"/>
+  <text x="836" y="304" fill="#1e40af" font-weight="600">🔑 Variables…</text>
+  <text x="836" y="332" fill="#09090b">⧉ Another laptop like this</text>
+  <line x1="828" y1="346" x2="1004" y2="346" stroke="#e4e4e7"/>
+  <text x="836" y="374" fill="#991b1b">✕ Remove laptop…</text>
+
+  <text x="656" y="432" font-size="12" fill="#52525b">The project ships its own scripts, e.g.</text>
+  <rect x="656" y="442" width="360" height="56" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="668" y="464" font-family="Consolas, monospace" font-size="12" fill="#09090b">$ node tools/get-jira-ticket.js ABC-123</text>
+  <text x="668" y="486" font-size="12" fill="#71717a">reads JIRA_URL and JIRA_PAT; AgentBook knows nothing of Jira</text>
+
+  <text x="24" y="640" font-size="12" fill="#71717a">Wireframe — FR-12, AC-16. Variables are set per shared folder (one laptop may get its own value as an exception); defaults from the devcontainer; hidden values in the OS credential store.</text>
+</svg>

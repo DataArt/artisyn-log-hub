@@ -10,6 +10,8 @@
 # The job `db-state` is the one exception to "no DB": see its own comment below. The job
 # `work-hub-fast` checks the separate Work Hub product (work-hub/) and is disabled for now: see its
 # own comment below.
+# The job `agentbook-fast` checks the separate AgentBook product (agentbook/) and is gated the same
+# way: see its own comment below.
 #
 # fast-checks: no secrets, no DB, no dev app: the same `static` checks as .claude/repo_config/repo-health-checks.json
 # (minus lint). A called workflow does not inherit the caller's `env`, hence its own BUN_VERSION.
@@ -152,6 +154,50 @@ jobs:
 
       - name: Algorithm tests
         run: npm run test:algo
+
+  # AgentBook (agentbook/): a separate Rust desktop product (Windows), so its own job on a Windows
+  # runner — never part of fast-checks, the root build or Log Hub's dist/. The same `static` checks
+  # as .claude/repo_config/agentbook-health-checks.json: lint (rustfmt, clippy, licence and
+  # platform-boundary checks), the algorithm tests and the release build of AgentBook.exe and
+  # AgentBook-Setup.exe. No DB, no Docker: the scenario suite (agentbook-scenarios) needs a local
+  # Docker engine and stays a local finalOnly check. Rust comes from agentbook/rust-toolchain.toml
+  # (1.92.0 + rustfmt + clippy) through the rustup preinstalled on the runner. Gated like
+  # work-hub-fast: it runs only when the repository variable AGENTBOOK_CI is `true`
+  # (Settings → Variables → Actions).
+  agentbook-fast:
+    name: agentbook-fast
+    if: vars.AGENTBOOK_CI == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: agentbook
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          package-manager-cache: false
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: |
+          set -eu
+          rustup toolchain install
+          rustc --version
+          cargo --version
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Algorithm tests
+        run: npm run test:algo
+
+      - name: Build (AgentBook.exe, AgentBook-Setup.exe)
+        run: npm run build
 
   # docs/knowledgebase/db_state.sql must match the migrations: a new migration without a regenerated
   # file (or a hand edit of it) fails here. Its own job, because fast-checks runs without a DB. The

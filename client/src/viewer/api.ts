@@ -35,7 +35,6 @@ import type {
   OkfUsageResponse,
   OtelReasonKey,
   RepoConfig,
-  RepositoryContext,
   RepositoryDetail,
   RepositorySession,
   RepositorySummary,
@@ -44,6 +43,9 @@ import type {
   SessionAttributionRunOutcome,
   SessionAttributionValueBucket,
   SessionAttributionValues,
+  SessionTag,
+  SessionTagNoise,
+  SessionTagValues,
   TimelineSession,
   WorkTimeBucket,
   ActiveSessionsResponse,
@@ -116,6 +118,11 @@ import type {
   ExportScopeSummary,
   ImportUploadSummary,
 } from '../models/export-import';
+import {
+  tagFiltersToParams,
+  tagGroupLabel,
+  type TagFilter,
+} from './lib/session-tags';
 // Called by main.tsx once on startup so api.ts can clear React auth state on 401.
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: () => void) {
@@ -477,6 +484,8 @@ export async function fetchRepositoryBranches(
   repoId: number,
   teamId?: number,
   dateRange?: { startDate: string; endDate: string },
+  /** `tag=` filters (otel-session-tags) — the Branch Summary / Cost by Branch reports. */
+  tags?: readonly TagFilter[],
 ): Promise<BranchSummary[]> {
   const params = new URLSearchParams();
   if (teamId != null) params.set('teamId', String(teamId));
@@ -484,6 +493,7 @@ export async function fetchRepositoryBranches(
     params.set('startDate', dateRange.startDate);
     params.set('endDate', dateRange.endDate);
   }
+  appendTagParams(params, tags);
   const qs = params.toString();
   const url = `/api/v1/repositories/${repoId}/sessions/branches${qs ? `?${qs}` : ''}`;
   const res = await apiFetch(url);
@@ -526,16 +536,34 @@ export async function fetchRepositorySummary(
   return res.json() as Promise<RepositorySummary>;
 }
 
-export async function fetchRepositoryContexts(
+/**
+ * FR-8 tag discovery (2026-11-24 otel-session-tags): the tag keys on the root sessions in scope
+ * the caller may open, each value with its session count, plus the keys noisy on at least one of
+ * those sessions. Feeds the repository-header chips and the session-list tag pickers.
+ */
+export async function fetchSessionTagValues(
   repoId: number,
-  teamId?: number,
-): Promise<RepositoryContext[]> {
-  const url = teamId
-    ? `/api/v1/repositories/${repoId}/contexts?teamId=${teamId}`
-    : `/api/v1/repositories/${repoId}/contexts`;
+  scope: {
+    teamId?: number;
+    dateRange?: { startDate: string; endDate: string };
+    /** `''` = sessions with no branch. */
+    branch?: string;
+    userEmail?: string;
+  } = {},
+): Promise<SessionTagValues> {
+  const params = new URLSearchParams();
+  if (scope.teamId != null) params.set('teamId', String(scope.teamId));
+  if (scope.dateRange) {
+    params.set('startDate', scope.dateRange.startDate);
+    params.set('endDate', scope.dateRange.endDate);
+  }
+  if (scope.branch !== undefined) params.set('branch', scope.branch);
+  if (scope.userEmail) params.set('userEmail', scope.userEmail);
+  const qs = params.toString();
+  const url = `/api/v1/repositories/${repoId}/session-tags/values${qs ? `?${qs}` : ''}`;
   const res = await apiFetch(url);
   if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<RepositoryContext[]>;
+  return res.json() as Promise<SessionTagValues>;
 }
 
 // Hook state
@@ -567,9 +595,11 @@ export interface AnalyticsQueryParams {
   // Widened to accept `attr:<key>` for
   // `analytics/timeline`/`analytics/work-time`, both of which now validate that form
   // server-side.
-  groupBy?: 'branch' | 'user' | `attr:${string}`;
+  groupBy?: 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   branches?: string[];
   users?: string[];
+  /** `tag=` filters (otel-session-tags): AND across keys, OR within a key. */
+  tags?: readonly TagFilter[];
 }
 
 export async function fetchAnalyticsTimeline(
@@ -590,11 +620,13 @@ export async function fetchAnalyticsTimeline(
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/analytics/timeline?${url.toString()}`,
   );
   if (!res.ok) throw new ApiError(res.status);
   const raw = (await res.json()) as TimelineSession[];
+  const tagGrouped = isTagGroupBy(params.groupBy);
   return raw.map((s) => {
     if (s.mcpCallsByServer == null) {
       console.error(
@@ -603,10 +635,29 @@ export async function fetchAnalyticsTimeline(
     }
     return {
       ...s,
+      ...(tagGrouped && s.group != null
+        ? { group: tagGroupLabel(s.group) }
+        : {}),
       mcpCallsTotal: s.mcpCallsTotal ?? 0,
       mcpCallsByServer: s.mcpCallsByServer ?? {},
     };
   });
+}
+
+/** Appends one `tag=` per filter entry (`<key>` / `<key>:<value>`, otel-session-tags). */
+function appendTagParams(
+  url: URLSearchParams,
+  tags: readonly TagFilter[] | undefined,
+): void {
+  for (const t of tagFiltersToParams(tags ?? [])) url.append('tag', t);
+}
+
+/**
+ * `groupBy=tag:<key>` responses key the sessions without that tag `__untagged__`; every
+ * fetcher whose groups the UI prints as-is relabels it "(untagged)" here, once.
+ */
+function isTagGroupBy(groupBy: string | undefined): boolean {
+  return groupBy != null && groupBy.startsWith('tag:');
 }
 
 export async function fetchAnalyticsWorkTime(
@@ -627,11 +678,16 @@ export async function fetchAnalyticsWorkTime(
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/analytics/work-time?${url.toString()}`,
   );
   if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<WorkTimeBucket[]>;
+  const buckets = (await res.json()) as WorkTimeBucket[];
+  if (!isTagGroupBy(params.groupBy)) return buckets;
+  return buckets.map((b) =>
+    b.group != null ? { ...b, group: tagGroupLabel(b.group) } : b,
+  );
 }
 
 export interface ExecutiveSummaryQueryParams {
@@ -640,6 +696,8 @@ export interface ExecutiveSummaryQueryParams {
   endDate: string;
   branches?: string[];
   users?: string[];
+  /** `tag=` filters (otel-session-tags): AND across keys, OR within a key. */
+  tags?: readonly TagFilter[];
 }
 
 export async function fetchExecutiveSummaryReport(
@@ -659,6 +717,7 @@ export async function fetchExecutiveSummaryReport(
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/reports/executive-summary?${url.toString()}`,
   );
@@ -671,9 +730,11 @@ export interface CacheReadRatioQueryParams {
   startDate: string;
   endDate: string;
   // Widened to accept `attr:<key>`.
-  groupBy?: 'branch' | 'user' | `attr:${string}`;
+  groupBy?: 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   branches?: string[];
   users?: string[];
+  /** `tag=` filters (otel-session-tags): AND across keys, OR within a key. */
+  tags?: readonly TagFilter[];
 }
 
 export async function fetchCacheReadRatioReport(
@@ -694,11 +755,17 @@ export async function fetchCacheReadRatioReport(
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/reports/cache-read-ratio?${url.toString()}`,
   );
   if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<CacheReadRatioReportData>;
+  const data = (await res.json()) as CacheReadRatioReportData;
+  if (!isTagGroupBy(params.groupBy) || !data.groups) return data;
+  return {
+    ...data,
+    groups: data.groups.map((g) => ({ ...g, group: tagGroupLabel(g.group) })),
+  };
 }
 
 export interface HarnessUsageQueryParams {
@@ -706,9 +773,11 @@ export interface HarnessUsageQueryParams {
   startDate: string;
   endDate: string;
   // Widened to accept `attr:<key>`.
-  groupBy?: 'branch' | 'user' | `attr:${string}`;
+  groupBy?: 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   branches?: string[];
   users?: string[];
+  /** `tag=` filters (otel-session-tags): AND across keys, OR within a key. */
+  tags?: readonly TagFilter[];
 }
 
 export async function fetchHarnessUsageReport(
@@ -729,11 +798,17 @@ export async function fetchHarnessUsageReport(
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/reports/harness-usage?${url.toString()}`,
   );
   if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<HarnessUsageReportData>;
+  const data = (await res.json()) as HarnessUsageReportData;
+  if (!isTagGroupBy(params.groupBy) || !data.groups) return data;
+  return {
+    ...data,
+    groups: data.groups.map((g) => ({ ...g, group: tagGroupLabel(g.group) })),
+  };
 }
 
 // --- Change surface --------------------------------------------------------------
@@ -775,7 +850,7 @@ export async function fetchSessionChangeSurfaceFiles(
 
 export interface ChangeSurfaceAnalyticsQueryParams extends AnalyticsQueryParams {
   /** `'none'` is accepted too; absent means "no grouping". */
-  groupBy?: 'branch' | 'user' | `attr:${string}`;
+  groupBy?: 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   /** Absent -> the server derives it from the range span. */
   bucket?: ChangeSurfaceTimelineBucket;
 }
@@ -799,6 +874,7 @@ export async function fetchAnalyticsChangeSurface(
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/analytics/change-surface?${url.toString()}`,
   );
@@ -810,9 +886,11 @@ export interface ChangeSurfaceReportQueryParams {
   teamId?: number;
   startDate: string;
   endDate: string;
-  groupBy?: 'branch' | 'user' | `attr:${string}`;
+  groupBy?: 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   branches?: string[];
   users?: string[];
+  /** `tag=` filters (otel-session-tags): AND across keys, OR within a key. */
+  tags?: readonly TagFilter[];
 }
 
 export async function fetchChangeSurfaceReport(
@@ -833,6 +911,7 @@ export async function fetchChangeSurfaceReport(
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/reports/change-surface?${url.toString()}`,
   );
@@ -1160,6 +1239,8 @@ export interface AttributionBreakdownQueryParams {
   endDate: string;
   branches?: string[];
   users?: string[];
+  /** `tag=` filters (otel-session-tags): AND across keys, OR within a key. */
+  tags?: readonly TagFilter[];
 }
 
 export async function fetchAttributionBreakdownReport(
@@ -1179,6 +1260,7 @@ export async function fetchAttributionBreakdownReport(
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/reports/attribution-breakdown?${url.toString()}`,
   );
@@ -1232,6 +1314,8 @@ export interface UsageAnalyticsQueryParams {
   endDate: string;
   branches?: string[];
   users?: string[];
+  /** `tag=` filters (otel-session-tags): AND across keys, OR within a key. */
+  tags?: readonly TagFilter[];
   /** `active-sessions` only — default 100, max 500. */
   limit?: number;
 }
@@ -1255,6 +1339,7 @@ function usageAnalyticsQuery(params: UsageAnalyticsQueryParams): string {
   if (params.users && params.users.length > 0) {
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
+  appendTagParams(url, params.tags);
   if (params.limit != null) url.set('limit', String(params.limit));
   return url.toString();
 }
@@ -1701,6 +1786,13 @@ export interface SessionLogsData {
    * uploaded) or the owning user's row is gone — there is no fallback or backfill (DD-17).
    */
   harnessSnapshot?: HarnessSnapshot | null;
+  /**
+   * The root session's tags (2026-11-24 otel-session-tags); a sub-agent gets its root's tags.
+   * Absent from an older server.
+   */
+  tags?: SessionTag[];
+  /** FR-10 junk-tag verdict of the root session. Absent from an older server. */
+  tagNoise?: SessionTagNoise;
 }
 
 /** One JSONL line of a stored log body. */
@@ -1738,6 +1830,10 @@ export interface SessionLogPartsManifest {
   turnEndAdvisor: NonNullable<SessionLogsData['turnEndAdvisor']> | null;
   sessionAttribution: NonNullable<SessionLogsData['sessionAttribution']>;
   harnessSnapshot: HarnessSnapshot | null;
+  /** The root session's tags (otel-session-tags); absent from an older server. */
+  tags?: SessionTag[];
+  /** FR-10 junk-tag verdict of the root session; absent from an older server. */
+  tagNoise?: SessionTagNoise;
   /** The server has a backlog older than 30 s, so derived figures may lag behind the upload. */
   derivedLagging: boolean;
   /** The root session's OTEL liveness (the Session Map's LIVE / Replay); absent from an older server. */
@@ -2855,6 +2951,11 @@ export interface SpendQueryParams {
   offset: number;
   /** The viewer's IANA time zone, used when the scope has no budget of that period. */
   tz: string;
+  /**
+   * The tag key of the `tag` slice (otel-session-tags): `spend` adds that slice, and
+   * `spend/sessions` needs it for `slice=tag`. Absent = no tag slice.
+   */
+  tagKey?: string;
 }
 
 function spendQuery(params: SpendQueryParams): URLSearchParams {
@@ -2862,6 +2963,7 @@ function spendQuery(params: SpendQueryParams): URLSearchParams {
   q.set('period', params.period);
   q.set('offset', String(params.offset));
   q.set('tz', params.tz);
+  if (params.tagKey !== undefined) q.set('tagKey', params.tagKey);
   return q;
 }
 

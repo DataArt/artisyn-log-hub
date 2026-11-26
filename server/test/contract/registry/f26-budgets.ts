@@ -834,6 +834,132 @@ const SPEND_ROWS: ContractCase[] = [
     read: BUDGET_OBJECT('budget', '@budgetOwnerR1.id'),
   },
   {
+    // 2026-11-24 otel-session-tags: every SpendView carries the tag keys present on the
+    // period's roots; without `tagKey` there is no tag slice (the seven default slices only).
+    id: 'F26-spend-repo-tag-keys',
+    route: 'GET /api/v1/repositories/:repoId/spend',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: SPEND_JAN_UTC,
+    expect: {
+      status: 200,
+      bodyMatches: { tagKeys: ['feature', 'jira', 'team.name'] },
+    },
+    read: {
+      sql: `SELECT kind FROM (VALUES (1, 'model'), (2, 'user'), (3, 'repo'), (4, 'branch'),
+                                     (5, 'subagent'), (6, 'skill'), (7, 'mcp')) AS k(n, kind)
+             ORDER BY n`,
+      shape: 'array',
+      path: 'slices',
+      fields: { kind: 'kind' },
+    },
+  },
+  {
+    // `tagKey=jira` appends the tag slice (index 7): ARR-1 (s01), ARR-2 (s04) and
+    // "(untagged)" (the s02 tree), each tree whole, costliest first.
+    id: 'F26-spend-repo-tag-slice',
+    route: 'GET /api/v1/repositories/:repoId/spend',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { ...SPEND_JAN_UTC, tagKey: 'jira' },
+    expect: { status: 200, minRows: 3 },
+    read: {
+      sql: `WITH roots AS ${PERSONAL_R1_ROOTS},
+                 total AS (SELECT sum(micros) AS t FROM roots),
+                 keyed AS (SELECT p.micros,
+                                  coalesce(v.value, '__untagged__') AS k
+                             FROM roots p
+                             LEFT JOIN LATERAL (SELECT DISTINCT st.value FROM session_tags st
+                                                 WHERE st.session_id = p.id
+                                                   AND st.key = 'jira') v ON true)
+            SELECT k AS key, CASE WHEN k = '__untagged__' THEN '(untagged)' ELSE k END AS label,
+                   count(*) AS sessions, sum(micros) AS micros,
+                   sum(micros)::float8 / (SELECT t FROM total) AS share
+              FROM keyed GROUP BY k
+             ORDER BY sum(micros) DESC, 2`,
+      args: ['@owner.id', '@R1.url'],
+      shape: 'array',
+      path: 'slices.7.rows',
+      fields: {
+        key: 'key',
+        label: 'label',
+        sessions: { col: 'sessions', as: 'number' },
+        micros: { col: 'micros', as: 'number' },
+        share: { col: 'share', as: 'numeric', tol: 1e-9 },
+      },
+      strict: true,
+    },
+  },
+  {
+    // Fan-out: s02 holds two `feature` values and counts whole in both rows, so the rows add
+    // up to more than the period's spend (billing = s02 + s04, checkout = s01 + s02).
+    id: 'F26-spend-repo-tag-slice-fan-out',
+    route: 'GET /api/v1/repositories/:repoId/spend',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { ...SPEND_JAN_UTC, tagKey: 'feature' },
+    expect: { status: 200, minRows: 2 },
+    read: {
+      sql: `WITH roots AS ${PERSONAL_R1_ROOTS}
+            SELECT v.value AS key, count(*) AS sessions, sum(p.micros) AS micros
+              FROM roots p
+              JOIN LATERAL (SELECT DISTINCT st.value FROM session_tags st
+                             WHERE st.session_id = p.id AND st.key = 'feature') v ON true
+             GROUP BY v.value`,
+      args: ['@owner.id', '@R1.url'],
+      shape: 'array',
+      path: 'slices.7.rows',
+      sortBy: 'key',
+      fields: {
+        key: 'key',
+        sessions: { col: 'sessions', as: 'number' },
+        micros: { col: 'micros', as: 'number' },
+      },
+    },
+  },
+  {
+    // The tag slice names its kind and key.
+    id: 'F26-spend-repo-tag-slice-kind',
+    route: 'GET /api/v1/repositories/:repoId/spend',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { ...SPEND_JAN_UTC, tagKey: 'feature' },
+    expect: { status: 200 },
+    read: {
+      sql: `SELECT 'tag' AS kind, 'feature' AS tag_key`,
+      shape: 'object',
+      path: 'slices.7',
+      fields: { kind: 'kind', tagKey: 'tag_key' },
+    },
+  },
+  {
+    // The team view slices by tag the same way (T2: R1 + Rdesert, visible users only).
+    id: 'F26-spend-team-tag-slice',
+    route: 'GET /api/v1/teams/:teamId/spend',
+    actor: 'manager',
+    params: { teamId: '@T2.id' },
+    query: { ...SPEND_JAN_UTC, tagKey: 'jira' },
+    expect: { status: 200, minRows: 2 },
+    read: {
+      sql: `WITH roots AS ${TEAM_T2_ROOTS}
+            SELECT coalesce(v.value, '__untagged__') AS key, count(*) AS sessions,
+                   sum(p.micros) AS micros
+              FROM roots p
+              LEFT JOIN LATERAL (SELECT DISTINCT st.value FROM session_tags st
+                                  WHERE st.session_id = p.id AND st.key = 'jira') v ON true
+             GROUP BY 1`,
+      args: ['@T2.id'],
+      shape: 'array',
+      path: 'slices.7.rows',
+      sortBy: 'key',
+      fields: {
+        key: 'key',
+        sessions: { col: 'sessions', as: 'number' },
+        micros: { col: 'micros', as: 'number' },
+      },
+    },
+  },
+  {
     // T2 on R1: the rows of every T2 member, the owner plus acknowledged members only
     // (restricted team), the January of the budget's Europe/Berlin time zone.
     id: 'F26-spend-team-repo-manager',
@@ -939,6 +1065,94 @@ const SPEND_ROWS: ContractCase[] = [
       path: 'sessions',
       fields: { ...SESSION_FIELDS, firstPrompt: 'first_prompt' },
       strict: true,
+    },
+  },
+  {
+    // 2026-11-24 otel-session-tags: a tag slice row opens the trees carrying the value (fan-out:
+    // s02 also opens under billing).
+    id: 'F26-spend-sessions-repo-tag',
+    route: 'GET /api/v1/repositories/:repoId/spend/sessions',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: {
+      ...SPEND_JAN_UTC,
+      slice: 'tag',
+      tagKey: 'feature',
+      key: 'checkout',
+    },
+    expect: { status: 200, minRows: 2, bodyMatches: { truncated: false } },
+    read: {
+      sql: sessionsSql(
+        PERSONAL_R1_ROOTS,
+        'NULL::int',
+        `EXISTS (SELECT 1 FROM session_tags st WHERE st.session_id = p.id
+                    AND st.key = 'feature' AND st.value = 'checkout')`,
+      ),
+      args: ['@owner.id', '@R1.url'],
+      shape: 'array',
+      path: 'sessions',
+      fields: { ...SESSION_FIELDS, firstPrompt: 'first_prompt' },
+      strict: true,
+    },
+  },
+  {
+    // The "(untagged)" row: the trees without the key (s02 has no jira tag).
+    id: 'F26-spend-sessions-repo-tag-untagged',
+    route: 'GET /api/v1/repositories/:repoId/spend/sessions',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: {
+      ...SPEND_JAN_UTC,
+      slice: 'tag',
+      tagKey: 'jira',
+      key: '__untagged__',
+    },
+    expect: { status: 200, minRows: 1, bodyMatches: { truncated: false } },
+    read: {
+      sql: sessionsSql(
+        PERSONAL_R1_ROOTS,
+        'NULL::int',
+        `NOT EXISTS (SELECT 1 FROM session_tags st WHERE st.session_id = p.id
+                        AND st.key = 'jira')`,
+      ),
+      args: ['@owner.id', '@R1.url'],
+      shape: 'array',
+      path: 'sessions',
+      fields: SESSION_FIELDS,
+    },
+  },
+  {
+    id: 'F26-spend-sessions-tag-without-key',
+    route: 'GET /api/v1/repositories/:repoId/spend/sessions',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { ...SPEND_JAN_UTC, slice: 'tag', key: 'checkout' },
+    expect: { status: 400 },
+  },
+  {
+    // The team route accepts slice=tag too.
+    id: 'F26-spend-sessions-team-tag',
+    route: 'GET /api/v1/teams/:teamId/spend/sessions',
+    actor: 'manager',
+    params: { teamId: '@T2.id' },
+    query: {
+      ...SPEND_JAN_UTC,
+      slice: 'tag',
+      tagKey: 'feature',
+      key: 'billing',
+    },
+    expect: { status: 200, minRows: 2, bodyMatches: { truncated: false } },
+    read: {
+      sql: sessionsSql(
+        TEAM_T2_ROOTS,
+        '$1::int',
+        `EXISTS (SELECT 1 FROM session_tags st WHERE st.session_id = p.id
+                    AND st.key = 'feature' AND st.value = 'billing')`,
+      ),
+      args: ['@T2.id'],
+      shape: 'array',
+      path: 'sessions',
+      fields: SESSION_FIELDS,
     },
   },
   {

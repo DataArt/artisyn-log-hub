@@ -34,6 +34,7 @@ import {
   assertPositiveTeamId,
   parseSpendPeriodQuery,
   parseSpendSessionsSlice,
+  parseSpendTagKey,
 } from './budget-query';
 import type { ScopeAccess } from './budget-scope';
 import { BudgetsService, type BudgetEventsPage } from './budgets.service';
@@ -48,6 +49,8 @@ interface SpendRawQuery {
   period?: string;
   offset?: string;
   tz?: string;
+  /** Adds a `tag` slice by this session tag key (2026-11-24 otel-session-tags). */
+  tagKey?: string;
 }
 
 interface SpendSessionsRawQuery extends SpendRawQuery {
@@ -122,7 +125,10 @@ class BudgetRoutes {
     user: AuthUser,
     raw: SpendRawQuery,
   ): Promise<SpendView> {
-    return this.spend.getSpendView(access, user.id, parseSpendPeriodQuery(raw));
+    return this.spend.getSpendView(access, user.id, {
+      ...parseSpendPeriodQuery(raw),
+      tagKey: parseSpendTagKey(raw.tagKey),
+    });
   }
 
   spendSessions(
@@ -135,6 +141,7 @@ class BudgetRoutes {
       ...parseSpendPeriodQuery(raw),
       slice: parseSpendSessionsSlice(raw.slice),
       key: raw.key ?? '',
+      tagKey: parseSpendTagKey(raw.tagKey),
     });
   }
 }

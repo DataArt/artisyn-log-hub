@@ -1,0 +1,38 @@
+[package]
+name = "agentbook-engine"
+description = "AgentBook engine: Docker, devcontainer CLI, downloads, laptop lifecycle and context push"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "agentbook_engine"
+path = "src/lib.rs"
+
+[dependencies]
+agentbook-core = { path = "../core" }
+agentbook-platform = { path = "../platform" }
+bollard = "0.21.1"
+bytes = "1.12.1"
+flate2 = "1.1.11"
+futures-util = "0.3.34"
+# Downloads (FR-10): the OS proxy (system-proxy) and the OS certificate store (native TLS), so a
+# corporate proxy and its TLS inspection work as they do for the browser.
+reqwest = { version = "0.12.28", default-features = false, features = ["default-tls", "system-proxy", "stream", "http2"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tar = "0.4.46"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "process", "fs", "io-util", "sync", "time", "net"] }
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2"] }
+
+# Scenario suite on real Docker (`npm run test:scenarios`, scripts/scenarios.mjs). Its own runner
+# (harness = false) so one stand serves every step and its Docker objects, fake home and data dir
+# are always cleaned up after the last one. It lives in agentbook/tests/scenarios/.
+[[test]]
+name = "scenarios"
+path = "../../tests/scenarios/main.rs"
+harness = false

@@ -167,6 +167,16 @@ export function spanLine(sessionId: string, sp: OtelSpanSpec, opts: LineOptions 
   };
 }
 
+/**
+ * `lines` with extra resource attributes merged into each line's resource — what a user's
+ * `OTEL_RESOURCE_ATTRIBUTES` (e.g. `feature=checkout,team.name=payments`) adds to every record
+ * Claude Code exports. Keys outside the server's deny-list become session tags
+ * (2026-11-24 otel-session-tags).
+ */
+export function withResource(lines: readonly OtelLine[], attrs: Record<string, string>): OtelLine[] {
+  return lines.map((l) => ({ ...l, resource: { ...l.resource, ...attrs } }));
+}
+
 /** NDJSON of `lines`, one per row, trailing newline — the body of a `claude-otel` upload. */
 export function chunkBody(lines: readonly OtelLine[]): string {
   return lines.map((l) => JSON.stringify(l)).join('\n') + '\n';

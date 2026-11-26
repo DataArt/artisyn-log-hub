@@ -2,6 +2,7 @@ import { View, Text } from '@react-pdf/renderer';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAnalyticsWorkTime } from '../../../api';
 import { GroupByFanOutCaveat } from './GroupByFanOutCaveat';
+import { isFanOutGroupBy } from '../../../lib/session-tags';
 import { WorkTimeByDayChart } from './WorkTimeByDayChart';
 import { ReportDocumentHeader } from './ReportDocumentHeader';
 import { ReportKpiTable } from './ReportKpiTable';
@@ -54,6 +55,7 @@ export function WorkTimeDistributionReport({
       endDate,
       params.groupBy,
       params.branches,
+      params.tags,
       generation,
     ],
     queryFn: () =>
@@ -63,6 +65,7 @@ export function WorkTimeDistributionReport({
         endDate,
         groupBy: params.groupBy !== 'none' ? params.groupBy : undefined,
         branches: params.branches.length > 0 ? params.branches : undefined,
+        tags: params.tags,
       }),
   });
 
@@ -86,7 +89,7 @@ export function WorkTimeDistributionReport({
   // `session-timeline`/`cost-by-user`/`cache-read-ratio` can. Falls back to always showing the
   // caveat once grouped by an attribute, since it can't be ruled out from this report's
   // response shape (same rationale as HarnessUsageReport.tsx).
-  const showFanOutCaveat = params.groupBy.startsWith('attr:');
+  const showFanOutCaveat = isFanOutGroupBy(params.groupBy);
 
   const { downloadError, handleDownload } = useReportPdfDownload(
     () =>
@@ -140,7 +143,7 @@ export function WorkTimeDistributionReport({
           },
         ]}
       />
-      <GroupByFanOutCaveat show={showFanOutCaveat} />
+      <GroupByFanOutCaveat show={showFanOutCaveat} groupBy={params.groupBy} />
       <section>
         <h2 className="text-sm font-semibold text-foreground">
           Work Time per Day

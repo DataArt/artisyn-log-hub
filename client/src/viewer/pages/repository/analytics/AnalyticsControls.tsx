@@ -9,7 +9,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/ui/tooltip';
-import type { SessionAttributionAttributeDef } from '../../../../models/repositories';
+import type {
+  SessionAttributionAttributeDef,
+  SessionTagValues,
+} from '../../../../models/repositories';
+import { groupByTagKey, type TagFilter } from '../../../lib/session-tags';
+import { TagFilterControl } from '../TagFilterControl';
+import { TagGroupByItems } from '../TagGroupByItems';
 import type { AnalyticsState } from './analytics-state';
 import { VIEW_OPTIONS } from './analytics-state';
 import { isUsageAnalyticsView } from './UsageAnalyticsPanel';
@@ -59,6 +65,9 @@ interface Props {
    * the "Group by" dropdown's ATTRIBUTES section; empty when the feature isn't configured,
    * in which case that section renders nothing. */
   attributeDefinitions: SessionAttributionAttributeDef[];
+  /** Tag discovery over the window (otel-session-tags): the tag filter and the TAGS section. */
+  tagValues: SessionTagValues | undefined;
+  onTagsChange: (next: TagFilter[]) => void;
   onRangeToggle: (value: string) => void;
   onCustomButtonClick: () => void;
   formatCustomLabel: (from: string, to: string) => string;
@@ -87,6 +96,8 @@ export function AnalyticsControls({
   productivityMetric,
   changeSurfaceMetric,
   attributeDefinitions,
+  tagValues,
+  onTagsChange,
   onRangeToggle,
   onCustomButtonClick,
   formatCustomLabel,
@@ -194,6 +205,11 @@ export function AnalyticsControls({
                     ))}
                   </div>
                 )}
+                <TagGroupByItems
+                  tagValues={tagValues}
+                  groupBy={state.groupBy}
+                  labelPrefix="Group by"
+                />
               </Select.Viewport>
             </Select.Content>
           </Select.Portal>
@@ -268,6 +284,16 @@ export function AnalyticsControls({
             </div>
           </PopoverContent>
         </Popover>
+      )}
+
+      {/* Tag filter (otel-session-tags) — every view but Budget burn, whose route has no tag=. */}
+      {!isBudgetBurn && (
+        <TagFilterControl
+          tagValues={tagValues}
+          value={state.tags}
+          onChange={onTagsChange}
+          excludeKey={groupByTagKey(state.groupBy)}
+        />
       )}
 
       {/* Layout toggle — vertical/horizontal applies to the D3 bar charts only; the usage

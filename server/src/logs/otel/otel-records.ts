@@ -9,7 +9,13 @@ import {
   stringAttrOf,
   tokenCountOf,
 } from '../otel-chunk';
-import { OTEL_SPAN_ATTRIBUTES_MAX_BYTES } from './otel-facts.constants';
+import {
+  OTEL_SPAN_ATTRIBUTES_MAX_BYTES,
+  OTEL_TAG_DENY_PREFIXES,
+  OTEL_TAG_MAX_KEY,
+  OTEL_TAG_MAX_PAIRS,
+  OTEL_TAG_MAX_VALUE,
+} from './otel-facts.constants';
 
 /**
  * Pure extraction of OTEL calls and spans from chunk lines (DD-8 … DD-10).
@@ -364,6 +370,61 @@ export function extractOtelAccount(
     customBaseUrl: best.customBaseUrl?.value ?? null,
     eventAt: new Date(eventAt),
   };
+}
+
+/** One user tag read from a line's resource (2026-11-24 otel-session-tags). */
+export interface ExtractedOtelTag {
+  key: string;
+  value: string;
+}
+
+/** A resource value as tag text: strings, finite numbers and booleans; anything else is null. */
+function tagText(raw: unknown): string | null {
+  let text: string;
+  if (typeof raw === 'string') text = raw;
+  else if (typeof raw === 'number' && Number.isFinite(raw)) text = String(raw);
+  else if (typeof raw === 'boolean' || typeof raw === 'bigint') {
+    text = String(raw);
+  } else return null;
+  // Postgres text rejects NUL; drop it before trimming so the stored text is what was checked.
+  return text.split('\u0000').join('').trim();
+}
+
+/**
+ * User tags of the lines (FR-2, FR-3, NFR limits): every resource attribute whose key does not
+ * start with a prefix of {@link OTEL_TAG_DENY_PREFIXES}. Keys and values are coerced to text and
+ * trimmed; keys are case-sensitive; an empty key or value is ignored; a key longer than
+ * {@link OTEL_TAG_MAX_KEY} or a value longer than {@link OTEL_TAG_MAX_VALUE} drops the pair (never
+ * truncated). Every distinct `(key, value)` is kept once, in first-seen order (line order, then the
+ * resource's key order), at most {@link OTEL_TAG_MAX_PAIRS} of them. Never throws.
+ */
+export function extractOtelTags(lines: readonly unknown[]): ExtractedOtelTag[] {
+  const seen = new Set<string>();
+  const tags: ExtractedOtelTag[] = [];
+  for (const line of lines) {
+    const entry = asLine(line);
+    const resource = entry?.resource;
+    if (!resource || typeof resource !== 'object' || Array.isArray(resource)) {
+      continue;
+    }
+    for (const [rawKey, rawValue] of Object.entries(
+      resource as Record<string, unknown>,
+    )) {
+      const key = tagText(rawKey);
+      if (!key || key.length > OTEL_TAG_MAX_KEY) continue;
+      if (OTEL_TAG_DENY_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+        continue;
+      }
+      const value = tagText(rawValue);
+      if (!value || value.length > OTEL_TAG_MAX_VALUE) continue;
+      const id = JSON.stringify([key, value]);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      tags.push({ key, value });
+      if (tags.length >= OTEL_TAG_MAX_PAIRS) return tags;
+    }
+  }
+  return tags;
 }
 
 /** One OTLP span, as `otel_spans` stores it (before cost and rollup). */

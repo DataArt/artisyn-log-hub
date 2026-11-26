@@ -131,7 +131,7 @@ export function useRepositoryViewState({
       queryKey: ['repo-summary', repoId, teamId],
     });
     void queryClient.invalidateQueries({
-      queryKey: ['repo-contexts', repoId, teamId],
+      queryKey: ['repo-tag-values', repoId, teamId],
     });
     void queryClient.invalidateQueries({
       queryKey: ['repo-branches', repoId, teamId],

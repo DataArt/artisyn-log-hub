@@ -27,6 +27,12 @@ import {
   attributeGroupLabels,
   parseGroupByAttrKey,
 } from '../attribute-filter.sql';
+import { loadTagGroupLabels } from '../session-tags.reader';
+import {
+  parseGroupByTagKey,
+  UNTAGGED_GROUP,
+  UNTAGGED_GROUP_LABEL,
+} from '../tag-filter.sql';
 import { computeChangeSurface } from './change-surface-metrics';
 import {
   CHANGE_SURFACE_BUCKET_THRESHOLDS,
@@ -46,7 +52,8 @@ export type ChangeSurfaceGroupBy =
   | 'none'
   | 'branch'
   | 'user'
-  | `attr:${string}`;
+  | `attr:${string}`
+  | `tag:${string}`;
 
 /**
  * `opts` is exactly what `resolveUsageScope()` returns (`reports.controller.ts`) plus the two
@@ -217,8 +224,9 @@ export class ChangeSurfaceAggregateService {
           key,
           // Branch/user/attribute keys are already the display text (`attributeGroupLabels()`
           // resolves `Unattributed`/`Not determined` for the attribute form), so there is no
-          // second lookup to keep in sync here.
-          label: key,
+          // second lookup to keep in sync here. The one exception is the tag grouping's
+          // `__untagged__` key, labelled "(untagged)".
+          label: key === UNTAGGED_GROUP ? UNTAGGED_GROUP_LABEL : key,
           sessions: groupRootIds.length,
           aggregate: computeChangeSurface(groupFacts, {
             computed: groupRootIds.some((id) => computedFlags.get(id) === true),
@@ -245,6 +253,16 @@ export class ChangeSurfaceAggregateService {
     roots: readonly ScopedRootSession[],
     opts: ChangeSurfaceAggregateOptions,
   ): Promise<Map<number, string[]>> {
+    // `groupBy=tag:<key>` (otel-session-tags): one bucket per distinct value of the root's
+    // tag, `__untagged__` without it — fan-out, like a `string[]` attribute.
+    const tagKey = parseGroupByTagKey(opts.groupBy);
+    if (tagKey !== null) {
+      return loadTagGroupLabels(
+        this.db,
+        roots.map((root) => root.sessionRowId),
+        tagKey,
+      );
+    }
     const attrKey = parseGroupByAttrKey(opts.groupBy);
     const attributionValues =
       attrKey !== undefined

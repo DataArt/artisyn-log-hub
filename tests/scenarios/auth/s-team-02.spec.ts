@@ -21,6 +21,8 @@ import { createApiKey } from '../helpers/api-key';
 import { getSpend, listBudgets, recentAt, usd2 } from '../helpers/budgets';
 import { ownRepoId, rangeAround, uploadPromptSession } from '../helpers/prompt-session';
 import { addTeamRepo, browserAs, createTeam, inviteAndAccept, setMemberRoles } from '../helpers/teams';
+import { uploadOtelChunk, waitForOtelProjected } from '../helpers/otel';
+import { callLines, otelTurn, withResource } from '../fixtures/otel/otel-lines';
 import {
   ACCESS_MODE_TOOLTIP_ANALYTICS,
   PROMPT_HIDDEN_LABEL,
@@ -59,6 +61,7 @@ test('@S-TEAM-02 restricted team: who sees what (member, owner, trainer, manager
   ];
   const sid = (who: string) => `rst-${runId}-${who}`;
   const prompt = (who: string) => `prompt-${who} ${runId}`;
+  const tagOf = (who: string) => `tag-${who}-${runId}`;
   const range = rangeAround();
 
   const { teamId, repoId } = await test.step('setup: team «Restricted-<run>», everyone accepted, one session each, roles after upload', async () => {
@@ -67,7 +70,14 @@ test('@S-TEAM-02 restricted team: who sees what (member, owner, trainer, manager
     for (const [who, user] of uploaders) {
       const key = await createApiKey(user.api);
       await uploadPromptSession(api, key.key, { sessionId: sid(who), prompt: prompt(who), repoUrl }, { db, userId: user.id });
+      // A session tag from an OTEL resource attribute (2026-11-24 otel-session-tags, AC-8).
+      const turn = otelTurn(`r${who}${runId}`, new Date(Date.now() - 60 * 60 * 1000));
+      await uploadOtelChunk(api, key.key, sid(who), withResource(callLines(sid(who), turn), { uploader: tagOf(who) }), {
+        db,
+        userId: user.id,
+      });
     }
+    for (const [who] of uploaders) await waitForOtelProjected(db, sid(who));
     await addTeamRepo(owner, team, repoUrl);
     await setMemberRoles(owner, team, tr.id, { isAdlcTrainer: true });
     await setMemberRoles(owner, team, mg.id, { isManager: true });
@@ -126,6 +136,30 @@ test('@S-TEAM-02 restricted team: who sees what (member, owner, trainer, manager
     for (const path of perSession('m2')) expect(await status(m1, path), path).toBe(403);
     for (const path of perSession('m1')) expect(await status(m1, path), path).toBe(200);
     for (const path of teamWide) expect(await status(m1, path), path).toBe(403);
+  });
+
+  await test.step('3b. AC-8, AC-10a (2026-11-24 otel-session-tags): tags follow session visibility — M1’s discovery, repository contexts and list rows hold only M1’s own tag; the owner’s hold all five', async () => {
+    const tagsOf = async (user: ScenarioUser) => {
+      const res = await user.api.get(`${base}/session-tags/values?teamId=${teamId}`);
+      expect(res.status(), `${user.email} tag discovery`).toBe(200);
+      return ((await res.json()) as { tags: Record<string, Array<{ value: string }>> }).tags.uploader?.map((v) => v.value).sort() ?? [];
+    };
+    const contextsOf = async (user: ScenarioUser) => {
+      const res = await user.api.get(`${base}/contexts?teamId=${teamId}`);
+      expect(res.status(), `${user.email} contexts`).toBe(200);
+      return ((await res.json()) as Array<{ key: string; value: string }>).map((c) => c.value).sort();
+    };
+    expect(await tagsOf(m1)).toEqual([tagOf('m1')]);
+    expect(await contextsOf(m1)).toEqual([tagOf('m1')]);
+    const m1Rows = (await (await m1.api.get(`${base}/sessions?teamId=${teamId}`)).json()) as Array<SessionRow & { tags: Array<{ value: string }> }>;
+    expect(m1Rows.flatMap((r) => r.tags.map((t) => t.value))).toEqual([tagOf('m1')]);
+    // M1 cannot reach another member's session through a tag filter either.
+    const filtered = await m1.api.get(`${base}/sessions?teamId=${teamId}&tag=${encodeURIComponent(`uploader:${tagOf('m2')}`)}`);
+    expect(filtered.status()).toBe(200);
+    expect(await filtered.json()).toEqual([]);
+    const all = uploaders.map(([who]) => tagOf(who)).sort();
+    expect(await tagsOf(owner)).toEqual(all);
+    expect(await contextsOf(owner)).toEqual(all);
   });
 
   await test.step('4. API (OWNER): all five sessions with prompts, M2’s raw logs, analytics with prompts', async () => {

@@ -25,7 +25,7 @@ what has been collected.
 
 | Claude Code event | Script | What it does |
 |---|---|---|
-| `UserPromptSubmit` | `telemetry-hook.js` | Writes a `prompt_start` record: the prompt text, git context (remote, repo root, branch, `user.name`) and configured `context` values. At most once a minute, starts a background upload (`prompt-upload-hook.js`) and re-arms the OTEL receiver. |
+| `UserPromptSubmit` | `telemetry-hook.js` | Writes a `prompt_start` record: the prompt text, git context (remote, repo root, branch, `user.name`). At most once a minute, starts a background upload (`prompt-upload-hook.js`) and re-arms the OTEL receiver. |
 | `SessionStart` | `lifecycle-hook.js` | Writes a record with the git context (remote, repo root, branch, `user.name`); starts the shared loopback receiver if none is running — since hook `3.0.0` whether OTEL is enabled or not, because it is also the background log uploader — and, when OTEL is enabled, checks that Claude Code's exporter points at it. Warns about an outdated Node.js. |
 | `PostToolUse` | `lifecycle-hook.js` | Writes the tool name, tool input, tool-use id, agent id/type and, for edit tools, added/removed line counts. The tool's output is not copied into this record. |
 | `PostToolUseFailure` | `lifecycle-hook.js` | Writes the tool name, tool input, error text and (since `2.24.0`) tool-use id. |

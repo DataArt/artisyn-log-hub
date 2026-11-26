@@ -26,6 +26,7 @@ Secret scanning is separate and unchanged: see [Git Hooks and Secret Scanning](g
 | `security-report` | `.github/workflows/security-report.yml` | `workflow_run` (`completed`) of `security-scans` and `virustotal` | the triggering run came from a `pull_request` |
 | `checks` | `.github/workflows/checks.yml` | `pull_request` into `main`, `release` (no path filter); `workflow_call` from `release` | always — not a scan: the FR-5 fast checks (typechecks, algorithm tests, build-script and hook tests); its job `fast-checks` is a required check next to `scan` |
 | `release` | `.github/workflows/release.yml` | `push` to `release`; `workflow_dispatch` (refused on any other ref) | always — not a scan: builds and publishes the GHCR image and the GitHub Release; its `vt-scan` job scans the release assets (see below) |
+| `agentbook-release` | `.github/workflows/agentbook-release.yml` | `workflow_dispatch` only (refused off the default branch) | always — not a scan: builds AgentBook (`agentbook/`, a separate product) on a Windows runner and attaches `AgentBook.exe`, `AgentBook-Setup.exe` and `SHA256SUMS` to the release `agentbook-v<version>`, never marked latest; see [AgentBook](agentbook.md) |
 
 `checks` and `release` are not report-only scans and feed nothing into the PR block; they are
 listed here because they share the pinned actions, the `VIRUS_TOTAL_KEY` secret and
@@ -42,7 +43,7 @@ workflow that is not a required check (FR-30). `security-scans` uses no `paths-i
 | `changes` | Diffs `base.sha...head.sha`; outputs `docs_only` (every path under `docs/`) and `docker_changed` (`Dockerfile` or `docker-dev/Dockerfile`); on PRs uploads `pr-meta` | — |
 | `build-kit` | Builds the installer tarballs **without secrets** (`npm ci --ignore-scripts`, `npm run build:hooks-installer -- --static-dir …`), uploads artifact `installer-kit` | — |
 | `snyk-oss` | Snyk CLI (pinned, sha256-checked) `test` prod and `--dev` over `--all-projects`, plus the extracted tarballs; `snyk monitor` only on push to `main` and nightly; SARIF category `snyk-oss` | `snyk-oss/prod`, `/dev`, `/kit` |
-| `dependency-review` | `actions/dependency-review-action` (`warn-only`, GPL/AGPL `deny-licenses`); PRs only. The action has no path filter, so `scan-rows.js` drops changes whose manifest is under `docs/pocs/` (like Snyk's `--exclude=…pocs`) and notes "N PoC manifest(s) ignored" | `dependency-review/pr` |
+| `dependency-review` | `actions/dependency-review-action` (`warn-only`, GPL/AGPL `deny-licenses`; a dual-licensed package used under its non-GPL option goes into `allow-dependencies-licenses` by purl, today `pkg:cargo/self_cell` = "Apache-2.0 OR GPL-2.0-only" for AgentBook's egui); PRs only. The action has no path filter, so `scan-rows.js` drops changes whose manifest is under `docs/pocs/` (like Snyk's `--exclude=…pocs`) and notes "N PoC manifest(s) ignored" | `dependency-review/pr` |
 | `config-guard` | `node scripts/ci/config-guard.js` (executable-config guard, FR-4) | `config-guard/repo` |
 | `supply-chain` | `lockfile-lint` (every `resolved` URL is `registry.npmjs.org`) and `npm audit signatures` | `lockfile-lint/npm`, `npm-signatures/npm` |
 | `workflow-lint` | actionlint and zizmor (SARIF category `zizmor`) | `actionlint/workflows`, `zizmor/workflows` |

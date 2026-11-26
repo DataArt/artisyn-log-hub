@@ -6,7 +6,7 @@ tags:
   - server
   - api
   - auth
-generated: { by: "ai:claude", at: "2026-11-24T20:00:00+04:00" }
+generated: { by: "ai:claude", at: "2026-11-25T12:00:00+04:00" }
 ---
 
 # Server HTTP API map
@@ -67,7 +67,7 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   (raw conversation; one shared check, `resolveSessionLogsAccess`) are owner-only
   (owner = `userId` of the session's artisyn log); exceptions only with `?teamId`: the team
   owner, or a `team-with-prompts` caller in a restricted team, and only for members who have
-  acknowledged the disclosure. `GET .../contexts` stays owner-only. `DELETE
+  acknowledged the disclosure. `DELETE
   /api/v1/sessions/:sessionId` is owner-only, admins included.
 - **Team access-mode gate** — every team-scoped read (`?teamId`) resolves one `TeamScope`
   (`RepositoriesService.resolveTeamScope`, type in `logs/team-scope.ts`): `accessMode`
@@ -81,7 +81,8 @@ Most repository routes are only `session`-guarded; the real check is in the hand
     empty / `computed: false` payload for a session outside the scope instead of a 404;
   - `analytics/*`, `reports/*`, `otel/facts` and team OTEL **403** when `analyticsAllowed` is
     false; the session-list support routes (`sessions/branches`, `session-attribution/values`,
-    `sessions/:sessionId/contexts`) are deliberately not analytics-gated;
+    `session-tags/values`, `contexts`, `sessions/:sessionId/contexts`) are deliberately not
+    analytics-gated;
   - prompt masking is a projection, not a `WHERE`: a `null` `firstPrompt` in a team payload
     means "hidden", never "absent".
   - budgets and Spend (`BudgetAccessService`, one `ScopeAccess` per request) are the exception
@@ -338,6 +339,19 @@ grep the controller.
   Headers, ETag, 304 and the stream permit are the same either way. Logic:
   `logs/session-log-parts.service.ts`; types: `logs/dto/session-log-parts.dto.ts`; details in
   `session-log-view.md` ("The parts API") and [session-part-cache.md](session-part-cache.md).
+- **Session tags** (2026-11-24 otel-session-tags; storage `session_tags`, always on the root
+  session). `GET …/session-tags/values` (discovery: `?teamId`, `startDate`+`endDate` together,
+  `branch` with `''` = no branch, `userEmail`) answers
+  `{ tags: { [key]: { value, sessionCount }[] }, noisyKeys }` over the root sessions in scope the
+  caller may open — same repo access and team visible-users row filter as
+  `session-attribution/values`; a key is noisy when one session in scope has more than 10 values
+  of it. The legacy `GET …/contexts` keeps its `{ key, value }[]` shape but is now read from
+  `session_tags` under the same scope and row filter (all-time without a period), so a team
+  member no longer sees pairs of sessions they cannot open; `GET …/sessions/:sessionId/contexts`
+  reads the session's root tags. Session list rows and the session detail (`/logs`, `/logs/parts`)
+  carry `tags` (a sub-agent gets its root's; deduped across sources, `otel` wins), the detail
+  also `tagNoise`. `sessions` and `sessions/branches` accept repeatable `tag=<key>[:<value>]`
+  (AND across keys, OR within a key, 400 on an empty key; helper `logs/tag-filter.sql.ts`).
 - `GET …/sessions/export-scope` (statistics export) is repo owner or team owner and bypasses the
   team access mode.
 - `PUT …/settings/team` is team owner only; both settings PUTs trigger a recompute, except when

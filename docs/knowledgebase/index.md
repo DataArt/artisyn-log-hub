@@ -84,6 +84,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [CI Security Scans](ci-security-scans.md) - Read before touching `security-scans.yml`, `virustotal.yml`, `scripts/ci/` or the config-guard allowlist, or when a scan row / PR security block looks wrong
 * [Git Hooks and Secret Scanning](git-hooks.md) - Read before touching `.githooks/`, gitleaks config or when a commit/push is blocked by the scan
 * [Claude Code Dev Container (sandboxes)](docker-dev-container.md) - Read before touching `scripts/claude-docker*` or `docker-dev/`, or when a sandbox misbehaves: sandbox model, launcher rules and deletion guards, mounts, `TEST_DATABASE_URL`, provisioning, prune rules, Windows menu quirks, limitations (commands: `--help`)
+* [Local Image Generation](local-image-generation.md) - Read when you need a picture from a prompt (icons, mascots, About art) or touch `scripts/imagegen.js`: stable-diffusion.cpp in Docker/native + FLUX.1-schnell on a local GPU, no Python; setup, presets, styles, prompt tips, what never goes into git
 * [User Docs and Site](user-docs-and-site.md) - Read before editing `user-docs/`, the in-app help menu or the GitHub Pages site/deck/one-pager: `nav.json`, link rules, the help generator, the site renderer
 
 ## Tests and algorithm docs
@@ -133,6 +134,10 @@ article itself holds the details. Keep new lines to one or two sentences.
 
 * [Artisyn AI Work Hub](work-hub.md) - Read before touching anything under `work-hub/` (Rust server, web, image, scripts, tests): container model, Docker names / labels and cleanup rules, env vars, run modes, its own commands, licence and agent-name checks, test stand and fake agent, the checkpoint layer limit
 * [Work Hub git proxy and connections](workhub-git-proxy.md) - Read before touching Work Hub remotes, connections, clone-from-a-connection, close + push or `work-hub/sidecar/`: the git proxy sidecar (`wh-gitproxy-<instance>`, `wh-net-<instance>`, `wh-gitcache-<instance>`), vault and capabilities, `wh-git-ctl` commands, push policy, exact error messages, provider-name lint guard, and how to debug the sidecar with `docker exec`
+
+## AgentBook (separate product in `agentbook/`)
+
+* [AgentBook (local sandbox tool)](agentbook.md) - Read before touching anything under `agentbook/` (Rust desktop tool giving Claude Desktop Docker laptops over SSH): crates, per-user data folder, Docker labels, in-container contract, its own commands and checks, scenario suite and manual acceptance list
 
 ## Product (separate KB) and history
 

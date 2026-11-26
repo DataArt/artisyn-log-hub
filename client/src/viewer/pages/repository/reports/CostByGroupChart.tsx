@@ -14,7 +14,7 @@ interface Props {
   sessions: TimelineSession[];
   // Widened to accept `attr:<key>` — the fallback
   // `s.group ?? 'unknown'` logic below already treats any non-'none' value generically.
-  groupBy: 'none' | 'branch' | 'user' | `attr:${string}`;
+  groupBy: 'none' | 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
 }
 
 const COLORS = [

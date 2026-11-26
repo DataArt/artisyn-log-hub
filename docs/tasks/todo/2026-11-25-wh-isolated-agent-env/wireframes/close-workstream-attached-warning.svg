@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="560" viewBox="0 0 1280 560" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+  <!-- Wireframe: Close workstream dialog warns when an external agent is attached (open question). -->
+  <rect width="1280" height="560" fill="#ffffff"/>
+  <!-- dimmed page behind -->
+  <line x1="0" y1="48" x2="1280" y2="48" stroke="#e4e4e7"/>
+  <text x="16" y="29" font-weight="600" font-size="14" fill="#09090b">Artisyn AI Work Hub</text>
+  <rect x="0" y="48" width="1280" height="44" fill="#fafafa"/>
+  <rect x="0" y="92" width="256" height="468" fill="#fafafa"/>
+  <rect x="0" y="0" width="1280" height="560" fill="#09090b" fill-opacity="0.45"/>
+
+  <!-- Dialog -->
+  <rect x="400" y="96" width="480" height="356" rx="12" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="428" y="136" font-size="17" font-weight="600" fill="#09090b">Close "Q4 pricing analysis"?</text>
+  <text x="852" y="134" fill="#71717a">✕</text>
+
+  <rect x="428" y="156" width="424" height="92" rx="8" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="446" y="180" fill="#92400e" font-weight="600">⚠ Claude Desktop is connected to this workstream</text>
+  <text x="446" y="202" fill="#92400e">Closing stops its container. Claude Desktop will see</text>
+  <text x="446" y="220" fill="#92400e">"This workstream was closed in Work Hub" on its next step</text>
+  <text x="446" y="238" fill="#92400e">and its access key stops working.</text>
+
+  <text x="428" y="276" fill="#52525b">What should happen to the changes?</text>
+  <rect x="428" y="290" width="424" height="40" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <circle cx="448" cy="310" r="6" fill="#fff" stroke="#3358cc" stroke-width="2"/>
+  <circle cx="448" cy="310" r="3" fill="#3358cc"/>
+  <text x="464" y="315" fill="#09090b">Close for now (keep changes)</text>
+  <rect x="428" y="338" width="424" height="40" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <circle cx="448" cy="358" r="6" fill="#fff" stroke="#a1a1aa" stroke-width="2"/>
+  <text x="464" y="363" fill="#09090b">Bring into main</text>
+
+  <rect x="604" y="400" width="88" height="34" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="626" y="422" fill="#09090b">Cancel</text>
+  <rect x="702" y="400" width="150" height="34" rx="6" fill="#3358cc"/>
+  <text x="716" y="422" fill="#fff" font-weight="600">Disconnect &amp; close</text>
+
+  <text x="400" y="500" font-size="12" fill="#ffffff">Wireframe — open question: warn before close / bring into main / discard / workspace delete while attached.</text>
+</svg>

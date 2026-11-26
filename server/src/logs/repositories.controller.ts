@@ -116,6 +116,21 @@ import {
   parseGroupByAttrKey,
   validateAttributeFilterTypes,
 } from './attribute-filter.sql';
+import { loadTagGroupLabels } from './session-tags.reader';
+import {
+  assertNoGroupByTagFilterConflict,
+  parseGroupByTagKey,
+  parseTagFilters,
+  tagFilterSql,
+  tagGroupKeysSql,
+} from './tag-filter.sql';
+import {
+  loadScopedTagPairs,
+  loadSessionTagDetail,
+  loadSessionTagValues,
+  loadSessionTagsByNode,
+  type SessionTagValuesResponse,
+} from './session-tags.reader';
 import { SessionAttributionService } from './session-attribution/session-attribution.service';
 import { loadHarnessSnapshot } from './harness-snapshot';
 import {
@@ -135,6 +150,7 @@ import {
   type ChangeSurfaceTimelineBucket,
 } from './change-surface/change-surface.types';
 import { maskFirstPrompt, type TeamScope } from './team-scope';
+import { resolveRootSessionDbId } from './okf/okf-snapshot';
 import { OkfUsageService } from './okf/okf-usage.service';
 import type { OkfUsageResponse } from './okf/okf-usage.types';
 
@@ -567,11 +583,19 @@ export class RepositoriesController {
     @Query('branch') branchParam?: string,
     @Query('attr') attrParam?: string | string[],
     @Query('otelReason') otelReasonParam?: string | string[],
+    @Query('tag') tagParam?: string | string[],
   ) {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
     }
     const otelReason = parseOtelReasonFilter(otelReasonParam);
+    // Repeatable `tag=<key>[:<value>]` (2026-11-24 otel-session-tags): AND across keys, OR
+    // within a key, matched on the listed root session's `session_tags`.
+    const tagFilters = parseTagFilters(tagParam);
+    const tagCondition =
+      tagFilters.length > 0
+        ? tagFilterSql(tagFilters, sql`${schema.sessions.id}`)
+        : undefined;
     // Only root sessions without OTEL data whose reason (`no-status` when the hook never
     // reported one) equals the filter (DD-29's split, API changes).
     const otelReasonCondition =
@@ -655,6 +679,7 @@ export class RepositoriesController {
           branchCondition,
           ownerCondition,
           attrCondition,
+          tagCondition,
           otelReasonCondition,
         ),
       )
@@ -745,6 +770,8 @@ export class RepositoriesController {
       user.id,
       sessionDbIds,
     );
+    // Session tags of every listed row (the root's tags), one batched query.
+    const tagsMap = await loadSessionTagsByNode(this.db, sessionDbIds);
 
     // Fetch owner userId for each session via a separate lookup
     // (do NOT add userId to selectDistinct — it would break distinctness and produce duplicates)
@@ -971,6 +998,8 @@ export class RepositoriesController {
         // attribution row shows no chips").
         attribution,
         lastRun,
+        // 2026-11-24 otel-session-tags: deduped across sources, `[]` when untagged.
+        tags: tagsMap.get(r.sessionRowId) ?? [],
       };
     });
   }
@@ -1059,10 +1088,12 @@ export class RepositoriesController {
     @Query('startDate') startDateParam?: string,
     @Query('endDate') endDateParam?: string,
     @Query('attr') attrParam?: string | string[],
+    @Query('tag') tagParam?: string | string[],
   ) {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
     }
+    const tagFilters = parseTagFilters(tagParam);
 
     let startDate: Date | undefined;
     let endDate: Date | undefined;
@@ -1132,6 +1163,10 @@ export class RepositoriesController {
       sql`l.session_id`,
     );
     const attrBranchFilter = attrCondition ? sql`AND ${attrCondition}` : sql``;
+    const tagBranchFilter =
+      tagFilters.length > 0
+        ? sql`AND ${tagFilterSql(tagFilters, sql`l.session_id`)}`
+        : sql``;
 
     type BranchRow = {
       branch: string | null;
@@ -1180,6 +1215,7 @@ export class RepositoriesController {
         ${ownerBranchFilter}
         ${dateRangeBranchFilter}
         ${attrBranchFilter}
+        ${tagBranchFilter}
       GROUP BY l.git_branch
       ORDER BY MAX(COALESCE(l.end_time, l.updated_at)) DESC
     `);
@@ -1343,43 +1379,122 @@ export class RepositoriesController {
     );
   }
 
+  /**
+   * FR-8 tag discovery (2026-11-24 otel-session-tags): every tag key on the root sessions in
+   * scope — repository (team view: every linked repo row), optional period, branch (`''` = no
+   * branch) and user — that the caller may open, each value with its session count, plus the
+   * keys noisy on at least one session in scope. Same access as `session-attribution/values`:
+   * repo access, team visible-users row filter, not analytics-gated.
+   */
+  @Get(':repoId/session-tags/values')
+  async getSessionTagValues(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+    @Query('startDate') startDateParam?: string,
+    @Query('endDate') endDateParam?: string,
+    @Query('branch') branchParam?: string,
+    @Query('userEmail') userEmailParam?: string,
+  ): Promise<SessionTagValuesResponse> {
+    const scope = await this.resolveRepoTagScope(
+      req.user as AuthUser,
+      repoId,
+      teamId,
+      startDateParam,
+      endDateParam,
+      branchParam,
+      userEmailParam,
+    );
+    return loadSessionTagValues(this.db, scope);
+  }
+
+  /**
+   * Legacy tag pairs of a repository (kept with its `{ key, value }[]` shape for clients left
+   * open over the upgrade): read from `session_tags` of the root sessions the caller may open
+   * (team visible-users filter, AC-10a), optionally narrowed like the discovery route; all-time
+   * without a period.
+   */
   @Get(':repoId/contexts')
   async getRepositoryContexts(
     @Req() req: Request,
     @Param('repoId', ParseIntPipe) repoId: number,
     @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+    @Query('startDate') startDateParam?: string,
+    @Query('endDate') endDateParam?: string,
+    @Query('branch') branchParam?: string,
+    @Query('userEmail') userEmailParam?: string,
+  ) {
+    const scope = await this.resolveRepoTagScope(
+      req.user as AuthUser,
+      repoId,
+      teamId,
+      startDateParam,
+      endDateParam,
+      branchParam,
+      userEmailParam,
+    );
+    return loadScopedTagPairs(this.db, scope);
+  }
+
+  /**
+   * The shared scope of the two repository tag reads: validates `teamId` and the period
+   * (both bounds or neither), checks repository access, resolves the team's linked repo rows
+   * and the caller's visible-users filter.
+   */
+  private async resolveRepoTagScope(
+    user: AuthUser,
+    repoId: number,
+    teamId: number | undefined,
+    startDateParam: string | undefined,
+    endDateParam: string | undefined,
+    branchParam: string | undefined,
+    userEmailParam: string | undefined,
   ) {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
     }
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+    if (startDateParam || endDateParam) {
+      if (!startDateParam || !endDateParam) {
+        throw new BadRequestException(
+          'startDate and endDate must be provided together',
+        );
+      }
+      startDate = new Date(startDateParam);
+      endDate = new Date(endDateParam);
+      if (isNaN(startDate.getTime())) {
+        throw new BadRequestException(
+          'startDate must be a valid ISO 8601 date',
+        );
+      }
+      if (isNaN(endDate.getTime())) {
+        throw new BadRequestException('endDate must be a valid ISO 8601 date');
+      }
+    }
 
-    const user = req.user as AuthUser;
-    await this.repositoriesService.assertRepoAccess(user, repoId, teamId);
-
-    const rows = await this.db
-      .selectDistinct({
-        key: schema.contexts.contextKey,
-        value: schema.contexts.contextValue,
-      })
-      .from(schema.contexts)
-      .innerJoin(
-        schema.logContexts,
-        eq(schema.logContexts.contextId, schema.contexts.id),
-      )
-      .innerJoin(schema.logs, eq(schema.logs.id, schema.logContexts.logId))
-      .innerJoin(
-        schema.logRepositories,
-        eq(schema.logRepositories.logId, schema.logs.id),
-      )
-      .where(
-        and(
-          eq(schema.logRepositories.repoId, repoId),
-          eq(schema.logs.logType, 'artisyn'),
-        ),
-      )
-      .orderBy(asc(schema.contexts.contextKey));
-
-    return rows;
+    const repo = await this.repositoriesService.assertRepoAccess(
+      user,
+      repoId,
+      teamId,
+    );
+    const repoIds = await this.repositoriesService.resolveRepoIds(
+      repoId,
+      repo.repoUrl,
+      teamId,
+    );
+    const teamScope = await this.repositoriesService.resolveTeamScope(
+      user,
+      teamId,
+    );
+    return {
+      repoIds,
+      ownerFilter: teamScopeUserFilterSql(teamId, teamScope, 'l'),
+      startDate,
+      endDate,
+      branch: branchParam,
+      userEmail: userEmailParam || undefined,
+    };
   }
 
   @Get(':repoId/sessions/:sessionId/contexts')
@@ -1419,18 +1534,12 @@ export class RepositoriesController {
         ? inArray(schema.logs.userId, scope.visibleUserIds)
         : undefined;
 
-    const rows = await this.db
-      .selectDistinct({
-        key: schema.contexts.contextKey,
-        value: schema.contexts.contextValue,
-      })
-      .from(schema.contexts)
-      .innerJoin(
-        schema.logContexts,
-        eq(schema.logContexts.contextId, schema.contexts.id),
-      )
-      .innerJoin(schema.logs, eq(schema.logs.id, schema.logContexts.logId))
-      .innerJoin(schema.sessions, eq(schema.sessions.id, schema.logs.sessionId))
+    // The session must have an artisyn log in this repository (visible to the caller); its
+    // tags are read from its root session, where every tag lives.
+    const [node] = await this.db
+      .selectDistinct({ id: schema.sessions.id })
+      .from(schema.sessions)
+      .innerJoin(schema.logs, eq(schema.logs.sessionId, schema.sessions.id))
       .innerJoin(
         schema.logRepositories,
         eq(schema.logRepositories.logId, schema.logs.id),
@@ -1443,7 +1552,18 @@ export class RepositoriesController {
           ownerCondition,
         ),
       )
-      .orderBy(asc(schema.contexts.contextKey));
+      .limit(1);
+    if (!node) return [];
+    const rootId = await resolveRootSessionDbId(this.db, node.id);
+
+    const rows = await this.db
+      .selectDistinct({
+        key: schema.sessionTags.key,
+        value: schema.sessionTags.value,
+      })
+      .from(schema.sessionTags)
+      .where(eq(schema.sessionTags.sessionId, rootId))
+      .orderBy(asc(schema.sessionTags.key), asc(schema.sessionTags.value));
 
     return rows;
   }
@@ -1790,7 +1910,7 @@ export class RepositoriesController {
     // `session-tree-metrics.sql.ts` — both selects use the same rows and the same
     // transcript guard, so the client's tree-scoped code-impact figure cannot
     // drift from the analytics pages.
-    const tailJson = `"subagentStats":${JSON.stringify(extras.subagentStats)},"rootStats":${JSON.stringify(extras.rootStats)},"workflows":${JSON.stringify(extras.workflows)},"turnEndAdvisor":${JSON.stringify(extras.turnEndAdvisor)},"sessionAttribution":${JSON.stringify(extras.sessionAttribution)},"harnessSnapshot":${JSON.stringify(extras.harnessSnapshot)}`;
+    const tailJson = `"subagentStats":${JSON.stringify(extras.subagentStats)},"rootStats":${JSON.stringify(extras.rootStats)},"workflows":${JSON.stringify(extras.workflows)},"turnEndAdvisor":${JSON.stringify(extras.turnEndAdvisor)},"sessionAttribution":${JSON.stringify(extras.sessionAttribution)},"harnessSnapshot":${JSON.stringify(extras.harnessSnapshot)},"tags":${JSON.stringify(extras.tags)},"tagNoise":${JSON.stringify(extras.tagNoise)}`;
 
     await this.sessionLogsStreamService.runLimited(res, async () => {
       res.setHeader('Content-Type', 'application/json');
@@ -2119,6 +2239,12 @@ export class RepositoriesController {
         : null,
     };
 
+    // 2026-11-24 otel-session-tags: the root's tags and the FR-10 junk-tag verdict.
+    const { tags, tagNoise } = await loadSessionTagDetail(
+      this.db,
+      sessionRowId,
+    );
+
     const subagentStats: Record<string, SubagentStats> = Object.fromEntries(
       subagentStatsRows.map((r) => [
         r.sessionId,
@@ -2170,6 +2296,8 @@ export class RepositoriesController {
         turnEndAdvisor,
         sessionAttribution,
         harnessSnapshot: harnessSnapshot ?? null,
+        tags,
+        tagNoise,
       },
     };
   }
@@ -2273,6 +2401,7 @@ export class RepositoriesController {
     @Query('branches') branchesParam?: string,
     @Query('users') usersParam?: string,
     @Query('attr') attrParam?: string | string[],
+    @Query('tag') tagParam?: string | string[],
   ): Promise<TimelineSession[]> {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
@@ -2325,16 +2454,23 @@ export class RepositoriesController {
     // fixed 'branch'/'user' values — the key itself is validated below, once this repo's
     // resolved attribute definitions are known.
     const groupByAttrKey = parseGroupByAttrKey(groupBy);
+    // `groupBy=tag:<key>` (otel-session-tags) — free-form key, never validated against
+    // definitions; groups are the key's values plus `__untagged__`, fanned out.
+    const groupByTagKey = parseGroupByTagKey(groupBy);
     if (
       groupBy !== undefined &&
       groupBy !== 'branch' &&
       groupBy !== 'user' &&
-      groupByAttrKey === undefined
+      groupByAttrKey === undefined &&
+      groupByTagKey === null
     ) {
       throw new BadRequestException(
-        "groupBy must be 'branch', 'user', or 'attr:<key>'",
+        "groupBy must be 'branch', 'user', 'attr:<key>' or 'tag:<key>'",
       );
     }
+    // `tag=<key>[:<value>]` — shape-only, 400 on an empty key or a grouped-and-filtered key.
+    const tagFilters = parseTagFilters(tagParam);
+    assertNoGroupByTagFilterConflict(groupByTagKey, tagFilters);
 
     const branches =
       branchesParam !== undefined && branchesParam !== ''
@@ -2466,6 +2602,9 @@ export class RepositoriesController {
       sql`${schema.sessions.id}`,
     );
     if (attrCondition) conditions.push(attrCondition);
+    if (tagFilters.length > 0) {
+      conditions.push(tagFilterSql(tagFilters, sql`${schema.sessions.id}`));
+    }
 
     const rows = await this.db
       .select({
@@ -2899,6 +3038,11 @@ export class RepositoriesController {
         user.id,
         timelineSessionDbIds,
       );
+    // `groupBy=tag:<key>`: each root's tag buckets, fetched only for that grouping.
+    const tagLabelsBySessionRowId =
+      groupByTagKey !== null
+        ? await loadTagGroupLabels(this.db, timelineSessionDbIds, groupByTagKey)
+        : null;
 
     return rows.flatMap((r) => {
       const stats = statsMap.get(r.sessionRowId);
@@ -2908,13 +3052,15 @@ export class RepositoriesController {
       // form their own bucket, and a `string[]` value with N literal
       // values produces N identical rows differing only in `group`.
       const groups =
-        groupByAttrKey !== undefined
-          ? attributeGroupLabels(
-              groupByAttrKey,
-              r.attrValues,
-              resolvedDefinitions,
-            )
-          : [r.group];
+        tagLabelsBySessionRowId !== null
+          ? (tagLabelsBySessionRowId.get(r.sessionRowId) ?? [])
+          : groupByAttrKey !== undefined
+            ? attributeGroupLabels(
+                groupByAttrKey,
+                r.attrValues,
+                resolvedDefinitions,
+              )
+            : [r.group];
       return groups.map((group) => ({
         sessionId: r.sessionId,
         startTime: r.startTime!.toISOString(),
@@ -2981,6 +3127,7 @@ export class RepositoriesController {
     @Query('branches') branchesParam?: string,
     @Query('users') usersParam?: string,
     @Query('attr') attrParam?: string | string[],
+    @Query('tag') tagParam?: string | string[],
     @Query('bucket') bucketParam?: string,
   ): Promise<ChangeSurfaceTimeline> {
     if (teamId !== undefined && teamId <= 0) {
@@ -3032,15 +3179,19 @@ export class RepositoriesController {
     // `none` is spelled out here (unlike `analytics/timeline`, whose absent `groupBy` means
     // "no grouping") because the aggregate service takes it as an explicit value.
     const groupByAttrKey = parseGroupByAttrKey(groupByParam);
+    const groupByTagKey = parseGroupByTagKey(groupByParam);
     const groupBy = (groupByParam ?? 'none') as ChangeSurfaceGroupBy;
     if (
       groupByAttrKey === undefined &&
+      groupByTagKey === null &&
       !CHANGE_SURFACE_GROUP_BY_VALUES.includes(groupBy)
     ) {
       throw new BadRequestException(
-        `groupBy must be one of: ${CHANGE_SURFACE_GROUP_BY_VALUES.join(', ')}, or attr:<key>`,
+        `groupBy must be one of: ${CHANGE_SURFACE_GROUP_BY_VALUES.join(', ')}, attr:<key> or tag:<key>`,
       );
     }
+    const tagFilters = parseTagFilters(tagParam);
+    assertNoGroupByTagFilterConflict(groupByTagKey, tagFilters);
 
     // An absent `bucket` means "derive it from the range"; an
     // unrecognised one is a 400 rather than a silent fallback, so a typo in a saved URL is
@@ -3126,6 +3277,7 @@ export class RepositoriesController {
       branches,
       users,
       attributeFilters,
+      tagFilters,
       groupBy,
       bucket,
       resolvedAttributeDefinitions: resolvedDefinitions,
@@ -3158,6 +3310,7 @@ export class RepositoriesController {
     @Query('branches') branchesParam?: string,
     @Query('users') usersParam?: string,
     @Query('attr') attrParam?: string | string[],
+    @Query('tag') tagParam?: string | string[],
   ): Promise<WorkTimeBucket[]> {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
@@ -3209,16 +3362,23 @@ export class RepositoriesController {
     // `groupBy=attr:<key>` accepted alongside the
     // fixed 'branch'/'user' values — the key itself is validated below.
     const groupByAttrKey = parseGroupByAttrKey(groupBy);
+    // `groupBy=tag:<key>` (otel-session-tags) — free-form key, never validated against
+    // definitions; groups are the key's values plus `__untagged__`, fanned out.
+    const groupByTagKey = parseGroupByTagKey(groupBy);
     if (
       groupBy !== undefined &&
       groupBy !== 'branch' &&
       groupBy !== 'user' &&
-      groupByAttrKey === undefined
+      groupByAttrKey === undefined &&
+      groupByTagKey === null
     ) {
       throw new BadRequestException(
-        "groupBy must be 'branch', 'user', or 'attr:<key>'",
+        "groupBy must be 'branch', 'user', 'attr:<key>' or 'tag:<key>'",
       );
     }
+    // `tag=<key>[:<value>]` — shape-only, 400 on an empty key or a grouped-and-filtered key.
+    const tagFilters = parseTagFilters(tagParam);
+    assertNoGroupByTagFilterConflict(groupByTagKey, tagFilters);
 
     const branches =
       branchesParam !== undefined && branchesParam !== ''
@@ -3276,7 +3436,13 @@ export class RepositoriesController {
       attributeFilters,
       sql`l.session_id`,
     );
-    const attrFilter = attrCondition ?? sql`TRUE`;
+    // `tag=` folds into the same per-CTE predicate as `attr=` (root column `l.session_id`).
+    const attrFilter =
+      tagFilters.length > 0
+        ? attrCondition
+          ? sql`(${attrCondition} AND ${tagFilterSql(tagFilters, sql`l.session_id`)})`
+          : tagFilterSql(tagFilters, sql`l.session_id`)
+        : (attrCondition ?? sql`TRUE`);
     // Non-null whenever `groupByAttrKey` is (guaranteed by `assertKnownGroupByAttrKey` above).
     const groupByAttrType = groupByAttrKey
       ? resolvedDefinitions.find((d) => d.key === groupByAttrKey)?.type
@@ -3328,10 +3494,17 @@ export class RepositoriesController {
       groupByAttrKey !== undefined
         ? sql`LEFT JOIN session_attribution attr_sa ON attr_sa.session_id = l.session_id`
         : sql``;
+    // `groupBy=tag:<key>` reuses the same `attr_group(group_key)` alias, so the groups CTE
+    // and `sessionGroupExpr` below serve both groupings: one row per distinct tag value of
+    // the root, or one `__untagged__` row — the fan-out `tagGroupKeysSql()` documents.
     const attrGroupJoin =
       groupByAttrKey !== undefined
         ? sql`CROSS JOIN LATERAL (${attrGroupKeysSql(groupByAttrKey, groupByAttrType!)}) AS attr_group(group_key)`
-        : sql``;
+        : groupByTagKey !== null
+          ? sql`CROSS JOIN LATERAL (${tagGroupKeysSql(groupByTagKey, sql`l.session_id`)}) AS attr_group(group_key)`
+          : sql``;
+    const groupedByLabel =
+      groupByAttrKey !== undefined || groupByTagKey !== null;
 
     // groups CTE produces one row per distinct group_key for the zero-fill cross join.
     // When no grouping is requested it emits a single NULL row so every hour still appears.
@@ -3372,7 +3545,7 @@ export class RepositoriesController {
               AND ${userFilter}
               AND ${attrFilter}
           `
-          : groupByAttrKey !== undefined
+          : groupedByLabel
             ? sql`
             SELECT DISTINCT attr_group.group_key
             FROM logs l
@@ -3405,7 +3578,7 @@ export class RepositoriesController {
         ? sql`COALESCE(l.git_branch, 'no branch')`
         : groupBy === 'user'
           ? sql`u.email`
-          : groupByAttrKey !== undefined
+          : groupedByLabel
             ? sql`attr_group.group_key`
             : sql`NULL::text`;
 

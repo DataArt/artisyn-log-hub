@@ -1,0 +1,35 @@
+[package]
+name = "agentbook"
+description = "AgentBook desktop app (egui); calls only engine commands"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "agentbook_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "AgentBook"
+path = "src/main.rs"
+
+# The window is egui on winit + wgpu (Direct3D 12 / Vulkan; Metal later on macOS), wired by hand in
+# `src/window.rs` instead of through eframe: eframe forces egui-winit's `clipboard` feature, whose
+# Windows backend (clipboard-win, error-code) is BSL-1.0 and fails the licence allowlist. Copy and
+# paste go through the platform layer instead. egui's `default_fonts` stay off as well (OFL /
+# Ubuntu-font): the UI uses the OS fonts from the platform layer.
+[dependencies]
+agentbook-core = { path = "../core" }
+agentbook-engine = { path = "../engine" }
+agentbook-platform = { path = "../platform" }
+egui = { version = "0.35.0", default-features = false }
+egui-winit = { version = "0.35.0", default-features = false }
+egui-wgpu = { version = "0.35.0", default-features = false, features = ["winit"] }
+wgpu = { version = "29.0", default-features = false, features = ["std", "wgsl", "dx12", "vulkan", "metal"] }
+pollster = "0.4.0"
+winit = { version = "0.30.13", default-features = false, features = ["rwh_06"] }
+# The built-in help pages (agentbook/help/*.md, embedded) are CommonMark, rendered natively.
+pulldown-cmark = { version = "0.13.0", default-features = false }

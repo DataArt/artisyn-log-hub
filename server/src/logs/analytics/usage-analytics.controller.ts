@@ -24,6 +24,7 @@ import { SpendService } from '../budgets/spend.service';
 import { RepositoriesService } from '../repositories.service';
 import type { AuthUser } from '../repositories.service';
 import { SessionAttributionService } from '../session-attribution/session-attribution.service';
+import { parseTagFilters } from '../tag-filter.sql';
 import { ActiveSessionsService } from './active-sessions.service';
 import { ClaudeVersionUsageService } from './claude-version-usage.service';
 import {
@@ -76,6 +77,7 @@ export class UsageAnalyticsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<ToolAnalyticsResponse> {
     const { repoIds, scope } = await this.resolveScope(req, repoId, {
       teamId,
@@ -84,6 +86,7 @@ export class UsageAnalyticsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.toolAnalyticsService.build(repoIds, scope);
   }
@@ -98,6 +101,7 @@ export class UsageAnalyticsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<TokenAnalyticsResponse> {
     const { repoIds, scope } = await this.resolveScope(req, repoId, {
       teamId,
@@ -106,6 +110,7 @@ export class UsageAnalyticsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.tokenAnalyticsService.build(repoIds, scope);
   }
@@ -120,6 +125,7 @@ export class UsageAnalyticsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<ProductivityAnalyticsResponse> {
     const { repoIds, scope } = await this.resolveScope(req, repoId, {
       teamId,
@@ -128,6 +134,7 @@ export class UsageAnalyticsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.productivityAnalyticsService.build(repoIds, scope);
   }
@@ -142,6 +149,7 @@ export class UsageAnalyticsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
   ): Promise<ActiveSessionsResponse> {
     const { repoIds, scope } = await this.resolveScope(req, repoId, {
@@ -151,6 +159,7 @@ export class UsageAnalyticsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.activeSessionsService.build(
       repoIds,
@@ -169,6 +178,7 @@ export class UsageAnalyticsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<ClaudeVersionUsageResponse> {
     const { repoIds, scope } = await this.resolveScope(req, repoId, {
       teamId,
@@ -177,6 +187,7 @@ export class UsageAnalyticsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.claudeVersionUsageService.build(repoIds, scope);
   }
@@ -241,9 +252,14 @@ export class UsageAnalyticsController {
       branches?: string;
       users?: string;
       attr?: string | string[];
+      tag?: string | string[];
     },
   ): Promise<{ repoIds: number[]; scope: AnalyticsScope }> {
     const query = parseAnalyticsQuery(raw);
+    // `tag=<key>[:<value>]` (2026-11-24 otel-session-tags): shape-only parse, 400 on an
+    // empty key, before any DB work. Tag keys are free-form, so nothing is validated against
+    // definitions; `loadScopedRootSessions()` applies them.
+    const tagFilters = parseTagFilters(raw.tag);
     const user = req.user as AuthUser;
 
     const repo = await this.repositoriesService.assertRepoAccess(
@@ -282,6 +298,7 @@ export class UsageAnalyticsController {
         branches: query.branches,
         users: query.users,
         attributeFilters,
+        tagFilters,
       },
     };
   }

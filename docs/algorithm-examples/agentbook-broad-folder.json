@@ -1,0 +1,104 @@
+[
+  {
+    "id": "BF-01",
+    "input": {"path": "C:\\", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "drive-root", "confirm": true},
+    "note": "Rule 2: one component 'c:' ending in ':' is a drive root. It is checked before the ancestor rule, although C:\\ also contains home."
+  },
+  {
+    "id": "BF-02",
+    "input": {"path": "C:", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "drive-root", "confirm": true},
+    "note": "Rule 2: 'C:' without a separator is the same single component."
+  },
+  {
+    "id": "BF-03",
+    "input": {"path": "D:\\", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "drive-root", "confirm": true},
+    "note": "Rule 2: any drive root, not only the system drive, is the whole disk."
+  },
+  {
+    "id": "BF-04",
+    "input": {"path": "C:\\Users\\Den", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "home", "confirm": true},
+    "note": "Rule 3: components [c:, users, den] equal home's."
+  },
+  {
+    "id": "BF-05",
+    "input": {"path": "c:/users/den/", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "home", "confirm": true},
+    "note": "Rule 1: '/' is read as '\\', case is ignored on Windows and the trailing separator gives no component: still home."
+  },
+  {
+    "id": "BF-06",
+    "input": {"path": "C:\\Users", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "home-ancestor", "confirm": true},
+    "note": "Rule 4: [c:, users] is a strict prefix of [c:, users, den]."
+  },
+  {
+    "id": "BF-07",
+    "input": {"path": "C:\\Users\\Den\\Documents\\mockups", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "none", "confirm": false},
+    "note": "Rule 5: a folder inside home is narrow (it is longer than home, so not an ancestor)."
+  },
+  {
+    "id": "BF-08",
+    "input": {"path": "C:\\Users\\Denis", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "none", "confirm": false},
+    "note": "Components, not text: 'denis' != 'den', although 'C:\\Users\\Den' is a text prefix of the path."
+  },
+  {
+    "id": "BF-09",
+    "input": {"path": "\\\\?\\C:\\Users", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "home-ancestor", "confirm": true},
+    "note": "Rule 1: the verbatim prefix \\\\?\\ is dropped first, leaving C:\\Users: an ancestor."
+  },
+  {
+    "id": "BF-10",
+    "input": {"path": "\\\\fileserver\\team", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "drive-root", "confirm": true},
+    "note": "Rule 2: a UNC path with only server and share is a share root."
+  },
+  {
+    "id": "BF-11",
+    "input": {"path": "\\\\fileserver\\team\\mockups", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "none", "confirm": false},
+    "note": "A folder below the share root is narrow; it is not on the home drive at all."
+  },
+  {
+    "id": "BF-12",
+    "input": {"path": "D:\\Users", "home": "C:\\Users\\Den"},
+    "expected": {"breadth": "none", "confirm": false},
+    "note": "Rule 4 compares the drive too: 'd:' != 'c:'."
+  },
+  {
+    "id": "BF-13",
+    "input": {"path": "c:\\users\\дэн", "home": "C:\\Users\\Дэн"},
+    "expected": {"breadth": "home", "confirm": true},
+    "note": "Rule 1 lowercases Unicode on Windows: 'Дэн' and 'дэн' are the same component."
+  },
+  {
+    "id": "BF-14",
+    "input": {"path": "/", "home": "/Users/den"},
+    "expected": {"breadth": "drive-root", "confirm": true},
+    "note": "POSIX: '/' has no components: the root."
+  },
+  {
+    "id": "BF-15",
+    "input": {"path": "/Users", "home": "/Users/den"},
+    "expected": {"breadth": "home-ancestor", "confirm": true},
+    "note": "POSIX rule 4: [Users] is a strict prefix of [Users, den]."
+  },
+  {
+    "id": "BF-16",
+    "input": {"path": "/Users/den", "home": "/Users/den"},
+    "expected": {"breadth": "home", "confirm": true},
+    "note": "POSIX rule 3: equal components."
+  },
+  {
+    "id": "BF-17",
+    "input": {"path": "/users/den", "home": "/Users/den"},
+    "expected": {"breadth": "none", "confirm": false},
+    "note": "POSIX paths compare exactly: 'users' != 'Users'."
+  }
+]

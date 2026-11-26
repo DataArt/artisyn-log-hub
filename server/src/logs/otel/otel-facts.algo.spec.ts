@@ -22,6 +22,7 @@ import {
   extractOtelAccount,
   extractOtelCalls,
   extractOtelSpans,
+  extractOtelTags,
   otelCallKey,
   resolveOtelEventTime,
   sanitizeOtelBaseUrl,
@@ -41,6 +42,7 @@ type FactsInput =
   | { kind: 'calls'; lines: unknown[] }
   | { kind: 'spans'; lines: unknown[] }
   | { kind: 'account'; lines: unknown[] }
+  | { kind: 'tags'; lines: unknown[] }
   | { kind: 'baseUrl'; raw: unknown }
   | { kind: 'dictionary' }
   | { kind: 'querySource'; name: string };
@@ -51,12 +53,23 @@ const iso = (d: Date | null) => (d === null ? null : d.toISOString());
 
 /**
  * Expands the doc's `{"$repeat": [char, count]}` placeholder into a long string, and
- * `{"$concat": [part, ...]}` into the joined (expanded) parts.
+ * `{"$concat": [part, ...]}` into the joined (expanded) parts, and
+ * `{"$attrs": [prefix, count, value]}` into the object `{ prefix1: value, …, prefixN: value }`.
  */
 function expandRepeat(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(expandRepeat);
   if (value !== null && typeof value === 'object') {
     const obj = value as Record<string, unknown>;
+    const attrs = obj['$attrs'];
+    if (Array.isArray(attrs) && Object.keys(obj).length === 1) {
+      const count = Number(attrs[1]);
+      return Object.fromEntries(
+        Array.from({ length: count }, (_, i) => [
+          `${String(attrs[0])}${i + 1}`,
+          attrs[2],
+        ]),
+      );
+    }
     const repeat = obj['$repeat'];
     if (Array.isArray(repeat) && Object.keys(obj).length === 1) {
       return String(repeat[0]).repeat(Number(repeat[1]));
@@ -152,6 +165,16 @@ it.each(rows)('$id', ({ input, expected }) => {
             ? null
             : { ...account, eventAt: account.eventAt.toISOString() },
       }).toEqual(expected);
+      return;
+    }
+    case 'tags': {
+      const tags = extractOtelTags(expandRepeat(input.lines) as unknown[]);
+      expect({
+        count: tags.length,
+        tags,
+        first: tags[0] ?? null,
+        last: tags[tags.length - 1] ?? null,
+      }).toMatchObject(expandRepeat(expected) as Record<string, unknown>);
       return;
     }
     case 'baseUrl':

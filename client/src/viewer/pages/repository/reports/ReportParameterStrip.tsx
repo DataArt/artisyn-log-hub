@@ -15,8 +15,15 @@ import {
   resolveSessionAttributionDefinitions,
 } from '../../../lib/session-attribution-ui';
 import { DateRangePicker } from '../analytics/DateRangePicker';
-import type { ReportDefinition } from './report-catalog';
-import type { ReportParamsState } from './report-url';
+import { groupByTagKey, withoutGroupedTagKey } from '../../../lib/session-tags';
+import { TagFilterControl } from '../TagFilterControl';
+import { TagGroupByItems } from '../TagGroupByItems';
+import { useScopedTagValues } from '../useScopedTagValues';
+import {
+  reportSupportsTagFilter,
+  type ReportDefinition,
+} from './report-catalog';
+import { toIsoDateBounds, type ReportParamsState } from './report-url';
 
 interface Props {
   report: ReportDefinition;
@@ -111,6 +118,20 @@ export function ReportParameterStrip({
     [repoSettingsQuery.data],
   );
 
+  // FR-8 tag discovery over the draft range (otel-session-tags): the tag filter's values and
+  // the Group-by TAGS section.
+  const supportsTags = reportSupportsTagFilter(report);
+  const tagRange = useMemo(
+    () => toIsoDateBounds(draft.startDate, draft.endDate),
+    [draft.startDate, draft.endDate],
+  );
+  const tagValuesQuery = useScopedTagValues(
+    repoId,
+    teamId,
+    tagRange,
+    supportsTags || report.supportsGroupBy,
+  );
+
   const branchOptions = (branchesQuery.data ?? [])
     .map((b) => b.branch)
     .filter((b): b is string => b != null)
@@ -172,7 +193,11 @@ export function ReportParameterStrip({
           <Select.Root
             value={draft.groupBy}
             onValueChange={(v) =>
-              onDraftChange({ groupBy: v as ReportParamsState['groupBy'] })
+              onDraftChange({
+                groupBy: v as ReportParamsState['groupBy'],
+                // The server rejects a tag key that is both grouped and filtered.
+                tags: withoutGroupedTagKey(draft.tags, v),
+              })
             }
           >
             <Select.Trigger className="flex h-9 items-center gap-1 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
@@ -231,6 +256,10 @@ export function ReportParameterStrip({
                       ))}
                     </div>
                   )}
+                  <TagGroupByItems
+                    tagValues={tagValuesQuery.data}
+                    groupBy={draft.groupBy}
+                  />
                 </Select.Viewport>
               </Select.Content>
             </Select.Portal>
@@ -308,6 +337,18 @@ export function ReportParameterStrip({
             </PopoverContent>
           </Popover>
         </div>
+      )}
+
+      {supportsTags && (
+        <TagFilterControl
+          label="Tags (optional)"
+          tagValues={tagValuesQuery.data}
+          value={draft.tags}
+          onChange={(tags) => onDraftChange({ tags })}
+          excludeKey={
+            report.supportsGroupBy ? groupByTagKey(draft.groupBy) : null
+          }
+        />
       )}
 
       {report.id === 'cache-read-ratio' && <CacheRatioScopeLegendStrip />}

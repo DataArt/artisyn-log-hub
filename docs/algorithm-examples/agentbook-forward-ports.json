@@ -1,0 +1,74 @@
+[
+  {
+    "id": "FP-01",
+    "input": {"op": "devcontainer", "merged": {"forwardPorts": [5173, "3000", "localhost:8080", "127.0.0.1:9229"]}},
+    "expected": {"ports": [5173, 3000, 8080, 9229]},
+    "note": "Rule 1: numbers and the three local string forms, in order."
+  },
+  {
+    "id": "FP-02",
+    "input": {"op": "devcontainer", "merged": {"forwardPorts": [3000, "db:5432"]}},
+    "expected": {"ports": [3000]},
+    "note": "Rule 1: a compose service's port is not the laptop's; skipped."
+  },
+  {
+    "id": "FP-03",
+    "input": {"op": "devcontainer", "merged": {"forwardPorts": [3000, "3000", "localhost:3000"]}},
+    "expected": {"ports": [3000]},
+    "note": "Rule 1: duplicates dropped, the first kept."
+  },
+  {
+    "id": "FP-04",
+    "input": {"op": "devcontainer", "merged": {"forwardPorts": [0, 70000, -1, "abc", true, 22]}},
+    "expected": {"ports": [22]},
+    "note": "Rule 1: 0, out of range, negative, not a number and a boolean are skipped."
+  },
+  {
+    "id": "FP-05",
+    "input": {"op": "devcontainer", "merged": {"name": "no ports"}},
+    "expected": {"ports": []},
+    "note": "Rule 1: no forwardPorts, no defaults."
+  },
+  {
+    "id": "FP-06",
+    "input": {"op": "effective", "set": [{"port": 5173, "host": 15173}], "devcontainer": [5173, 3000]},
+    "expected": {"ports": [{"port": 5173, "host": 15173}]},
+    "note": "Rule 2: the user's list wins over the devcontainer."
+  },
+  {
+    "id": "FP-07",
+    "input": {"op": "effective", "set": [], "devcontainer": [5173]},
+    "expected": {"ports": []},
+    "note": "Rule 2: an empty user list means the user removed them all; no fallback."
+  },
+  {
+    "id": "FP-08",
+    "input": {"op": "effective", "devcontainer": [5173, 3000]},
+    "expected": {"ports": [{"port": 5173, "host": 5173}, {"port": 3000, "host": 3000}]},
+    "note": "Rule 2: never set: the devcontainer ports, each on the same port here."
+  },
+  {
+    "id": "FP-09",
+    "input": {"op": "check", "list": [{"port": 5173, "host": 5173}, {"port": 3000, "host": 13000}]},
+    "expected": {"ok": true},
+    "note": "Rule 3: valid list."
+  },
+  {
+    "id": "FP-10",
+    "input": {"op": "check", "list": [{"port": 5173, "host": 8000}, {"port": 3000, "host": 8000}]},
+    "expected": {"ok": false, "error": "Port 8000 of this computer is used twice; each forward needs its own."},
+    "note": "Rule 3: one port of this computer cannot carry two forwards."
+  },
+  {
+    "id": "FP-11",
+    "input": {"op": "check", "list": [{"port": 0, "host": 5173}]},
+    "expected": {"ok": false, "error": "A port is a number from 1 to 65535."},
+    "note": "Rule 3: port 0 is refused."
+  },
+  {
+    "id": "FP-12",
+    "input": {"op": "check", "list": [{"port": 5173, "host": 5173}, {"port": 5173, "host": 15173}]},
+    "expected": {"ok": true},
+    "note": "Rule 3: the same laptop port on two ports here is allowed."
+  }
+]

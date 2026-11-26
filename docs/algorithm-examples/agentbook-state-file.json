@@ -1,0 +1,140 @@
+[
+  {
+    "id": "SF-01",
+    "input": {"op": "load", "file": {
+      "schema_version": 1,
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\work\\Q3 reports", "claude_dir": "repo-a",
+        "equipment": {"kind": "project", "config": ".devcontainer/devcontainer.json"},
+        "vars": [
+          {"name": "JIRA_URL", "value": {"kind": "plain", "text": "https://jira.example.com"}, "origin": "override"},
+          {"name": "JIRA_PAT", "value": {"kind": "hidden"}, "origin": "override"}]}],
+      "laptops": [{"id": "k3m7q2xa", "folder_id": "f1aaaaaa", "name": "Q3 reports", "port": 21234,
+        "given": [{"path": "D:\\Mockups", "read_only": true}],
+        "equipment_hash": "5dbea848", "libc": "glibc", "gen": 3,
+        "laptop_vars": [{"name": "JIRA_PAT", "value": {"kind": "hidden"}, "origin": "override"}]}],
+      "recent": ["C:\\work\\Q3 reports"]}},
+    "expected": {"ok": true, "readOnly": false, "folders": 1, "laptops": 1},
+    "note": "Rule 1: a schema_version 1 file (the v1 fixture) loads writable with its folder and laptop."
+  },
+  {
+    "id": "SF-02",
+    "input": {"op": "roundtrip", "file": {
+      "schema_version": 1,
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\work\\Q3 reports", "claude_dir": "repo-a",
+        "equipment": {"kind": "project", "config": ".devcontainer/devcontainer.json"},
+        "vars": [
+          {"name": "JIRA_URL", "value": {"kind": "plain", "text": "https://jira.example.com"}, "origin": "override"},
+          {"name": "JIRA_PAT", "value": {"kind": "hidden"}, "origin": "override"}]}],
+      "laptops": [{"id": "k3m7q2xa", "folder_id": "f1aaaaaa", "name": "Q3 reports", "port": 21234,
+        "given": [{"path": "D:\\Mockups", "read_only": true}],
+        "equipment_hash": "5dbea848", "libc": "glibc", "gen": 3,
+        "laptop_vars": [{"name": "JIRA_PAT", "value": {"kind": "hidden"}, "origin": "override"}]}],
+      "recent": ["C:\\work\\Q3 reports"]}},
+    "expected": {"ok": true, "written": {
+      "schema_version": 1,
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\work\\Q3 reports", "claude_dir": "repo-a",
+        "equipment": {"kind": "project", "config": ".devcontainer/devcontainer.json"},
+        "vars": [
+          {"name": "JIRA_URL", "value": {"kind": "plain", "text": "https://jira.example.com"}, "origin": "override"},
+          {"name": "JIRA_PAT", "value": {"kind": "hidden"}, "origin": "override"}]}],
+      "laptops": [{"id": "k3m7q2xa", "folder_id": "f1aaaaaa", "name": "Q3 reports", "port": 21234,
+        "given": [{"path": "D:\\Mockups", "read_only": true}],
+        "equipment_hash": "5dbea848", "libc": "glibc", "gen": 3,
+        "laptop_vars": [{"name": "JIRA_PAT", "value": {"kind": "hidden"}, "origin": "override"}]}],
+      "recent": ["C:\\work\\Q3 reports"]}},
+    "note": "Rule 3: the v1 fixture writes back exactly as read (every key is known and present)."
+  },
+  {
+    "id": "SF-03",
+    "input": {"op": "roundtrip", "file": {
+      "schema_version": 1,
+      "ui": {"theme": "dark"},
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\w", "color": "blue",
+        "equipment": {"kind": "standard", "variant": "slim"},
+        "vars": [{"name": "A", "value": {"kind": "plain", "text": "1"}, "origin": "added", "note": "n"}]}],
+      "laptops": [{"id": "k3m7q2xa", "folder_id": "f1aaaaaa", "name": "Laptop 1", "port": 20000, "pinned": true,
+        "given": [{"path": "D:\\x", "read_only": false, "label": "m"}], "gen": 1, "laptop_vars": []}],
+      "recent": []}},
+    "expected": {"ok": true, "readOnly": false, "written": {
+      "schema_version": 1,
+      "ui": {"theme": "dark"},
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\w", "color": "blue",
+        "equipment": {"kind": "standard", "variant": "slim"},
+        "vars": [{"name": "A", "value": {"kind": "plain", "text": "1"}, "origin": "added", "note": "n"}]}],
+      "laptops": [{"id": "k3m7q2xa", "folder_id": "f1aaaaaa", "name": "Laptop 1", "port": 20000, "pinned": true,
+        "given": [{"path": "D:\\x", "read_only": false, "label": "m"}], "gen": 1, "laptop_vars": []}],
+      "recent": []}},
+    "note": "Rule 2: unknown fields (a newer tool's) on the top level, folder, equipment, variable, laptop and given folder are all kept on write-back. Absent optional keys (claude_dir, config, equipment_hash, libc) stay absent."
+  },
+  {
+    "id": "SF-04",
+    "input": {"op": "load", "file": {"schema_version": 2, "folders": [], "laptops": [], "recent": [], "profiles": [{"x": 1}]}},
+    "expected": {"ok": true, "readOnly": true, "folders": 0, "laptops": 0},
+    "note": "Rule 1: schema_version 2 > 1: it loads (so the tool can show it) but read-only."
+  },
+  {
+    "id": "SF-05",
+    "input": {"op": "roundtrip", "file": {"schema_version": 2, "folders": [], "laptops": [], "recent": []}},
+    "expected": {"ok": true, "readOnly": true, "error": "read-only"},
+    "note": "Rule 4: writing a read-only state is refused ('update AgentBook')."
+  },
+  {
+    "id": "SF-06",
+    "input": {"op": "roundtrip", "file": {
+      "schema_version": 1,
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\w", "equipment": {"kind": "remote", "host": "x"},
+        "vars": [
+          {"name": "A", "value": {"kind": "plain", "text": "1"}, "origin": "inherited"},
+          {"name": "B", "value": {"kind": "vault", "ref": "kv/b"}, "origin": "override"}]}],
+      "laptops": [{"id": "k3m7q2xa", "folder_id": "f1aaaaaa", "name": "L", "port": 20000, "libc": "bionic", "gen": 0}],
+      "recent": []}},
+    "expected": {"ok": true, "readOnly": false, "written": {
+      "schema_version": 1,
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\w", "equipment": {"kind": "remote", "host": "x"},
+        "vars": [
+          {"name": "A", "value": {"kind": "plain", "text": "1"}, "origin": "inherited"},
+          {"name": "B", "value": {"kind": "vault", "ref": "kv/b"}, "origin": "override"}]}],
+      "laptops": [{"id": "k3m7q2xa", "folder_id": "f1aaaaaa", "name": "L", "port": 20000, "libc": "bionic", "gen": 0,
+        "given": [], "laptop_vars": []}],
+      "recent": []}},
+    "note": "Rule 2: unknown enum values (Equipment kind, origin, libc) and an unknown variable value kind are kept as written. Missing lists are written as empty lists."
+  },
+  {
+    "id": "SF-07",
+    "input": {"op": "roundtrip", "file": {
+      "schema_version": 1,
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\w", "equipment": {"kind": "standard"},
+        "vars": [{"name": "JIRA_PAT", "value": {"kind": "hidden", "text": "s3cr3t"}, "origin": "override"}]}],
+      "laptops": [], "recent": []}},
+    "expected": {"ok": true, "written": {
+      "schema_version": 1,
+      "folders": [{"id": "f1aaaaaa", "path": "C:\\w", "equipment": {"kind": "standard"},
+        "vars": [{"name": "JIRA_PAT", "value": {"kind": "hidden"}, "origin": "override"}]}],
+      "laptops": [], "recent": []}},
+    "note": "Rule 5: a Hidden value is only a marker; a stray text next to it is dropped on write, so a hidden value can never be (re)written to state.json."
+  },
+  {
+    "id": "SF-08",
+    "input": {"op": "roundtrip", "file": {"schema_version": 1}},
+    "expected": {"ok": true, "readOnly": false, "written": {"schema_version": 1, "folders": [], "laptops": [], "recent": []}},
+    "note": "Rule 3: the minimal file; the three lists default to empty and are written."
+  },
+  {"id": "SF-09", "input": {"op": "load", "file": {"folders": []}}, "expected": {"ok": false, "error": "invalid"}, "note": "Rule 1: no schema_version: not a state file."},
+  {"id": "SF-10", "input": {"op": "load", "file": {"schema_version": 0}}, "expected": {"ok": false, "error": "invalid"}, "note": "Rule 1: versions start at 1."},
+  {"id": "SF-11", "input": {"op": "load", "text": "{\"schema_version\": 1,"}, "expected": {"ok": false, "error": "invalid"}, "note": "Rule 1: a cut-off file is not JSON."},
+  {"id": "SF-12", "input": {"op": "load", "file": [1, 2]}, "expected": {"ok": false, "error": "invalid"}, "note": "Rule 1: the top level must be an object."},
+  {
+    "id": "SF-13",
+    "input": {"op": "load", "file": {"schema_version": 1, "folders": [{"id": "f1aaaaaa", "path": "C:\\w", "equipment": {"kind": "standard"},
+      "vars": [{"name": "A", "value": {"kind": "plain"}, "origin": "added"}]}]}},
+    "expected": {"ok": false, "error": "invalid"},
+    "note": "Rule 5: a plain value must carry its text."
+  },
+  {"id": "SF-14", "input": {"op": "id", "bytes": [0, 0, 0, 0, 0]}, "expected": {"id": "aaaaaaaa", "valid": true}, "note": "Rule 6: forty 0 bits are eight 5-bit groups of 0, letter 'a'."},
+  {"id": "SF-15", "input": {"op": "id", "bytes": [255, 255, 255, 255, 255]}, "expected": {"id": "77777777", "valid": true}, "note": "Rule 6: eight groups of 31, the last alphabet character '7'."},
+  {"id": "SF-16", "input": {"op": "id", "bytes": [18, 52, 86, 120, 154]}, "expected": {"id": "ci2fm6e2", "valid": true}, "note": "Rule 6: 0x123456789A in 5-bit groups is 2,8,26,5,12,30,4,26 = c,i,2,f,m,6,e,2 (RFC 4648 base32 'CI2FM6E2', lowercased)."},
+  {"id": "SF-17", "input": {"op": "valid-id", "id": "k3m7q2xa"}, "expected": {"valid": true}, "note": "Rule 6: 8 characters from a-z and 2-7."},
+  {"id": "SF-18", "input": {"op": "valid-id", "id": "K3M7Q2XA"}, "expected": {"valid": false}, "note": "Rule 6: ids are lowercase."},
+  {"id": "SF-19", "input": {"op": "valid-id", "id": "k3m9q2xa"}, "expected": {"valid": false}, "note": "Rule 6: '9' is not in the base32 alphabet (digits are 2-7 only)."},
+  {"id": "SF-20", "input": {"op": "valid-id", "id": "k3m7q2x"}, "expected": {"valid": false}, "note": "Rule 6: 7 characters is one short."}
+]

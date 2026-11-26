@@ -1,0 +1,96 @@
+[
+  {"id": "VR-01", "input": {"op": "hidden", "name": "JIRA_TOKEN"}, "expected": {"hidden": true}, "note": "Rule 1: contains TOKEN."},
+  {"id": "VR-02", "input": {"op": "hidden", "name": "JIRA_PAT"}, "expected": {"hidden": true}, "note": "Rule 1: PAT is a whole word (after '_')."},
+  {"id": "VR-03", "input": {"op": "hidden", "name": "CLIENT_SECRET"}, "expected": {"hidden": true}, "note": "Rule 1: contains SECRET."},
+  {"id": "VR-04", "input": {"op": "hidden", "name": "DB_PASSWORD"}, "expected": {"hidden": true}, "note": "Rule 1: contains PASSWORD."},
+  {"id": "VR-05", "input": {"op": "hidden", "name": "API_KEY"}, "expected": {"hidden": true}, "note": "Rule 1: contains KEY."},
+  {"id": "VR-06", "input": {"op": "hidden", "name": "JIRA_URL"}, "expected": {"hidden": false}, "note": "Rule 1: none of the words: starts plain."},
+  {"id": "VR-07", "input": {"op": "hidden", "name": "PATH"}, "expected": {"hidden": false}, "note": "Rule 1: PAT counts only as a whole word; the word here is PATH."},
+  {"id": "VR-08", "input": {"op": "hidden", "name": "COMPAT_MODE"}, "expected": {"hidden": false}, "note": "Rule 1: words COMPAT and MODE; PAT is only inside COMPAT."},
+  {"id": "VR-09", "input": {"op": "hidden", "name": "jira_pat"}, "expected": {"hidden": true}, "note": "Rule 1 ignores case: the word 'pat' is PAT."},
+  {"id": "VR-10", "input": {"op": "hidden", "name": "APIKEY"}, "expected": {"hidden": true}, "note": "Rule 1: KEY is a substring match, so it needs no '_' in front."},
+  {"id": "VR-11", "input": {"op": "hidden", "name": "GITHUB_PAT_2"}, "expected": {"hidden": true}, "note": "Rule 1: PAT is a word between '_' and '_'."},
+  {"id": "VR-12", "input": {"op": "hidden", "name": "PATCH_LEVEL"}, "expected": {"hidden": false}, "note": "Rule 1: the word is PATCH, not PAT."},
+  {"id": "VR-13", "input": {"op": "hidden", "name": "MONKEY_NAME"}, "expected": {"hidden": true}, "note": "Rule 1 as written: KEY is a substring of MONKEY. A false positive on the safe side; the user can unmark it."},
+  {"id": "VR-14", "input": {"op": "valid", "name": "JIRA_URL"}, "expected": {"valid": true}, "note": "Rule 2: letters and '_'."},
+  {"id": "VR-15", "input": {"op": "valid", "name": "_X1"}, "expected": {"valid": true}, "note": "Rule 2: may start with '_', digits after the first character."},
+  {"id": "VR-16", "input": {"op": "valid", "name": "1ABC"}, "expected": {"valid": false}, "note": "Rule 2: may not start with a digit."},
+  {"id": "VR-17", "input": {"op": "valid", "name": "MY-VAR"}, "expected": {"valid": false}, "note": "Rule 2: '-' is not allowed (sh would not accept it as a name)."},
+  {"id": "VR-18", "input": {"op": "valid", "name": ""}, "expected": {"valid": false}, "note": "Rule 2: needs at least one character."},
+  {"id": "VR-19", "input": {"op": "valid", "name": "ПЕРЕМЕННАЯ"}, "expected": {"valid": false}, "note": "Rule 2 is ASCII only."},
+  {"id": "VR-20", "input": {"op": "credential", "prefix": "AgentBook/", "folder": "f1aaaaaa", "name": "JIRA_PAT"}, "expected": {"target": "AgentBook/f1aaaaaa/JIRA_PAT"}, "note": "Rule 3: folder-wide: prefix + folder id + '/' + name."},
+  {"id": "VR-21", "input": {"op": "credential", "prefix": "AgentBook/", "folder": "f1aaaaaa", "laptop": "k3m7q2xa", "name": "JIRA_PAT"}, "expected": {"target": "AgentBook/f1aaaaaa/k3m7q2xa/JIRA_PAT"}, "note": "Rule 3: Only for one laptop: the laptop id between folder id and name."},
+  {"id": "VR-22", "input": {"op": "credential", "prefix": "AgentBook-test-run7/", "folder": "f1aaaaaa", "name": "JIRA_PAT"}, "expected": {"target": "AgentBook-test-run7/f1aaaaaa/JIRA_PAT"}, "note": "Rule 3: the scenario stand's prefix replaces AgentBook/."},
+  {"id": "VR-23", "input": {"op": "container-refs", "value": "${containerEnv:PATH}:/opt/tool/bin", "containerEnv": [["PATH", "/usr/bin:/bin"]]}, "expected": {"value": "/usr/bin:/bin:/opt/tool/bin"}, "note": "Rule 4: the reference is replaced by the container's PATH."},
+  {"id": "VR-24", "input": {"op": "container-refs", "value": "${containerEnv:MISSING:fallback}", "containerEnv": []}, "expected": {"value": "fallback"}, "note": "Rule 4: not in the container env: the default after the second ':'."},
+  {"id": "VR-25", "input": {"op": "container-refs", "value": "${containerEnv:MISSING}x", "containerEnv": [["OTHER", "1"]]}, "expected": {"value": "x"}, "note": "Rule 4: not found and no default: empty."},
+  {"id": "VR-26", "input": {"op": "container-refs", "value": "${localEnv:HOME}/a", "containerEnv": [["HOME", "/root"]]}, "expected": {"value": "${localEnv:HOME}/a"}, "note": "Rule 4 touches only containerEnv references."},
+  {"id": "VR-27", "input": {"op": "container-refs", "value": "a${containerEnv:PATH", "containerEnv": [["PATH", "/bin"]]}, "expected": {"value": "a${containerEnv:PATH"}, "note": "Rule 4: an unterminated reference (no '}') stays as it is."},
+  {
+    "id": "VR-28",
+    "input": {"op": "resolve", "defaults": [["JIRA_URL", "https://jira.example.com"], ["JIRA_PAT", ""]]},
+    "expected": {"vars": [
+      {"name": "JIRA_URL", "value": "https://jira.example.com", "source": "project", "editable": true, "needsValue": false},
+      {"name": "JIRA_PAT", "value": "", "source": "project", "editable": true, "needsValue": true}
+    ]},
+    "note": "Rules 5, 8: only project defaults; the empty JIRA_PAT default needs a value."
+  },
+  {
+    "id": "VR-29",
+    "input": {"op": "resolve", "defaults": [["JIRA_URL", "https://jira.example.com"], ["JIRA_PAT", ""]], "folder": [{"name": "JIRA_PAT", "hidden": true}]},
+    "expected": {"vars": [
+      {"name": "JIRA_URL", "value": "https://jira.example.com", "source": "project", "editable": true, "needsValue": false},
+      {"name": "JIRA_PAT", "value": {"hidden": true}, "source": "folder", "editable": true, "needsValue": false}
+    ]},
+    "note": "Rule 6: the folder's Hidden value replaces the default in place; a Hidden marker never needs a value (rule 8)."
+  },
+  {
+    "id": "VR-30",
+    "input": {"op": "resolve", "defaults": [["JIRA_PAT", ""]], "folder": [{"name": "JIRA_PAT", "hidden": true}], "laptop": [{"name": "JIRA_PAT", "value": "other-pat"}]},
+    "expected": {"vars": [
+      {"name": "JIRA_PAT", "value": "other-pat", "source": "laptop", "editable": true, "needsValue": false}
+    ]},
+    "note": "Rule 7: the per-laptop override wins over the folder value, which won over the project default."
+  },
+  {
+    "id": "VR-31",
+    "input": {"op": "resolve", "defaults": [["JIRA_URL", "u"]], "folder": [{"name": "EXTRA", "value": "1", "origin": "added"}], "laptop": [{"name": "ONLY_HERE", "value": "", "origin": "added"}]},
+    "expected": {"vars": [
+      {"name": "JIRA_URL", "value": "u", "source": "project", "editable": true, "needsValue": false},
+      {"name": "EXTRA", "value": "1", "source": "folder", "editable": true, "needsValue": false},
+      {"name": "ONLY_HERE", "value": "", "source": "laptop", "editable": true, "needsValue": true}
+    ]},
+    "note": "Rules 6, 7: names the project does not declare are appended, folder ones before laptop ones; the empty added one needs a value."
+  },
+  {
+    "id": "VR-32",
+    "input": {"op": "resolve", "defaults": [["A", "1"], ["B", "2"], ["A", "3"]]},
+    "expected": {"vars": [
+      {"name": "A", "value": "3", "source": "project", "editable": true, "needsValue": false},
+      {"name": "B", "value": "2", "source": "project", "editable": true, "needsValue": false}
+    ]},
+    "note": "Rule 5: remoteEnv after containerEnv; the later A=3 replaces A=1 and keeps A's first position."
+  },
+  {
+    "id": "VR-33",
+    "input": {"op": "resolve", "defaults": [["PATH", "${containerEnv:PATH}:/opt/x/bin"]], "containerEnv": [["PATH", "/usr/bin"]]},
+    "expected": {"vars": [
+      {"name": "PATH", "value": "/usr/bin:/opt/x/bin", "source": "project", "editable": false, "needsValue": false}
+    ]},
+    "note": "Rule 5: a default with ${containerEnv: is resolved (rule 4) and delivered, but not editable (not listed in the dialog)."
+  },
+  {
+    "id": "VR-34",
+    "input": {"op": "resolve", "defaults": [["JIRA_URL", "https://jira.example.com"]], "folder": [{"name": "JIRA_URL", "value": ""}]},
+    "expected": {"vars": [
+      {"name": "JIRA_URL", "value": "", "source": "folder", "editable": true, "needsValue": true}
+    ]},
+    "note": "Rules 6, 8: an explicit empty folder value replaces the default and needs a value."
+  },
+  {"id": "VR-35", "input": {"op": "env-file", "vars": [["JIRA_URL", "https://jira.example.com/x?a=1&b=2"]]}, "expected": {"text": "JIRA_URL='https://jira.example.com/x?a=1&b=2'\n"}, "note": "Rule 9: one NAME='value' line; & and ? are literal inside single quotes."},
+  {"id": "VR-36", "input": {"op": "env-file", "vars": [["A", "it's"]]}, "expected": {"text": "A='it'\\''s'\n"}, "note": "Rule 9: the ' becomes '\\'' (close quote, escaped quote, reopen)."},
+  {"id": "VR-37", "input": {"op": "env-file", "vars": [["B", "l1\nl2 $HOME `x` \\n"]]}, "expected": {"text": "B='l1\nl2 $HOME `x` \\n'\n"}, "note": "Rule 9: newline kept inside the quotes; $, backticks and backslash are literal in single quotes, so nothing is escaped."},
+  {"id": "VR-38", "input": {"op": "env-file", "vars": [["BAD-NAME", "x"], ["OK", ""]]}, "expected": {"text": "OK=''\n"}, "note": "Rule 9: an invalid name (rule 2) is left out; an empty value is written as ''."},
+  {"id": "VR-39", "input": {"op": "env-file", "vars": []}, "expected": {"text": ""}, "note": "Rule 9: no variables: an empty file."},
+  {"id": "VR-40", "input": {"op": "env-file", "vars": [["X", "1"], ["Y", "2"]]}, "expected": {"text": "X='1'\nY='2'\n"}, "note": "Rule 9: one line per variable, in order, each ending in a newline."}
+]

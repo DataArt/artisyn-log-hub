@@ -18,13 +18,6 @@ function asRecord(v: unknown): AnyRecord | null {
   return null;
 }
 
-export function coerceContextValue(v: unknown): string {
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  if (v !== null && typeof v === 'object') return JSON.stringify(v);
-  return '';
-}
-
 export function extractRepoUrls(lines: object[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -604,27 +597,6 @@ export function extractHarnessMcpInventory(
     byName.set(name, { name, connected, tools });
   }
   return [...byName.values()];
-}
-
-export function extractContextPairs(
-  lines: object[],
-): Array<{ key: string; value: string }> {
-  const seen = new Set<string>();
-  const result: Array<{ key: string; value: string }> = [];
-  for (const line of lines) {
-    const context = asRecord((line as AnyRecord).context);
-    if (context === null) continue;
-    for (const [key, val] of Object.entries(context)) {
-      if (!key) continue;
-      const value = coerceContextValue(val);
-      if (!value) continue;
-      const pairKey = `${key}\0${value}`;
-      if (seen.has(pairKey)) continue;
-      seen.add(pairKey);
-      result.push({ key, value });
-    }
-  }
-  return result;
 }
 
 // ---------------------------------------------------------------------------

@@ -33,6 +33,8 @@ interface Props {
   period: BudgetPeriod;
   offset: number;
   tz: string;
+  /** The Spend tab's tag slice key (otel-session-tags); sent with `slice=tag`. */
+  tagKey?: string;
   target: SpendSessionsTarget | null;
   onClose: () => void;
 }
@@ -43,9 +45,11 @@ export function SpendSessionsModal({
   period,
   offset,
   tz,
+  tagKey,
   target,
   onClose,
 }: Props) {
+  const sliceTagKey = target?.slice === 'tag' ? tagKey : undefined;
   const query = useQuery({
     queryKey: [
       'spend-sessions',
@@ -55,6 +59,7 @@ export function SpendSessionsModal({
       tz,
       target?.slice,
       target?.key,
+      sliceTagKey,
     ],
     queryFn: ({ signal }) =>
       fetchSpendSessions(
@@ -63,6 +68,7 @@ export function SpendSessionsModal({
           period,
           offset,
           tz,
+          tagKey: sliceTagKey,
           slice: target!.slice,
           key: target!.key,
         },

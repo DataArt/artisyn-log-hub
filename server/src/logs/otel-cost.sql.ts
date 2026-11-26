@@ -371,7 +371,8 @@ export function costExcludesUtilityCallsSql(rootId: SQL): SQL {
  * is then null ({@link resolveSessionTotalCost}).
  *
  * Requires a `descendant_sessions` CTE (`descendantSessionsCte`) over the same roots to be in
- * scope earlier in the same `WITH`.
+ * scope earlier in the same `WITH`. Emits three CTEs: the helpers `tree_rids(root_id,
+ * request_id)` and `tree_has_rids(root_id)`, then `utility_costs`.
  */
 export function utilityCostsCte(rootIdsArray: SQL): SQL {
   const transcriptSources = sql.join(
@@ -379,7 +380,20 @@ export function utilityCostsCte(rootIdsArray: SQL): SQL {
     sql`, `,
   );
   const transcriptPrefixLike = `${TRANSCRIPT_QUERY_SOURCE_PREFIX}%`;
-  return sql`utility_costs AS (
+  // `tree_rids` / `tree_has_rids` build each tree's transcript request-id set ONCE and are joined
+  // by hash. Correlated EXISTS / NOT EXISTS over `descendant_sessions` (a CTE, no index) per OTEL
+  // call scanned the whole tree for every call: 8.4 s → 1.4 s on a Raspberry Pi with 9.5 k calls
+  // (2026-11-25, sessions list). Do not mark `descendant_sessions` MATERIALIZED here: that variant
+  // crossed the JIT threshold and took 33 s.
+  return sql`tree_rids AS (
+    SELECT DISTINCT dt.root_id, sri.request_id
+    FROM descendant_sessions dt
+    JOIN session_request_ids sri ON sri.session_id = dt.id
+  ),
+  tree_has_rids AS (
+    SELECT DISTINCT root_id FROM tree_rids
+  ),
+  utility_costs AS (
     SELECT
       rs.id AS session_row_id,
       COALESCE(SUM(
@@ -397,15 +411,10 @@ export function utilityCostsCte(rootIdsArray: SQL): SQL {
     CROSS JOIN LATERAL (
       SELECT ${sessionPriceDateSql(sql`rs.id`)} AS price_date
     ) pd
-    CROSS JOIN LATERAL (
-      SELECT EXISTS (
-        SELECT 1
-        FROM descendant_sessions dt
-        JOIN session_request_ids sri ON sri.session_id = dt.id
-        WHERE dt.root_id = rs.id
-      ) AS has_request_ids
-    ) tr
+    LEFT JOIN tree_has_rids thr ON thr.root_id = rs.id
     JOIN otel_api_calls oc ON oc.session_id = rs.id
+    LEFT JOIN tree_rids trid
+      ON trid.root_id = rs.id AND trid.request_id = oc.request_id
     LEFT JOIN LATERAL (
       ${pricingAsOfSql(sql`oc.model`, sql`pd.price_date`)}
     ) p ON true
@@ -414,14 +423,8 @@ export function utilityCostsCte(rootIdsArray: SQL): SQL {
     ) ct ON true
     WHERE rs.id = ANY(${rootIdsArray})
       AND CASE
-        WHEN tr.has_request_ids THEN
-          oc.request_id IS NULL OR NOT EXISTS (
-            SELECT 1
-            FROM descendant_sessions dr
-            JOIN session_request_ids sr
-              ON sr.session_id = dr.id AND sr.request_id = oc.request_id
-            WHERE dr.root_id = rs.id
-          )
+        WHEN thr.root_id IS NOT NULL THEN
+          oc.request_id IS NULL OR trid.root_id IS NULL
         ELSE
           NOT (
             COALESCE(oc.query_source, '') IN (${transcriptSources})

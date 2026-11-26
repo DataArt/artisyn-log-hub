@@ -4,6 +4,7 @@ import {
   attributeFilterSql,
   type ParsedAttributeFilter,
 } from '../attribute-filter.sql';
+import { tagFilterSql, type TagFilter } from '../tag-filter.sql';
 import type { TeamScope } from '../team-scope';
 
 /**
@@ -45,6 +46,12 @@ export interface AnalyticsScope {
    * empty narrows nothing, matching `branches`/`users`' own "empty = no filter" convention.
    */
   attributeFilters?: ParsedAttributeFilter[];
+  /**
+   * Repeatable `tag=<key>[:<value>]` filters (2026-11-24 otel-session-tags), already parsed
+   * by the caller (`parseTagFilters`). Matched against the root's `session_tags`; omitted or
+   * empty narrows nothing.
+   */
+  tagFilters?: TagFilter[];
 }
 
 /** One root session selected by Phase A. */
@@ -179,6 +186,10 @@ export async function loadScopedRootSessions(
     sql`s.id`,
   );
   const attrFilter = attrCondition ? sql`AND ${attrCondition}` : sql``;
+  const tagFilter =
+    scope.tagFilters && scope.tagFilters.length > 0
+      ? sql`AND ${tagFilterSql(scope.tagFilters, sql`s.id`)}`
+      : sql``;
 
   const result = await db.execute(sql`
     SELECT
@@ -212,6 +223,7 @@ export async function loadScopedRootSessions(
       ${branchFilter}
       ${userFilter}
       ${attrFilter}
+      ${tagFilter}
   `);
 
   return (result.rows as unknown as RootSessionSqlRow[]).map((r) => ({

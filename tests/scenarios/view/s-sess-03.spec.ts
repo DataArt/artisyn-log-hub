@@ -1130,6 +1130,8 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     const legacy = JSON.parse(await legacyRes.text()) as LegacyLogs;
     expect(Object.keys(legacy), '/logs keys in their historic order').toEqual([
       'main', 'subagents', 'subagentStats', 'rootStats', 'workflows', 'turnEndAdvisor', 'sessionAttribution', 'harnessSnapshot',
+      // 2026-11-24 otel-session-tags: additive, appended after the historic keys.
+      'tags', 'tagNoise',
     ]);
     expect(legacy.main, 'main = artisyn lines, then claude lines').toEqual([...artisynLines, ...claudeLines]);
     expect(legacy.subagents.map((s) => s.sessionId).sort()).toEqual([w1, w2].sort());

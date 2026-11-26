@@ -1,0 +1,122 @@
+[
+  {
+    "id": "DE-01",
+    "input": {"op": "dir", "name": "desktop-linux"},
+    "expected": {"dir": "fe9c6bd7a66301f49ca9b6a70b217107cd1284598bfc254700c989b916da791e"},
+    "note": "Rule 4: sha256('desktop-linux') in lowercase hex (Node's crypto); the research found this folder under ~/.docker/contexts/meta/."
+  },
+  {
+    "id": "DE-02",
+    "input": {"op": "resolve", "dockerHost": "npipe:////./pipe/dockerDesktopLinuxEngine", "windows": true},
+    "expected": {"source": "DOCKER_HOST", "candidates": [{"kind": "pipe", "address": "\\\\.\\pipe\\dockerDesktopLinuxEngine"}]},
+    "note": "Rules 1, 5: DOCKER_HOST first; npipe:// + '//./pipe/x' with '/' turned into '\\' is \\\\.\\pipe\\x."
+  },
+  {
+    "id": "DE-03",
+    "input": {"op": "resolve", "dockerHost": "unix:///var/run/docker.sock", "home": "/Users/den"},
+    "expected": {"source": "DOCKER_HOST", "candidates": [{"kind": "unix", "address": "/var/run/docker.sock"}]},
+    "note": "Rule 5: unix:// + the path."
+  },
+  {
+    "id": "DE-04",
+    "input": {"op": "resolve", "dockerHost": "tcp://localhost:2375", "windows": true},
+    "expected": {"source": "DOCKER_HOST", "candidates": [{"kind": "tcp", "address": "tcp://localhost:2375"}]},
+    "note": "Rule 5: TCP to localhost is this computer; the URL is kept."
+  },
+  {
+    "id": "DE-05",
+    "input": {"op": "resolve", "dockerHost": "tcp://127.0.0.1:2375", "windows": true},
+    "expected": {"source": "DOCKER_HOST", "candidates": [{"kind": "tcp", "address": "tcp://127.0.0.1:2375"}]},
+    "note": "Rule 5: any 127.x address is loopback."
+  },
+  {
+    "id": "DE-06",
+    "input": {"op": "resolve", "dockerHost": "tcp://[::1]:2375", "windows": true},
+    "expected": {"source": "DOCKER_HOST", "candidates": [{"kind": "tcp", "address": "tcp://[::1]:2375"}]},
+    "note": "Rule 5: the IPv6 loopback in brackets."
+  },
+  {
+    "id": "DE-07",
+    "input": {"op": "resolve", "dockerHost": "tcp://192.168.1.20:2376", "windows": true},
+    "expected": {"error": "not-local", "url": "tcp://192.168.1.20:2376"},
+    "note": "Rule 5: another host cannot see this computer's folders: 'AgentBook needs a Docker engine on this computer'."
+  },
+  {
+    "id": "DE-08",
+    "input": {"op": "resolve", "dockerHost": "ssh://dev@build-box", "windows": true},
+    "expected": {"error": "not-local", "url": "ssh://dev@build-box"},
+    "note": "Rule 5: ssh:// is always another host."
+  },
+  {
+    "id": "DE-09",
+    "input": {"op": "resolve", "dockerHost": "fd://", "windows": false, "home": "/home/den"},
+    "expected": {"error": "unsupported", "url": "fd://"},
+    "note": "Rule 5: a scheme the tool does not speak."
+  },
+  {
+    "id": "DE-10",
+    "input": {"op": "resolve", "dockerHost": "   ", "windows": true},
+    "expected": {"source": "default", "candidates": [{"kind": "pipe", "address": "\\\\.\\pipe\\docker_engine"}, {"kind": "wsl", "address": ""}]},
+    "note": "Rule 1: a blank DOCKER_HOST counts as unset; no context; rule 3 gives the Windows default pipe."
+  },
+  {
+    "id": "DE-11",
+    "input": {"op": "resolve", "windows": true,
+      "configJson": {"currentContext": "desktop-linux"},
+      "metas": {"desktop-linux": {"Name": "desktop-linux", "Endpoints": {"docker": {"Host": "npipe:////./pipe/dockerDesktopLinuxEngine"}}}}},
+    "expected": {"source": "context:desktop-linux", "candidates": [{"kind": "pipe", "address": "\\\\.\\pipe\\dockerDesktopLinuxEngine"}]},
+    "note": "Rule 2: currentContext of config.json, its meta.json Endpoints.docker.Host (Docker Desktop's usual setup)."
+  },
+  {
+    "id": "DE-12",
+    "input": {"op": "resolve", "windows": true, "dockerContext": "rancher",
+      "configJson": {"currentContext": "desktop-linux"},
+      "metas": {
+        "desktop-linux": {"Endpoints": {"docker": {"Host": "npipe:////./pipe/dockerDesktopLinuxEngine"}}},
+        "rancher": {"Endpoints": {"docker": {"Host": "npipe:////./pipe/docker_engine"}}}}},
+    "expected": {"source": "context:rancher", "candidates": [{"kind": "pipe", "address": "\\\\.\\pipe\\docker_engine"}]},
+    "note": "Rule 2: DOCKER_CONTEXT wins over currentContext."
+  },
+  {
+    "id": "DE-13",
+    "input": {"op": "resolve", "windows": true, "dockerHost": "npipe:////./pipe/one", "dockerContext": "rancher",
+      "metas": {"rancher": {"Endpoints": {"docker": {"Host": "npipe:////./pipe/two"}}}}},
+    "expected": {"source": "DOCKER_HOST", "candidates": [{"kind": "pipe", "address": "\\\\.\\pipe\\one"}]},
+    "note": "Rule 1 before rule 2: DOCKER_HOST wins over DOCKER_CONTEXT."
+  },
+  {
+    "id": "DE-14",
+    "input": {"op": "resolve", "windows": true, "configJson": {"currentContext": "default"}},
+    "expected": {"source": "default", "candidates": [{"kind": "pipe", "address": "\\\\.\\pipe\\docker_engine"}, {"kind": "wsl", "address": ""}]},
+    "note": "Rule 2: the 'default' context has no meta: rule 3."
+  },
+  {
+    "id": "DE-15",
+    "input": {"op": "resolve", "windows": true, "configJson": {"currentContext": "gone"}},
+    "expected": {"source": "default", "candidates": [{"kind": "pipe", "address": "\\\\.\\pipe\\docker_engine"}, {"kind": "wsl", "address": ""}]},
+    "note": "Rule 2: the named context has no meta.json: fall through to rule 3."
+  },
+  {
+    "id": "DE-16",
+    "input": {"op": "resolve", "windows": true, "configJson": "{not json"},
+    "expected": {"source": "default", "candidates": [{"kind": "pipe", "address": "\\\\.\\pipe\\docker_engine"}, {"kind": "wsl", "address": ""}]},
+    "note": "Rule 2: an unreadable config.json gives no context."
+  },
+  {
+    "id": "DE-17",
+    "input": {"op": "resolve", "windows": false, "home": "/Users/den"},
+    "expected": {"source": "default", "candidates": [
+      {"kind": "unix", "address": "/Users/den/.docker/run/docker.sock"},
+      {"kind": "unix", "address": "/var/run/docker.sock"}]},
+    "note": "Rule 3 on macOS: the per-user Docker Desktop socket, then the system one, tried in that order."
+  },
+  {
+    "id": "DE-18",
+    "input": {"op": "resolve", "windows": true, "dockerContext": "remote",
+      "metas": {"remote": {"Endpoints": {"docker": {"Host": "ssh://dev@build-box"}}}}},
+    "expected": {"error": "not-local", "url": "ssh://dev@build-box"},
+    "note": "Rules 2, 5: a context pointing at another host is refused like DOCKER_HOST would be."
+  },
+  {"id": "DE-19", "input": {"op": "resolve", "dockerHost": "wsl://Ubuntu-24.04", "windows": true}, "expected": {"source": "DOCKER_HOST", "candidates": [{"kind": "wsl", "address": "Ubuntu-24.04"}]}, "note": "Rule 5: AgentBook's own wsl://<distro> names the WSL distro whose Docker engine to use."},
+  {"id": "DE-20", "input": {"op": "resolve", "dockerHost": "wsl://", "windows": true}, "expected": {"error": "unsupported", "url": "wsl://"}, "note": "Rule 5: wsl:// without a distro name is not an endpoint."}
+]

@@ -46,3 +46,9 @@ description = "Folder path in an algorithm row, read as a generic API key becaus
 condition = "AND"
 paths = ['''^docs/algorithm-examples/okf-usage-counting\.json$''']
 regexes = ['''^docs/private/$''']
+
+[[allowlists]]
+description = "File name of a PoC's generated public key, read as a generic API key (docs/pocs/2026-11-25-2146-devcontainer-laptop-layer/run.mjs)"
+condition = "AND"
+paths = ['''^docs/pocs/2026-11-25-2146-devcontainer-laptop-layer/run\.mjs$''']
+regexes = ['''^id_ed25519\.pub$''']

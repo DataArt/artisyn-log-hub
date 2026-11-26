@@ -694,6 +694,13 @@
       "when": 1792627440000,
       "tag": "0098_otel_desktop_cc_version_reproject",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1792627500000,
+      "tag": "0099_session_tags",
+      "breakpoints": true
     }
   ]
 }

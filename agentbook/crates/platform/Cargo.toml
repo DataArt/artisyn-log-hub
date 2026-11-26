@@ -1,0 +1,46 @@
+[package]
+name = "agentbook-platform"
+description = "AgentBook Platform trait and its Windows implementation (the only crate allowed cfg(windows))"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "agentbook_platform"
+path = "src/lib.rs"
+
+[dependencies]
+agentbook-core = { path = "../core" }
+
+# OS-specific dependencies live only in this crate (`scripts/platform-check.mjs`, part of `npm run lint`).
+[target.'cfg(windows)'.dependencies]
+# Native folder picker. No default features: they only pick the Linux backend.
+rfd = { version = "0.18", default-features = false }
+# COM interfaces windows-sys lacks: the Start-menu shortcut (IShellLinkW + IPersistFile) for the
+# installer. The same `windows` release wgpu already locks.
+windows = { version = "0.62.2", features = ["Win32_System_Com", "Win32_UI_Shell"] }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Credentials",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Pipes",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Native folder panel (AppKit); no default features, they only pick the Linux backend.
+rfd = { version = "0.18", default-features = false }
+# The login Keychain for Hidden variable values (the same release reqwest's native TLS locks).
+security-framework = "3.7"

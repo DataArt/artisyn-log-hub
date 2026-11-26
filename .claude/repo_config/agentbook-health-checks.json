@@ -1,0 +1,43 @@
+{
+  "description": "AgentBook (agentbook/) health checks. NOT run by default: adlc-lh:check-health reads only repo-health-checks.json. Run them only when asked (or when a task changes agentbook/), by passing this file's checks and environmentNotes to the adlc-lh:check-health-wf Workflow (finalRun true includes agentbook-scenarios), or run the commands by hand from agentbook/ (CLAUDE.md, AgentBook).",
+  "environmentNotes": "AgentBook (agentbook/, a separate Rust desktop product) has its own agentbook-* checks: they need Rust 1.92 (agentbook/rust-toolchain.toml) and Node for the scripts; there are no npm dependencies. agentbook-scenarios also needs a local Docker engine running, the docker CLI, the system OpenSSH client (ssh, sftp, ssh-keygen) and network access (the first run fetches the pinned Node and @devcontainers/cli files once into tmp/agentbook-scenarios/cache/, which is kept, and the image builds pull Debian/Alpine/Ubuntu bases and distro packages): it drives the engine with a fake home, data dir and download server under the repo's tmp/, creates only Docker objects labelled with its own artisyn.agentbook.instance and removes them afterwards, and deletes only its own AgentBook-test-<instance>/ credentials. None of the checks touch Log Hub's or Work Hub's dev servers, DBs or dist/.",
+  "checks": [
+    {
+      "name": "agentbook-lint",
+      "dir": "agentbook",
+      "module": "AgentBook lint (rustfmt, clippy, licence check, platform-boundary check)",
+      "command": "npm run lint",
+      "group": "static",
+      "timeoutSeconds": 1200,
+      "instructions": "Fix all errors: cargo fmt --all --check, cargo clippy --workspace --all-targets -D warnings , scripts/platform-check.mjs (no cfg(windows) or Windows-only API/dependency outside crates/platform — move it behind the Platform trait) and scripts/license-check.mjs (Work Hub's permissive allowlist with no reviewed exceptions — in particular no font exception: egui's bundled fonts stay disabled and the UI uses OS fonts). Never silence clippy with allow attributes to pass — fix the root cause. AgentBook's own check: never part of Log Hub's build, dist/ or its checks. Needs no DB, no Docker and no running app. The first run compiles the Cargo workspace into agentbook/target, hence the long budget; later runs are incremental."
+    },
+    {
+      "name": "agentbook-algo",
+      "dir": "agentbook",
+      "module": "AgentBook algorithm tests (cargo test algo)",
+      "command": "npm run test:algo",
+      "group": "static",
+      "timeoutSeconds": 1200,
+      "instructions": "Doc-driven table tests only: agentbook/crates/core/tests/algo.rs reads docs/algorithm-examples/agentbook-*.json. Change rows in the rows files, never inline tables; never add other unit tests. AgentBook's own check: never part of Log Hub's build, dist/ or its checks. Needs no DB, no Docker and no running app. The first run compiles the Cargo workspace into agentbook/target, hence the long budget; later runs are incremental."
+    },
+    {
+      "name": "agentbook-build",
+      "dir": "agentbook",
+      "module": "AgentBook build (release AgentBook.exe, then AgentBook-Setup.exe embedding it)",
+      "command": "npm run build",
+      "group": "static",
+      "timeoutSeconds": 1200,
+      "instructions": "Zero compilation errors. Builds the release binaries into agentbook/target only — it never touches Log Hub's dist/ or server/src/public/static, so it is safe in the `static` group. The first release build is long; later ones are incremental."
+    },
+    {
+      "name": "agentbook-scenarios",
+      "dir": "agentbook",
+      "module": "AgentBook scenarios (engine on real Docker)",
+      "command": "npm run test:scenarios",
+      "group": "app",
+      "timeoutSeconds": 1800,
+      "finalOnly": true,
+      "instructions": "scripts/scenarios.mjs runs the agentbook-engine `scenarios` test target (agentbook/tests/scenarios/main.rs, harness = false): it drives the engine with an EngineTestConfig (own instance label, local download server, fake Desktop launcher, AgentBook-test-<instance>/ credential prefix), a fake home and data dir under the repo's tmp/, connects to laptops over ssh/sftp and then removes only the Docker objects labelled with its instance. Needs a local Docker engine and the system OpenSSH client. It never touches Log Hub's or Work Hub's dev servers, DB schemas or dist/. The first run builds the standard Equipment and test images, hence the long budget."
+    }
+  ]
+}

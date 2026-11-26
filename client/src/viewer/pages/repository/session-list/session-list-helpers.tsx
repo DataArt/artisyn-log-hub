@@ -11,6 +11,11 @@ import { NoPricingBadge } from '../../../components/NoPricingBadge';
 import { CostReconciliation } from '../../../components/CostReconciliation';
 import { HoverPopover } from '../../../components/ViewportPopover';
 import { PROMPT_HIDDEN_LABEL } from '../../../lib/access-mode-copy';
+import {
+  sessionMatchesTagFilters,
+  tagValuesOf,
+  type TagFilter,
+} from '../../../lib/session-tags';
 
 /**
  * True when this row's cost is missing *because* some model of the session tree has no
@@ -100,6 +105,8 @@ export interface FilterVisibleSessionsOptions {
   filterByUserEmail?: string;
   hideHookSessions?: boolean;
   attributeFilter?: AttributeFilterSelection | null;
+  /** Session tag filters (otel-session-tags, FR-6): AND across keys, OR within a key. */
+  tagFilters?: readonly TagFilter[];
 }
 
 interface VisibilityFields {
@@ -107,6 +114,7 @@ interface VisibilityFields {
   userEmail?: string;
   isHookService?: boolean;
   attribution?: RepositorySession['attribution'];
+  tags?: RepositorySession['tags'];
 }
 
 export function filterVisibleSessions<T extends VisibilityFields>(
@@ -115,6 +123,7 @@ export function filterVisibleSessions<T extends VisibilityFields>(
     filterByUserEmail,
     hideHookSessions,
     attributeFilter,
+    tagFilters,
   }: FilterVisibleSessionsOptions,
 ): T[] {
   let list = filterByUserEmail
@@ -127,6 +136,9 @@ export function filterVisibleSessions<T extends VisibilityFields>(
     list = list.filter((s) =>
       sessionMatchesAttributeFilter(s, attributeFilter),
     );
+  }
+  if (tagFilters && tagFilters.length > 0) {
+    list = list.filter((s) => sessionMatchesTagFilters(s.tags, tagFilters));
   }
   return list;
 }
@@ -153,6 +165,7 @@ export function hiddenUserBreakdown<T extends VisibilityFields>(
     filterByUserEmail,
     hideHookSessions,
     attributeFilter,
+    tagFilters,
   }: FilterVisibleSessionsOptions,
 ): HiddenByUser[] {
   if (!filterByUserEmail) return [];
@@ -160,6 +173,7 @@ export function hiddenUserBreakdown<T extends VisibilityFields>(
   for (const s of filterVisibleSessions(sessions, {
     hideHookSessions,
     attributeFilter,
+    tagFilters,
   })) {
     if (!s.userEmail || s.userEmail === filterByUserEmail) continue;
     counts.set(s.userEmail, (counts.get(s.userEmail) ?? 0) + 1);
@@ -225,6 +239,11 @@ export interface SessionItemProps {
   /** Resolved attribute definitions — `undefined`/`[]` renders no chips at all,
    * same as a session with no attribution row. */
   attributeDefs?: SessionAttributionAttributeDef[];
+  /**
+   * Tag keys whose values this row shows as a `key=value` chip (+N for further values) — the
+   * grouped key in "By tag" mode, the filtered keys otherwise (otel-session-tags).
+   */
+  tagChipKeys?: readonly string[];
 }
 
 export function SessionItem({
@@ -233,6 +252,7 @@ export function SessionItem({
   onSelect,
   thresholds,
   attributeDefs,
+  tagChipKeys,
 }: SessionItemProps) {
   const unpriced = isSessionCostUnpriced(session);
   // The cell shows the server's calculated total (main thread +
@@ -347,6 +367,27 @@ export function SessionItem({
             hook-service
           </span>
         )}
+        {(tagChipKeys ?? []).map((key) => {
+          const values = tagValuesOf(session.tags, key);
+          if (values.length === 0) return null;
+          return (
+            <span
+              key={key}
+              data-testid="session-item-tag-chip"
+              title={values.map((v) => `${key}=${v}`).join(', ')}
+              className="inline-flex max-w-full items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs bg-violet-500/10 text-violet-700 dark:text-violet-400"
+            >
+              <span className="min-w-0 truncate">
+                {key}={values[0]}
+              </span>
+              {values.length > 1 && (
+                <span className="shrink-0 opacity-70">
+                  +{values.length - 1}
+                </span>
+              )}
+            </span>
+          );
+        })}
         {session.hasWorkflow && (
           <span className="inline-block rounded px-1.5 py-0.5 font-mono text-xs bg-purple-500/10 text-purple-700 dark:text-purple-400">
             ⚡ Workflow

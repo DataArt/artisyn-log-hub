@@ -390,6 +390,58 @@ different stream than before: tool details are on (`OTEL_LOG_TOOL_DETAILS=1`), m
 every 10 seconds (`OTEL_METRIC_EXPORT_INTERVAL=10000`), and trace spans are added when traces are
 on.
 
+## Tagging sessions
+
+You can label sessions — by feature, team, ticket, environment — with Claude Code's standard
+`OTEL_RESOURCE_ATTRIBUTES` variable. Log Hub reads each `key=value` pair of it as a **session tag**.
+Set it wherever Claude Code takes its environment, for example in `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "OTEL_RESOURCE_ATTRIBUTES": "feature=checkout,team.name=payments"
+  }
+}
+```
+
+or in the shell before you start Claude Code
+(`export OTEL_RESOURCE_ATTRIBUTES="feature=checkout"`). The installer keeps your pairs when it adds
+its own `artisyn.repo` entry. Tags arrive with the OTEL telemetry, so OTEL must reach Log Hub (see
+[Troubleshooting: OTEL tab is empty](#troubleshooting-otel-tab-is-empty)); sessions recorded earlier
+get their tags too once the server has re-read their OTEL data.
+
+Where tags show up:
+
+- **Session header** — a **TAGS** row of `key=value` chips (sub-agents show their root session's
+  tags).
+- **Session list** — the filter popover has a **TAGS** section (pick a value or "(any value)"),
+  and the view-mode menu can group sessions **by tag**, with an "(untagged)" group.
+- **Analytics and Reports** — a tag filter in the filter bar and a **TAGS** section in **Group
+  by**.
+- **Spend** — a **Tag: &lt;key&gt;** slice that splits cost by the key's values plus "(untagged)".
+- The repository header lists the tags used in the current period, branch and user scope.
+
+Rules:
+
+- Keys that describe the machine or Claude Code itself are not tags: keys starting with
+  `artisyn.`, `service.`, `telemetry.`, `host.`, `os.`, `process.`, `anthropic.`, `wsl.`, `user.`,
+  `session.`, `organization.`, `terminal.`, `deployment.`, `k8s.`, `cloud.`, `container.`,
+  `device.`, `faas.`, `aws.`, `gcp.` or `azure.`. Any other key, dotted or not (`team.name`), is a
+  tag. Keys are case-sensitive.
+- A key longer than 64 characters or a value longer than 256 characters is skipped, not cut.
+- A session that sees several values of one key (you changed the variable mid-session) keeps all
+  of them. In a grouping such a session counts in full in every group of its values, so group
+  totals can add up to more than the overall total — the views say so with a note.
+- **Volatile values are an anti-pattern.** A value that changes all the time — a commit SHA, a
+  timestamp, a build number — creates a new tag per value. Log Hub still records it but marks the
+  key with a warning (more than 10 values of one key in a session) that tells you to remove it
+  from `OTEL_RESOURCE_ATTRIBUTES`. A session keeps at most 500 tag pairs; when it reaches that
+  limit the session header says so.
+
+Older hooks set labels in a `context` list of `log-hub.json` (or `CTX_*` variables in an old
+`.env`). The hook no longer reads it; labels recorded that way were kept and now show as tags. Move
+your labels into `OTEL_RESOURCE_ATTRIBUTES`.
+
 ## Enable OTEL and traces
 
 The hook turns OTEL on when it is installed or upgraded: the installer writes Claude Code's OTEL

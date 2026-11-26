@@ -1,0 +1,62 @@
+[
+  {
+    "id": "SU-01",
+    "input": {"remoteUser": "vscode", "containerUser": "root"},
+    "expected": {"user": "vscode", "create": false, "home": "/home/vscode", "permitRootLogin": "no"},
+    "note": "Rule 1: remoteUser comes first. Not root: home /home/vscode, root login off."
+  },
+  {
+    "id": "SU-02",
+    "input": {"containerUser": "node"},
+    "expected": {"user": "node", "create": false, "home": "/home/node", "permitRootLogin": "no"},
+    "note": "Rule 1: no remoteUser, so containerUser."
+  },
+  {
+    "id": "SU-03",
+    "input": {"imageUser": "root"},
+    "expected": {"user": "claude", "create": true, "home": "/home/claude", "permitRootLogin": "no"},
+    "note": "Unset user on a root image: neither key is set, so rule 3 gives the tool-created 'claude' user. The image user is not an input."
+  },
+  {
+    "id": "SU-04",
+    "input": {"remoteUser": "root", "imageUser": "root"},
+    "expected": {"user": "root", "create": false, "home": "/root", "permitRootLogin": "prohibit-password"},
+    "note": "An explicit root is respected (rule 1); home /root and key-only root login."
+  },
+  {
+    "id": "SU-05",
+    "input": {"containerUser": "root"},
+    "expected": {"user": "root", "create": false, "home": "/root", "permitRootLogin": "prohibit-password"},
+    "note": "containerUser root is explicit too."
+  },
+  {
+    "id": "SU-06",
+    "input": {"remoteUser": "   ", "containerUser": "dev"},
+    "expected": {"user": "dev", "create": false, "home": "/home/dev", "permitRootLogin": "no"},
+    "note": "Rule 1: a blank remoteUser counts as not set; containerUser is next."
+  },
+  {
+    "id": "SU-07",
+    "input": {"remoteUser": "app:app"},
+    "expected": {"user": "app", "create": false, "home": "/home/app", "permitRootLogin": "no"},
+    "note": "Rule 2: the part before ':' of a user:group form."
+  },
+  {
+    "id": "SU-08",
+    "input": {"containerUser": "0"},
+    "expected": {"user": "root", "create": false, "home": "/root", "permitRootLogin": "prohibit-password"},
+    "note": "Rule 2: uid 0 is root."
+  },
+  {
+    "id": "SU-09",
+    "input": {"imageUser": "node"},
+    "expected": {"user": "claude", "create": true, "home": "/home/claude", "permitRootLogin": "no"},
+    "note": "The image's own non-root user is not used either: with no remoteUser / containerUser rule 3 gives 'claude'."
+  },
+  {
+    "id": "SU-10",
+    "input": {},
+    "expected": {"user": "claude", "create": true, "home": "/home/claude", "permitRootLogin": "no"},
+    "note": "The standard Equipment names no user: rule 3."
+  }
+]

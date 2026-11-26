@@ -1,0 +1,331 @@
+[
+  {
+    "id": "OC-01",
+    "input": {
+      "merged": {
+        "name": "App",
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+        "remoteUser": "vscode",
+        "containerEnv": {"JIRA_URL": "https://jira.example.com"},
+        "remoteEnv": {"JIRA_PAT": ""},
+        "postCreateCommand": "npm ci",
+        "postStartCommand": "echo started",
+        "features": {"ghcr.io/devcontainers/features/node:1": {}},
+        "mounts": ["source=node-cache,target=/cache,type=volume"],
+        "customizations": {"vscode": {"extensions": ["dbaeumer.vscode-eslint"]}},
+        "forwardPorts": [3000],
+        "overrideCommand": true
+      },
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:3f2a-1", "shared": "C:\\work\\Q3 reports",
+        "configDir": "C:\\work\\Q3 reports\\.devcontainer", "port": 21234, "home": "/home/vscode",
+        "keyDir": "C:\\AB\\laptops\\k3m7q2xa\\key", "binDir": "C:\\AB\\tool-files", "stateDir": "C:\\AB\\folders\\f1aaaaaa\\state",
+        "labels": [["artisyn.agentbook", "1"], ["artisyn.agentbook.laptop", "k3m7q2xa"]],
+        "composeFile": "C:\\AB\\laptops\\k3m7q2xa\\gen\\agentbook-compose.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "name": "App",
+        "image": "agentbook-laptop:3f2a-1",
+        "workspaceMount": "source=C:\\work\\Q3 reports,target=/work/Q3 reports,type=bind",
+        "workspaceFolder": "/work/Q3 reports",
+        "runArgs": ["-p", "127.0.0.1:21234:22", "--tmpfs", "/run/agentbook", "--label", "artisyn.agentbook=1", "--label", "artisyn.agentbook.laptop=k3m7q2xa"],
+        "mounts": [
+          "source=agentbook-home-k3m7q2xa,target=/home/vscode,type=volume",
+          "source=C:\\AB\\laptops\\k3m7q2xa\\key,target=/opt/agentbook/key,type=bind,readonly",
+          "source=C:\\AB\\tool-files,target=/opt/agentbook/bin,type=bind,readonly",
+          "source=C:\\AB\\folders\\f1aaaaaa\\state,target=/opt/agentbook/state,type=bind,readonly"
+        ]
+      },
+      "compose": null,
+      "workspaceFolder": "/work/Q3 reports",
+      "composeProject": null
+    },
+    "note": "Image config. Rule 1: only name, image (the layered one), workspaceMount/Folder, runArgs, mounts; remoteUser, containerEnv, remoteEnv, lifecycle commands, features, the project's mounts, customizations, forwardPorts and overrideCommand are label-carried and never repeated. Rule 3: no workspaceMount/Folder, so the shared folder is bound at /work/<name>. Rule 4: no project runArgs, so only the tool's: port, tmpfs, one --label per label. Rule 5: home volume, then key, bin, state read-only."
+  },
+  {
+    "id": "OC-02",
+    "input": {
+      "merged": {
+        "build": {"dockerfile": "Dockerfile", "context": ".."},
+        "runArgs": ["--cap-add=SYS_PTRACE"],
+        "remoteUser": "node",
+        "postStartCommand": "npm run watch &"
+      },
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:77aa-1", "shared": "C:\\work\\Q3 reports",
+        "configDir": "C:\\work\\Q3 reports\\.devcontainer", "port": 21234, "home": "/home/node",
+        "keyDir": "C:\\AB\\laptops\\k3m7q2xa\\key", "binDir": "C:\\AB\\tool-files", "stateDir": "C:\\AB\\folders\\f1aaaaaa\\state",
+        "given": [
+          {"source": "D:\\Mockups", "target": "/work/given/Mockups", "readOnly": true},
+          {"source": "E:\\Отчёты", "target": "/work/given/Отчёты", "readOnly": false}
+        ],
+        "labels": [["artisyn.agentbook", "1"]],
+        "composeFile": "C:\\AB\\laptops\\k3m7q2xa\\gen\\agentbook-compose.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "image": "agentbook-laptop:77aa-1",
+        "workspaceMount": "source=C:\\work\\Q3 reports,target=/work/Q3 reports,type=bind",
+        "workspaceFolder": "/work/Q3 reports",
+        "runArgs": ["--cap-add=SYS_PTRACE", "-p", "127.0.0.1:21234:22", "--tmpfs", "/run/agentbook", "--label", "artisyn.agentbook=1"],
+        "mounts": [
+          "source=agentbook-home-k3m7q2xa,target=/home/node,type=volume",
+          "source=C:\\AB\\laptops\\k3m7q2xa\\key,target=/opt/agentbook/key,type=bind,readonly",
+          "source=C:\\AB\\tool-files,target=/opt/agentbook/bin,type=bind,readonly",
+          "source=C:\\AB\\folders\\f1aaaaaa\\state,target=/opt/agentbook/state,type=bind,readonly",
+          "source=D:\\Mockups,target=/work/given/Mockups,type=bind,readonly",
+          "source=E:\\Отчёты,target=/work/given/Отчёты,type=bind"
+        ]
+      },
+      "compose": null,
+      "workspaceFolder": "/work/Q3 reports"
+    },
+    "note": "Dockerfile config. Rule 2: build is replaced by the layered image; no name in the project, so none here. Rule 4: the project's runArgs come first, the tool's after them. Rule 5: given folders follow the tool mounts in order; View only adds readonly."
+  },
+  {
+    "id": "OC-03",
+    "input": {
+      "merged": {
+        "image": "alpine:3.20",
+        "workspaceMount": "source=C:\\work\\Q3 reports,target=/src,type=bind,consistency=cached",
+        "workspaceFolder": "/src/app",
+        "remoteUser": "root"
+      },
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:91bc-1", "shared": "C:\\work\\Q3 reports",
+        "configDir": "C:\\work\\Q3 reports\\.devcontainer", "port": 20001, "home": "/root",
+        "keyDir": "C:\\AB\\laptops\\k3m7q2xa\\key", "binDir": "C:\\AB\\tool-files", "stateDir": "C:\\AB\\folders\\f1aaaaaa\\state",
+        "labels": [],
+        "composeFile": "C:\\AB\\laptops\\k3m7q2xa\\gen\\agentbook-compose.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "image": "agentbook-laptop:91bc-1",
+        "workspaceMount": "source=C:\\work\\Q3 reports,target=/src,type=bind,consistency=cached",
+        "workspaceFolder": "/src/app",
+        "runArgs": ["-p", "127.0.0.1:20001:22", "--tmpfs", "/run/agentbook"],
+        "mounts": [
+          "source=agentbook-home-k3m7q2xa,target=/root,type=volume",
+          "source=C:\\AB\\laptops\\k3m7q2xa\\key,target=/opt/agentbook/key,type=bind,readonly",
+          "source=C:\\AB\\tool-files,target=/opt/agentbook/bin,type=bind,readonly",
+          "source=C:\\AB\\folders\\f1aaaaaa\\state,target=/opt/agentbook/state,type=bind,readonly"
+        ]
+      },
+      "workspaceFolder": "/src/app"
+    },
+    "note": "Custom workspaceMount. Rule 3a: the project's workspaceMount is kept verbatim (consistency option included) with its workspaceFolder. No labels: no --label arguments. Home /root for a root SSH user."
+  },
+  {
+    "id": "OC-04",
+    "input": {
+      "merged": {"image": "ubuntu:24.04", "workspaceFolder": "/workspaces/q3"},
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:aa00-1", "shared": "C:\\work\\Q3 reports",
+        "configDir": "C:\\work\\Q3 reports\\.devcontainer", "port": 21234, "home": "/home/claude",
+        "keyDir": "C:\\AB\\k", "binDir": "C:\\AB\\b", "stateDir": "C:\\AB\\s",
+        "labels": [],
+        "composeFile": "C:\\AB\\c.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "image": "agentbook-laptop:aa00-1",
+        "workspaceMount": "source=C:\\work\\Q3 reports,target=/workspaces/q3,type=bind",
+        "workspaceFolder": "/workspaces/q3",
+        "runArgs": ["-p", "127.0.0.1:21234:22", "--tmpfs", "/run/agentbook"],
+        "mounts": [
+          "source=agentbook-home-k3m7q2xa,target=/home/claude,type=volume",
+          "source=C:\\AB\\k,target=/opt/agentbook/key,type=bind,readonly",
+          "source=C:\\AB\\b,target=/opt/agentbook/bin,type=bind,readonly",
+          "source=C:\\AB\\s,target=/opt/agentbook/state,type=bind,readonly"
+        ]
+      },
+      "workspaceFolder": "/workspaces/q3"
+    },
+    "note": "Rule 3b: workspaceFolder without workspaceMount: the tool still sets workspaceMount (never the CLI's git-root default) and binds the shared folder at the project's workspaceFolder."
+  },
+  {
+    "id": "OC-05",
+    "input": {
+      "merged": {"image": "ubuntu:24.04", "workspaceMount": "source=C:\\work\\Q3 reports,target=/src,type=bind"},
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:aa00-1", "shared": "C:\\work\\Q3 reports",
+        "configDir": "C:\\work\\Q3 reports\\.devcontainer", "port": 21234, "home": "/home/claude",
+        "keyDir": "C:\\AB\\k", "binDir": "C:\\AB\\b", "stateDir": "C:\\AB\\s",
+        "labels": [],
+        "composeFile": "C:\\AB\\c.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "image": "agentbook-laptop:aa00-1",
+        "workspaceMount": "source=C:\\work\\Q3 reports,target=/src,type=bind",
+        "workspaceFolder": "/src",
+        "runArgs": ["-p", "127.0.0.1:21234:22", "--tmpfs", "/run/agentbook"],
+        "mounts": [
+          "source=agentbook-home-k3m7q2xa,target=/home/claude,type=volume",
+          "source=C:\\AB\\k,target=/opt/agentbook/key,type=bind,readonly",
+          "source=C:\\AB\\b,target=/opt/agentbook/bin,type=bind,readonly",
+          "source=C:\\AB\\s,target=/opt/agentbook/state,type=bind,readonly"
+        ]
+      },
+      "workspaceFolder": "/src"
+    },
+    "note": "Rule 3a: workspaceMount without workspaceFolder: the folder is the mount's target, /src."
+  },
+  {
+    "id": "OC-06",
+    "input": {
+      "merged": {
+        "name": "Stack",
+        "dockerComposeFile": ["../docker-compose.yml", "docker-compose.dev.yml"],
+        "service": "app",
+        "runServices": ["app", "db"],
+        "workspaceFolder": "/workspaces/stack",
+        "remoteUser": "vscode",
+        "postCreateCommand": "npm ci",
+        "runArgs": ["--ignored-for-compose"],
+        "mounts": ["source=x,target=/x,type=volume"],
+        "shutdownAction": "stopCompose"
+      },
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:cc11-1", "shared": "C:\\work\\Q3 reports",
+        "configDir": "C:\\work\\Q3 reports\\.devcontainer", "port": 21234, "home": "/home/vscode",
+        "keyDir": "C:\\AB\\k", "binDir": "C:\\AB\\b", "stateDir": "C:\\AB\\s",
+        "given": [{"source": "D:\\Mockups", "target": "/work/given/Mockups", "readOnly": true}],
+        "labels": [["artisyn.agentbook", "1"], ["artisyn.agentbook.laptop", "k3m7q2xa"]],
+        "composeFile": "C:\\AB\\laptops\\k3m7q2xa\\gen\\agentbook-compose.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "name": "Stack",
+        "dockerComposeFile": [
+          "C:\\work\\Q3 reports\\.devcontainer\\..\\docker-compose.yml",
+          "C:\\work\\Q3 reports\\.devcontainer\\docker-compose.dev.yml",
+          "C:\\AB\\laptops\\k3m7q2xa\\gen\\agentbook-compose.yml"
+        ],
+        "service": "app",
+        "runServices": ["app", "db"],
+        "workspaceFolder": "/workspaces/stack"
+      },
+      "compose": {
+        "services": {
+          "app": {
+            "image": "agentbook-laptop:cc11-1",
+            "ports": ["127.0.0.1:21234:22"],
+            "tmpfs": ["/run/agentbook"],
+            "labels": {"artisyn.agentbook": "1", "artisyn.agentbook.laptop": "k3m7q2xa"},
+            "volumes": [
+              {"type": "volume", "source": "agentbook-home-k3m7q2xa", "target": "/home/vscode"},
+              {"type": "bind", "source": "C:\\AB\\k", "target": "/opt/agentbook/key", "read_only": true},
+              {"type": "bind", "source": "C:\\AB\\b", "target": "/opt/agentbook/bin", "read_only": true},
+              {"type": "bind", "source": "C:\\AB\\s", "target": "/opt/agentbook/state", "read_only": true},
+              {"type": "bind", "source": "D:\\Mockups", "target": "/work/given/Mockups", "read_only": true}
+            ]
+          }
+        },
+        "volumes": {"agentbook-home-k3m7q2xa": {"name": "agentbook-home-k3m7q2xa", "external": true}}
+      },
+      "workspaceFolder": "/workspaces/stack",
+      "composeProject": "agentbook-k3m7q2xa"
+    },
+    "note": "Compose config. Rule 6: name, the project's compose files joined onto the config folder with '\\' (the '..' is left for Docker) plus the tool file, service, runServices, workspaceFolder; runArgs, mounts, users, lifecycle commands and shutdownAction are not repeated. Rule 7: the tool file sets the primary service's image, loopback port, tmpfs, labels and volumes (long syntax, so Windows drive colons are safe), home volume external. Project name agentbook-<id>."
+  },
+  {
+    "id": "OC-07",
+    "input": {
+      "merged": {"dockerComposeFile": "docker-compose.yml", "service": "dev"},
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:cc11-1", "shared": "C:\\work\\Q3 reports",
+        "configDir": "C:\\work\\Q3 reports", "port": 21234, "home": "/home/claude",
+        "keyDir": "C:\\AB\\k", "binDir": "C:\\AB\\b", "stateDir": "C:\\AB\\s",
+        "labels": [],
+        "composeFile": "C:\\AB\\c.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "dockerComposeFile": ["C:\\work\\Q3 reports\\docker-compose.yml", "C:\\AB\\c.yml"],
+        "service": "dev",
+        "workspaceFolder": "/work/Q3 reports"
+      },
+      "compose": {
+        "services": {
+          "dev": {
+            "image": "agentbook-laptop:cc11-1",
+            "ports": ["127.0.0.1:21234:22"],
+            "tmpfs": ["/run/agentbook"],
+            "labels": {},
+            "volumes": [
+              {"type": "volume", "source": "agentbook-home-k3m7q2xa", "target": "/home/claude"},
+              {"type": "bind", "source": "C:\\AB\\k", "target": "/opt/agentbook/key", "read_only": true},
+              {"type": "bind", "source": "C:\\AB\\b", "target": "/opt/agentbook/bin", "read_only": true},
+              {"type": "bind", "source": "C:\\AB\\s", "target": "/opt/agentbook/state", "read_only": true},
+              {"type": "bind", "source": "C:\\work\\Q3 reports", "target": "/work/Q3 reports"}
+            ]
+          }
+        },
+        "volumes": {"agentbook-home-k3m7q2xa": {"name": "agentbook-home-k3m7q2xa", "external": true}}
+      },
+      "workspaceFolder": "/work/Q3 reports",
+      "composeProject": "agentbook-k3m7q2xa"
+    },
+    "note": "Rule 6: a single compose file as a string becomes a one-item list plus the tool file; no runServices in the project, none here. Rule 8: no workspaceFolder, so the tool binds the shared folder at /work/<name> as the last volume and uses it."
+  },
+  {
+    "id": "OC-08",
+    "input": {
+      "merged": {"image": "ubuntu:24.04"},
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:aa00-1", "shared": "C:\\work\\a,b",
+        "configDir": "C:\\work\\a,b\\.devcontainer", "port": 21234, "home": "/home/claude",
+        "keyDir": "C:\\AB\\k", "binDir": "C:\\AB\\b", "stateDir": "C:\\AB\\s",
+        "labels": [],
+        "composeFile": "C:\\AB\\c.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "image": "agentbook-laptop:aa00-1",
+        "workspaceMount": "\"source=C:\\work\\a,b\",\"target=/work/a,b\",type=bind",
+        "workspaceFolder": "/work/a,b",
+        "runArgs": ["-p", "127.0.0.1:21234:22", "--tmpfs", "/run/agentbook"],
+        "mounts": [
+          "source=agentbook-home-k3m7q2xa,target=/home/claude,type=volume",
+          "source=C:\\AB\\k,target=/opt/agentbook/key,type=bind,readonly",
+          "source=C:\\AB\\b,target=/opt/agentbook/bin,type=bind,readonly",
+          "source=C:\\AB\\s,target=/opt/agentbook/state,type=bind,readonly"
+        ]
+      },
+      "workspaceFolder": "/work/a,b"
+    },
+    "note": "Rule 9: a field holding a comma is CSV-quoted as a whole (\"source=...\"), so Docker's --mount parser keeps the path in one piece."
+  },
+  {
+    "id": "OC-09",
+    "input": {
+      "merged": {"dockerComposeFile": ["C:\\stack\\compose.yml", "/opt/shared/compose.yml"], "service": "app", "workspaceFolder": "/w"},
+      "run": {
+        "laptopId": "k3m7q2xa", "image": "agentbook-laptop:cc11-1", "shared": "C:\\work\\Q3 reports",
+        "configDir": "C:\\work\\Q3 reports\\.devcontainer", "port": 21234, "home": "/home/claude",
+        "keyDir": "C:\\AB\\k", "binDir": "C:\\AB\\b", "stateDir": "C:\\AB\\s",
+        "labels": [],
+        "composeFile": "C:\\AB\\c.yml"
+      }
+    },
+    "expected": {
+      "config": {
+        "dockerComposeFile": ["C:\\stack\\compose.yml", "/opt/shared/compose.yml", "C:\\AB\\c.yml"],
+        "service": "app",
+        "workspaceFolder": "/w"
+      },
+      "workspaceFolder": "/w"
+    },
+    "note": "Rule 6: absolute compose paths (a drive, or a leading '/') are kept as they are."
+  }
+]

@@ -329,7 +329,7 @@ function packCliTarball() {
 // Blanked `.artisyn/config/log-hub.json` template shipped in the plugin tree. Every other config
 // key is intentionally omitted here so the hook-side default table (env-context.js) applies.
 function buildConfigTemplate() {
-  return JSON.stringify({ serverUrl: '', telemetryDir: '', context: [] }, null, 2) + '\n';
+  return JSON.stringify({ serverUrl: '', telemetryDir: '' }, null, 2) + '\n';
 }
 
 // --- hooks.json (plugin hook wiring) ---

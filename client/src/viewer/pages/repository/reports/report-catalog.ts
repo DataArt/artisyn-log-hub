@@ -50,7 +50,12 @@ export interface ReportDefinition {
   // Widened to accept `attr:<key>` for the 5
   // `supportsGroupBy: true` reports — no report's `defaultGroupBy` uses that form yet, but
   // the type must accept it so a later chunk's attribute-group-by UI can set it.
-  defaultGroupBy: 'none' | 'branch' | 'user' | `attr:${string}`;
+  defaultGroupBy:
+    | 'none'
+    | 'branch'
+    | 'user'
+    | `attr:${string}`
+    | `tag:${string}`;
   /**
    * Whether this report's session population
    * honours the shared `attr=<key>:<op>:<value>` filter. `true` on exactly 15 reports (all 13
@@ -344,4 +349,13 @@ export function findCategoryForReport(
   id: ReportId,
 ): ReportCategory | undefined {
   return REPORT_CATEGORIES.find((c) => c.reports.some((r) => r.id === id));
+}
+
+/**
+ * Whether a report forwards the `tag=` filter (otel-session-tags): exactly the reports that
+ * honour `attr=` — `attribution-usage` (its population is evaluation runs) and `budget` (whole
+ * scope by definition) take neither.
+ */
+export function reportSupportsTagFilter(report: ReportDefinition): boolean {
+  return report.supportsAttributeFilter;
 }

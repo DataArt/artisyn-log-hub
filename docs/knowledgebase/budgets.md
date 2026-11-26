@@ -8,7 +8,7 @@ tags:
   - teams
   - notifications
   - reports
-generated: { by: "human:denistsyplakov", at: "2026-11-10T00:00:00+04:00" }
+generated: { by: "agent:claude", at: "2026-11-25T00:00:00+04:00" }
 ---
 
 # Budgets, Spend tab and threshold notices
@@ -89,6 +89,20 @@ across DST). Daily buckets are local `YYYY-MM-DD`, hourly `HH24`.
 to the spend; the remainder is the `Not reported` row (`SLICE_NOT_REPORTED_KEY`). OTEL slices
 pick calls by `session_id = ANY(period roots)`, never by call time (`loadSliceParts`).
 
+**Tag slice (2026-11-24 otel-session-tags).** `GET …/spend` always returns `tagKeys` — the
+distinct session-tag keys (`session_tags`, deduped across `otel` / `config`) on the period's root
+trees in scope (own trees only in the DD-9 restricted view). With `tagKey=<key>` the full view
+appends one extra slice `{ kind: 'tag', tagKey, rows }` after the default ones (`'tag'` is in
+`SpendSliceKind` but not in `SPEND_SLICE_KINDS`, so default slices and the Budget report's
+`topSlices` are unchanged; a request without `tagKey` returns the old payload plus `tagKeys`). It
+is a whole-tree slice like user / branch, with **fan-out**: a tree's whole cost goes to each of
+its distinct values of the key, a tree without the key goes to `__untagged__` (label
+"(untagged)", `UNTAGGED_GROUP` from `tag-filter.sql.ts`). No `Not reported` row; the rows sum to
+the period total when no tree has two values of the key, and to more when one does. Drill-down:
+`spend/sessions?slice=tag&tagKey=<key>&key=<value|__untagged__>` applies the same rule
+(`treeTagRowKeys`); `slice=tag` without `tagKey` is a 400. Tags come from `loadTreeTags`
+(`spend-read.sql.ts`), keyed by root `sessions.id`.
+
 ## Plain-member view (DD-9)
 
 When `fullView` is false (team kinds without analytics access):
@@ -167,8 +181,8 @@ Cookie session (`JwtAuthGuard`). Contract family `f26`.
 |---|---|
 | `GET/POST R\|T/budgets`, `PUT/DELETE R\|T/budgets/:budgetId` | list needs `fullView`; mutations need `canManage`; 400 invalid (DD-12, `validateBudgetInput`), 409 duplicate period, 404 id outside the scope |
 | `GET R\|T/budgets/events` | `budgetId?`, `event?`, `before?`, `limit?` (1–100, default 50); `fullView` |
-| `GET R\|T/spend` | `period`, `offset ≤ 0`, `tz` (viewer zone, used without a budget); every member, DD-9 when `!fullView` |
-| `GET R\|T/spend/sessions` | `slice` (`model\|user\|repo\|branch\|subagent\|skill\|mcp\|day\|costly`), `key`; max 200 costliest, `truncated`; `fullView` |
+| `GET R\|T/spend` | `period`, `offset ≤ 0`, `tz` (viewer zone, used without a budget), `tagKey?` (adds the `tag` slice); response always has `tagKeys`; every member, DD-9 when `!fullView` |
+| `GET R\|T/spend/sessions` | `slice` (`model\|user\|repo\|branch\|subagent\|skill\|mcp\|tag\|day\|costly`), `key`, `tagKey` (required with `slice=tag`; `key` = value or `__untagged__`); max 200 costliest, `truncated`; `fullView` |
 | `GET R/analytics/budget-burn` | `budgetId?` (default month › week › day), `branches?`, `users?`, `tz`; filters narrow only the cumulative line (`filtered: true` only when they drop a session tree of the current period — the Analytics controls send every user when nothing is narrowed) |
 | `GET R/reports/budget` | `startDate`, `endDate`, `tz`; each budget's periods overlapping the range |
 | `GET /api/v1/budget-notices`, `POST /api/v1/budget-notices/read` | caller's own recipient rows |
@@ -186,7 +200,7 @@ Server, `server/src/logs/budgets/`:
 | `budget.constants.ts` | DD-22 limits, `budgetMailSubject` |
 | `budgets.types.ts` | DTOs, `PeriodBounds`, `BudgetRow` |
 | `budget-math.ts` | pure forecast, anomaly days, costly sessions, threshold selection |
-| `spend-read.sql.ts` | period bounds, scope rows, period trees, slice parts, `loadScopeBudgets` / `loadAllBudgets` |
+| `spend-read.sql.ts` | period bounds, scope rows, period trees, slice parts, root tags (`loadTreeTags`), `loadScopeBudgets` / `loadAllBudgets` |
 | `spend.service.ts` | `getSpendView`, `getSpendSessions`, `getBudgetBurn`, `getBudgetReport`, `computeBudgetSpend` |
 | `budget-access.service.ts` | DD-2 |
 | `budgets.service.ts` | CRUD, events read |

@@ -1,0 +1,90 @@
+[
+  {"id": "HE-01", "input": {"config": {"image": "mcr.microsoft.com/devcontainers/base:ubuntu"}}, "expected": {"findings": []}, "note": "No mounts, no privileged, no runArgs: nothing to warn about."},
+  {
+    "id": "HE-02",
+    "input": {"config": {"mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"]}},
+    "expected": {"findings": [{"kind": "docker-socket", "source": "/var/run/docker.sock"}]},
+    "note": "Rule 2: the source's last segment is docker.sock: docker-socket (reported instead of writable-bind)."
+  },
+  {
+    "id": "HE-03",
+    "input": {"config": {"mounts": ["source=C:\\Users\\den\\.aws,target=/home/vscode/.aws,type=bind"]}},
+    "expected": {"findings": [{"kind": "writable-bind", "source": "C:\\Users\\den\\.aws"}]},
+    "note": "Rule 3: a bind mount without readonly gives the container write access to a host folder."
+  },
+  {
+    "id": "HE-04",
+    "input": {"config": {"mounts": ["source=C:\\Users\\den\\.aws,target=/home/vscode/.aws,type=bind,readonly"]}},
+    "expected": {"findings": []},
+    "note": "Rule 3: the same mount read-only is not a finding."
+  },
+  {
+    "id": "HE-05",
+    "input": {"config": {"mounts": ["source=node-cache,target=/cache,type=volume"]}},
+    "expected": {"findings": []},
+    "note": "Rule 3: a named volume is not the host's file system."
+  },
+  {
+    "id": "HE-06",
+    "input": {"config": {"mounts": [{"type": "bind", "source": "/home/den/.ssh", "target": "/root/.ssh"}]}},
+    "expected": {"findings": [{"kind": "writable-bind", "source": "/home/den/.ssh"}]},
+    "note": "Rule 1: the object form is read the same way; no readonly key means writable."
+  },
+  {
+    "id": "HE-07",
+    "input": {"config": {"mounts": ["source=data,target=/data"]}},
+    "expected": {"findings": []},
+    "note": "Rule 1: a mount string without type is a volume, as in Docker."
+  },
+  {"id": "HE-08", "input": {"config": {"privileged": true}}, "expected": {"findings": [{"kind": "privileged"}]}, "note": "Rule 4: privileged: true."},
+  {
+    "id": "HE-09",
+    "input": {"config": {"privileged": true, "runArgs": ["--privileged"]}},
+    "expected": {"findings": [{"kind": "privileged"}]},
+    "note": "Rule 6: the same finding from the key and from runArgs is reported once."
+  },
+  {"id": "HE-10", "input": {"config": {"runArgs": ["--network=host"]}}, "expected": {"findings": [{"kind": "host-network"}]}, "note": "Rule 5: --network=host (inline value)."},
+  {"id": "HE-11", "input": {"config": {"runArgs": ["--net", "host"]}}, "expected": {"findings": [{"kind": "host-network"}]}, "note": "Rule 5: --net with the value as the next argument."},
+  {"id": "HE-12", "input": {"config": {"runArgs": ["--network", "bridge"]}}, "expected": {"findings": []}, "note": "Rule 5: only the value host counts."},
+  {"id": "HE-13", "input": {"config": {"runArgs": ["--pid=host"]}}, "expected": {"findings": [{"kind": "host-pid"}]}, "note": "Rule 5: --pid host."},
+  {
+    "id": "HE-14",
+    "input": {"config": {"runArgs": ["-v", "C:\\data:/data"]}},
+    "expected": {"findings": [{"kind": "writable-bind", "source": "C:\\data"}]},
+    "note": "Rule 5: -v src:dst; the drive 'C:' stays in the source; a source with a separator is a bind; no :ro."
+  },
+  {"id": "HE-15", "input": {"config": {"runArgs": ["-v", "C:\\data:/data:ro"]}}, "expected": {"findings": []}, "note": "Rule 5: the :ro option makes it read-only."},
+  {"id": "HE-16", "input": {"config": {"runArgs": ["--volume=cache:/cache"]}}, "expected": {"findings": []}, "note": "Rule 5: a bare name source is a named volume."},
+  {
+    "id": "HE-17",
+    "input": {"config": {"runArgs": ["--mount", "type=bind,source=/srv,target=/srv"]}},
+    "expected": {"findings": [{"kind": "writable-bind", "source": "/srv"}]},
+    "note": "Rule 5: --mount is read as a mount string."
+  },
+  {
+    "id": "HE-18",
+    "input": {"config": {"workspaceFolder": "/workspaces/app", "mounts": ["source=C:\\work\\app,target=/workspaces/app,type=bind"]}},
+    "expected": {"findings": []},
+    "note": "Rule 3: a mount whose target is the workspaceFolder is the shared folder itself."
+  },
+  {
+    "id": "HE-19",
+    "input": {"config": {"mounts": ["source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind,readonly"]}},
+    "expected": {"findings": [{"kind": "docker-socket", "source": "/var/run/docker.sock"}]},
+    "note": "Rule 2: the Docker socket read-only still controls the engine (a read-only bind of a socket does not stop writes to it)."
+  },
+  {
+    "id": "HE-20",
+    "input": {"config": {"runArgs": ["--network=host"], "privileged": true, "mounts": ["source=/etc,target=/host-etc,type=bind"]}},
+    "expected": {"findings": [{"kind": "writable-bind", "source": "/etc"}, {"kind": "privileged"}, {"kind": "host-network"}]},
+    "note": "Rule 6: order is mounts, then privileged, then runArgs, regardless of key order in the config."
+  },
+  {"id": "HE-21", "input": {"config": {"runArgs": ["-e", "FOO=--privileged"]}}, "expected": {"findings": []}, "note": "Rule 5: 'FOO=--privileged' is the value of -e (not a flag: it does not start with '-'), so no finding."},
+  {"id": "HE-22", "input": {"config": {"runArgs": ["--privileged=false"]}}, "expected": {"findings": []}, "note": "Rule 5: an explicit false is not privileged."},
+  {
+    "id": "HE-23",
+    "input": {"config": {"mounts": ["source=/srv,target=/a,type=bind", "source=/srv,target=/a,type=bind"]}},
+    "expected": {"findings": [{"kind": "writable-bind", "source": "/srv"}]},
+    "note": "Rule 6: two identical findings are reported once."
+  }
+]

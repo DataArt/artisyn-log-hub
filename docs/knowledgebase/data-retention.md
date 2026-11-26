@@ -7,7 +7,7 @@ tags:
   - sessions
   - scheduler
   - hooks
-generated: { by: "claude", at: "2026-11-23T00:00:00+04:00" }
+generated: { by: "claude", at: "2026-11-25T18:00:00+04:00" }
 ---
 
 # Session Data Retention
@@ -94,7 +94,7 @@ For each eligible root, `SessionsService.hardPurgeExpiredSessions()` (`server/sr
    that account deletion and repository removal can clear ("fresh start"). It then deletes child
    data (`session_stats`, `session_call_tokens`,
    `session_costs`, `user_favorite_sessions`, `session_file_stats`, `session_okf_access` (step c2),
-   `logs`, orphaned `contexts`, queued `upload_queue` rows, the DD-28 survivor tables (step 0b,
+   `session_tags`, `logs`, queued `upload_queue` rows, the DD-28 survivor tables (step 0b,
    below), `turn_end_advisor_runs` of the session ids, and — step 0 — the OTEL facts tables, see
    below), then hard-deletes
    the `sessions` rows themselves — root and every descendant (including any already-soft-deleted

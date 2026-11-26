@@ -1,0 +1,640 @@
+#!/bin/sh
+# ws: AgentBook's helper inside a laptop (POSIX sh, any libc). Shipped in the read-only tool mount
+# /opt/agentbook/bin and refreshed by the tool on every Open; the laptop layer links it as
+# /usr/local/bin/ws.
+#
+#   ws whoami   which laptop this is, its shared folder, every git repo in it (current branch,
+#               local branches, worktrees, uncommitted changes), the other laptops of the folder
+#               and the Variable names
+#   ws mounts   the folders from the user's computer this laptop sees, with their modes
+#   ws ports    the ports forwarded to the user's computer (a server here opens there)
+#   ws env      the Variables as they are now (ls / get NAME / run CMD...): a session reads them
+#               only when it starts, `ws env` re-reads the env file on every call
+#
+# It reads only the per-folder state directory /opt/agentbook/state (folder.json and
+# laptops/<id>.json, additive-only JSON written by the tool with write-then-rename) and the git
+# repos, and re-reads everything on every call. There is no channel back to the tool.
+# Which laptop this is comes from the comment of the laptop's public host key
+# (`agentbook-laptop-<id>`), which the tool sets when it creates the laptop.
+#
+# `prompt-hook` (the UserPromptSubmit hook) runs `ws __prompt-hook`.
+
+STATE_DIR=${AGENTBOOK_STATE_DIR:-/opt/agentbook/state}
+KEY_DIR=${AGENTBOOK_KEY_DIR:-/opt/agentbook/key}
+RUN_DIR=/run/agentbook
+ENV_FILE=${AGENTBOOK_ENV_FILE:-$RUN_DIR/env/session.env}
+KEY_COMMENT_PREFIX=agentbook-laptop-
+# Repos deeper than this below the shared folder are not looked for.
+REPO_DEPTH=4
+# The prompt hook line names at most this many repos.
+HOOK_MAX_REPOS=6
+# Seconds a repo's uncommitted count stays cached for the prompt hook.
+DIRTY_TTL=5
+
+# --- JSON -------------------------------------------------------------------------------------
+# Flattens one JSON document into "path<TAB>value" lines: object keys joined with ".", array
+# items by index, plus "path#<TAB>count" for every array. Strings are unescaped; tabs and newlines
+# inside values become spaces; \u escapes outside ASCII become "?". Unknown fields are simply more
+# lines, so files written by a newer tool keep working. Exit 1 on malformed input.
+JSON_AWK='
+function skip() { while (p <= n && index(" \t\r\n", substr(s, p, 1)) > 0) p++ }
+function hexval(h,    i, c, v) {
+  v = 0; h = tolower(h)
+  for (i = 1; i <= length(h); i++) {
+    c = index("0123456789abcdef", substr(h, i, 1))
+    if (c == 0) return -1
+    v = v * 16 + c - 1
+  }
+  return v
+}
+function str(    out, c, v) {
+  p++; out = ""
+  while (p <= n) {
+    c = substr(s, p, 1)
+    if (c == "\"") { p++; return out }
+    if (c == "\\") {
+      p++; c = substr(s, p, 1)
+      if (c == "n" || c == "r" || c == "t") out = out " "
+      else if (c == "u") {
+        v = hexval(substr(s, p + 1, 4)); p += 4
+        if (v >= 32 && v < 127) out = out sprintf("%c", v)
+        else if (v >= 0 && v < 32) out = out " "
+        else out = out "?"
+      }
+      else if (c != "b" && c != "f") out = out c
+      p++; continue
+    }
+    if (c == "\t" || c == "\n" || c == "\r") c = " "
+    out = out c; p++
+  }
+  bad = 1; return out
+}
+function val(path,    c, k, i, v) {
+  skip()
+  if (p > n) { bad = 1; return }
+  c = substr(s, p, 1)
+  if (c == "{") {
+    p++; skip()
+    if (substr(s, p, 1) == "}") { p++; return }
+    while (!bad) {
+      skip()
+      if (substr(s, p, 1) != "\"") { bad = 1; return }
+      k = str(); skip()
+      if (substr(s, p, 1) != ":") { bad = 1; return }
+      p++
+      if (path == "") val(k); else val(path "." k)
+      skip(); c = substr(s, p, 1); p++
+      if (c == "}") return
+      if (c != ",") { bad = 1; return }
+    }
+    return
+  }
+  if (c == "[") {
+    p++; skip(); i = 0
+    if (substr(s, p, 1) == "]") { p++; print path "#\t0"; return }
+    while (!bad) {
+      val(path "." i); i++
+      skip(); c = substr(s, p, 1); p++
+      if (c == "]") { print path "#\t" i; return }
+      if (c != ",") { bad = 1; return }
+    }
+    return
+  }
+  if (c == "\"") { v = str(); print path "\t" v; return }
+  v = ""
+  while (p <= n && index(",}] \t\r\n", substr(s, p, 1)) == 0) { v = v substr(s, p, 1); p++ }
+  print path "\t" v
+}
+{ s = s $0 "\n" }
+END { n = length(s); p = 1; bad = 0; val(""); if (bad) exit 1 }
+'
+
+# json_flat FILE: prints the flattened lines (nothing when the file is missing or malformed).
+json_flat() {
+  [ -r "$1" ] || return 1
+  awk "$JSON_AWK" "$1" 2>/dev/null
+}
+
+# jget FLAT KEY: the value of KEY in flattened text FLAT (empty when absent).
+jget() {
+  printf '%s\n' "$1" | awk -v k="$2" 'index($0, k "\t") == 1 { print substr($0, length(k) + 2); exit }'
+}
+
+# --- state ------------------------------------------------------------------------------------
+# my_laptop_id: this laptop's id, from AGENTBOOK_LAPTOP_ID, else the host key comment, else the
+# only laptop in the state directory.
+my_laptop_id() {
+  if [ -n "${AGENTBOOK_LAPTOP_ID:-}" ]; then
+    printf '%s\n' "$AGENTBOOK_LAPTOP_ID"
+    return 0
+  fi
+  for pub in "$RUN_DIR/ssh_host_ed25519_key.pub" "$KEY_DIR/ssh_host_ed25519_key.pub"; do
+    [ -r "$pub" ] || continue
+    # The key is made by the host's ssh-keygen; on Windows its .pub line ends in CRLF, so drop the CR
+    # or the id would carry it and match no state file.
+    comment=$(tr -d '\r' < "$pub" 2>/dev/null | awk 'NF >= 3 { print $3; exit }')
+    case $comment in
+      "$KEY_COMMENT_PREFIX"?*)
+        printf '%s\n' "${comment#"$KEY_COMMENT_PREFIX"}"
+        return 0
+        ;;
+    esac
+  done
+  set -- "$STATE_DIR"/laptops/*.json
+  if [ "$#" -eq 1 ] && [ -f "$1" ]; then
+    basename "$1" .json
+  fi
+}
+
+# load_state: sets FOLDER_FLAT, FOLDER_NAME, FOLDER_PATH, FOLDER_HOST, LAPTOP_ID, LAPTOP_FLAT,
+# LAPTOP_NAME. Returns 1 (with a message on stderr unless $1 is "quiet") when there is no state.
+load_state() {
+  FOLDER_FLAT=$(json_flat "$STATE_DIR/folder.json")
+  if [ -z "$FOLDER_FLAT" ]; then
+    [ "${1:-}" = quiet ] || echo "ws: no AgentBook laptop state here ($STATE_DIR/folder.json is missing). Is this an AgentBook laptop?" >&2
+    return 1
+  fi
+  FOLDER_NAME=$(jget "$FOLDER_FLAT" name)
+  FOLDER_PATH=$(jget "$FOLDER_FLAT" shared_path_in_container)
+  FOLDER_HOST=$(jget "$FOLDER_FLAT" host_path)
+  [ -n "$FOLDER_NAME" ] || FOLDER_NAME=$(basename "${FOLDER_PATH:-/work}")
+  LAPTOP_ID=$(my_laptop_id)
+  LAPTOP_FLAT=
+  [ -n "$LAPTOP_ID" ] && LAPTOP_FLAT=$(json_flat "$STATE_DIR/laptops/$LAPTOP_ID.json")
+  LAPTOP_NAME=$(jget "$LAPTOP_FLAT" name)
+  [ -n "$LAPTOP_NAME" ] || LAPTOP_NAME="this laptop"
+  return 0
+}
+
+# state_word STATE: the UI word for a laptop state.
+state_word() {
+  case $1 in
+    working) echo Working ;;
+    sleeping) echo Sleeping ;;
+    "") echo "state unknown" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# mode_words MODE: the UI words for a given folder's mode.
+mode_words() {
+  case $1 in
+    view-only) echo "View only" ;;
+    *) echo "read and write" ;;
+  esac
+}
+
+# given_lines FLAT FORMAT: one line per given folder: "container<TAB>host<TAB>mode".
+given_lines() {
+  printf '%s\n' "$1" | awk -F '\t' '
+    $1 ~ /^given\.[0-9]+\.(container|host|mode)$/ {
+      split($1, a, "."); i = a[2] + 0; v = substr($0, length($1) + 2)
+      if (a[3] == "container") c[i] = v; else if (a[3] == "host") h[i] = v; else m[i] = v
+      if (i + 1 > n) n = i + 1
+    }
+    END { for (i = 0; i < n; i++) if (c[i] != "") print c[i] "\t" h[i] "\t" m[i] }'
+}
+
+# list_items FLAT KEY: the items of array KEY, one per line.
+list_items() {
+  printf '%s\n' "$1" | awk -F '\t' -v k="$2" '
+    index($1, k ".") == 1 && substr($1, length(k) + 2) ~ /^[0-9]+$/ { print substr($0, length($1) + 2) }'
+}
+
+# --- git --------------------------------------------------------------------------------------
+G() {
+  repo=$1
+  shift
+  git -c safe.directory='*' -C "$repo" "$@"
+}
+
+# list_repos ROOT: every git repo at or below ROOT (absolute paths, sorted). Linked worktrees and
+# node_modules are skipped.
+list_repos() {
+  [ -d "$1" ] || return 0
+  find "$1" -maxdepth "$REPO_DEPTH" \( -name node_modules -o -name .worktrees \) -prune -o -name .git -prune -print 2>/dev/null |
+    while IFS= read -r dotgit; do
+      if [ -f "$dotgit" ] && grep -q '/worktrees/' "$dotgit" 2>/dev/null; then
+        continue
+      fi
+      dirname "$dotgit"
+    done | sort
+}
+
+# repo_label ROOT REPO: the repo's name as shown (its path below the shared folder).
+repo_label() {
+  rel=${2#"$1"}
+  rel=${rel#/}
+  if [ -z "$rel" ]; then
+    printf '%s\n' "$FOLDER_NAME"
+  else
+    printf '%s\n' "$rel"
+  fi
+}
+
+# git_dir REPO: the repo's git directory (follows a `gitdir:` file).
+git_dir() {
+  if [ -d "$1/.git" ]; then
+    printf '%s\n' "$1/.git"
+  elif [ -f "$1/.git" ]; then
+    gd=$(sed -n 's/^gitdir: *//p' "$1/.git" | head -n 1)
+    case $gd in
+      /*) printf '%s\n' "$gd" ;;
+      *) printf '%s\n' "$1/$gd" ;;
+    esac
+  fi
+}
+
+# head_branch REPO: the current branch read straight from HEAD (no git process).
+head_branch() {
+  gd=$(git_dir "$1")
+  hline=
+  [ -n "$gd" ] && [ -r "$gd/HEAD" ] && hline=$(head -n 1 "$gd/HEAD" 2>/dev/null)
+  case $hline in
+    "ref: refs/heads/"*) printf '%s\n' "${hline#ref: refs/heads/}" ;;
+    "ref: "*) printf '%s\n' "${hline#ref: }" ;;
+    "") echo "no branch" ;;
+    *) printf 'detached at %.7s\n' "$hline" ;;
+  esac
+}
+
+# run_limited CMD...: runs CMD with a ~1 s limit when a `timeout` program exists.
+run_limited() {
+  if [ -z "${TIMEOUT_STYLE:-}" ]; then
+    TIMEOUT_STYLE=none
+    if command -v timeout >/dev/null 2>&1; then
+      if timeout 1 true >/dev/null 2>&1; then
+        TIMEOUT_STYLE=new
+      elif timeout -t 1 true >/dev/null 2>&1; then
+        TIMEOUT_STYLE=old
+      fi
+    fi
+  fi
+  case $TIMEOUT_STYLE in
+    new) timeout 1 "$@" ;;
+    old) timeout -t 1 "$@" ;;
+    *) "$@" ;;
+  esac
+}
+
+# cache_dir: the hook's cache folder in the home volume (empty when it cannot be made).
+cache_dir() {
+  dir=${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/agentbook
+  mkdir -p "$dir" 2>/dev/null && printf '%s\n' "$dir"
+}
+
+# dirty_count REPO: tracked uncommitted changes (git status --porcelain -uno), "?" when git does
+# not answer within ~1 s; cached per repo for DIRTY_TTL seconds.
+dirty_count() {
+  now=$(date +%s)
+  cdir=$(cache_dir)
+  cfile=
+  if [ -n "$cdir" ]; then
+    key=$(printf '%s' "$1" | cksum | awk '{ print $1 }')
+    cfile=$cdir/dirty-$key
+    if [ -r "$cfile" ]; then
+      read -r ctime ccount < "$cfile"
+      case $ctime in
+        '' | *[!0-9]*) ;;
+        *)
+          age=$((now - ctime))
+          if [ "$age" -ge 0 ] && [ "$age" -lt "$DIRTY_TTL" ] && [ -n "$ccount" ]; then
+            printf '%s\n' "$ccount"
+            return 0
+          fi
+          ;;
+      esac
+    fi
+  fi
+  if out=$(run_limited git -c safe.directory='*' -C "$1" status --porcelain -uno 2>/dev/null); then
+    count=$(printf '%s' "$out" | grep -c .)
+  else
+    count='?'
+  fi
+  if [ -n "$cfile" ]; then
+    printf '%s %s\n' "$now" "$count" > "$cfile.$$" 2>/dev/null && mv -f "$cfile.$$" "$cfile" 2>/dev/null
+  fi
+  printf '%s\n' "$count"
+}
+
+# --- commands ---------------------------------------------------------------------------------
+cmd_whoami() {
+  load_state || return 1
+  repos=$(list_repos "$FOLDER_PATH")
+
+  first="I'm on laptop \"$LAPTOP_NAME\"; shared folder: $FOLDER_NAME"
+  if [ -n "$repos" ]; then
+    first=$first$(printf '%s\n' "$repos" | while IFS= read -r r; do
+      printf '; %s: %s' "$(repo_label "$FOLDER_PATH" "$r")" "$(head_branch "$r")"
+    done)
+  fi
+  printf '%s\n\n' "$first"
+
+  printf 'Shared folder "%s": %s on this laptop' "$FOLDER_NAME" "$FOLDER_PATH"
+  [ -n "$FOLDER_HOST" ] && printf ' (%s on the user'"'"'s computer)' "$FOLDER_HOST"
+  printf '.\nYou and the user both see it, and changes are instant. Other laptops of this shared folder work on the same files.\n\n'
+
+  if [ -z "$repos" ]; then
+    echo "Git repos: none in the shared folder (no worktrees possible; ask the user how to split work)."
+  else
+    echo "Git repos:"
+    printf '%s\n' "$repos" | while IFS= read -r r; do
+      label=$(repo_label "$FOLDER_PATH" "$r")
+      printf '  %s (%s): branch %s\n' "$label" "$r" "$(head_branch "$r")"
+      branches=$(G "$r" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
+      printf '    local branches: %s\n' "${branches:-none}"
+      wts=$(G "$r" worktree list --porcelain 2>/dev/null | awk '
+        /^worktree / { n++; p = substr($0, 10); next }
+        /^branch / { b = substr($0, 8); sub(/^refs\/heads\//, "", b); if (n > 1) print "      " p " (branch " b ")"; next }
+        /^detached/ { if (n > 1) print "      " p " (detached)" }')
+      if [ -n "$wts" ]; then
+        echo "    worktrees:"
+        printf '%s\n' "$wts"
+      else
+        echo "    worktrees: none"
+      fi
+      if status=$(G "$r" status --porcelain 2>/dev/null); then
+        count=$(printf '%s' "$status" | grep -c .)
+        if [ "$count" -eq 0 ]; then
+          echo "    uncommitted changes: none"
+        else
+          printf '    uncommitted changes: %s\n' "$count"
+          printf '%s\n' "$status" | head -n 20 | sed 's/^/      /'
+          [ "$count" -gt 20 ] && printf '      ... and %s more (git status)\n' "$((count - 20))"
+        fi
+      else
+        echo "    uncommitted changes: unknown (git status failed)"
+      fi
+    done
+  fi
+  echo
+
+  others=
+  for f in "$STATE_DIR"/laptops/*.json; do
+    [ -f "$f" ] || continue
+    id=$(basename "$f" .json)
+    [ "$id" = "$LAPTOP_ID" ] && continue
+    flat=$(json_flat "$f") || continue
+    others="$others  \"$(jget "$flat" name)\": $(state_word "$(jget "$flat" state)")
+"
+  done
+  if [ -n "$others" ]; then
+    echo "Other laptops of this shared folder (they may change the same files):"
+    printf '%s' "$others"
+  else
+    echo "Other laptops of this shared folder: none"
+  fi
+  echo
+
+  vars=$(list_items "$LAPTOP_FLAT" vars | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
+  if [ -n "$vars" ]; then
+    printf 'Variables (set by the user for programs on this laptop; names only): %s\n' "$vars"
+  else
+    echo "Variables: none"
+  fi
+  echo "Connected folders and their modes: ws mounts"
+}
+
+cmd_mounts() {
+  load_state || return 1
+  printf 'Folders from the user'"'"'s computer that laptop "%s" sees (path on this laptop <- folder on the computer):\n' "$LAPTOP_NAME"
+  printf '  %s <- %s  (shared folder, read and write)\n' "$FOLDER_PATH" "${FOLDER_HOST:-?}"
+  given=$(given_lines "$LAPTOP_FLAT")
+  if [ -n "$given" ]; then
+    printf '%s\n' "$given" | while IFS="$(printf '\t')" read -r c h m; do
+      printf '  %s <- %s  (given folder, %s)\n' "$c" "${h:-?}" "$(mode_words "$m")"
+    done
+  else
+    echo "  no given folders"
+  fi
+  echo "Nothing else on the user's computer is visible from this laptop. Changes in these folders appear on the computer at once."
+}
+
+# --- Ports ------------------------------------------------------------------------------------
+# The tool forwards some ports of this laptop to the user's computer (an SSH tunnel to localhost
+# here, while the laptop works and AgentBook is open). laptops/<id>.json lists them.
+
+# port_lines FLAT: one line per forwarded port: "port<TAB>host".
+port_lines() {
+  printf '%s\n' "$1" | awk -F '\t' '
+    $1 ~ /^ports\.[0-9]+\.(port|host)$/ {
+      split($1, a, "."); i = a[2] + 0; v = substr($0, length($1) + 2)
+      if (a[3] == "port") p[i] = v; else h[i] = v
+      if (i + 1 > n) n = i + 1
+    }
+    END { for (i = 0; i < n; i++) if (p[i] != "") print p[i] "\t" (h[i] != "" ? h[i] : p[i]) }'
+}
+
+# listening PORT: whether something in this laptop listens on TCP PORT (any address).
+listening() {
+  hex=$(printf '%04X' "$1")
+  cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk -v h="$hex" '
+    NR > 1 && $4 == "0A" { split($2, a, ":"); if (toupper(a[length(a)]) == h) { found = 1; exit } }
+    END { exit found ? 0 : 1 }'
+}
+
+cmd_ports() {
+  load_state || return 1
+  ports=$(port_lines "$LAPTOP_FLAT")
+  if [ -z "$ports" ]; then
+    echo "No ports of laptop \"$LAPTOP_NAME\" are forwarded to the user's computer."
+    echo "A server you start here is not reachable from the user's browser. Ask the user to add its"
+    echo "port in AgentBook: Ports... on this laptop's card (then it opens at http://localhost:<port>)."
+    return 0
+  fi
+  printf 'Ports of laptop "%s" forwarded to the user'"'"'s computer (while the laptop works and AgentBook is open):\n' "$LAPTOP_NAME"
+  printf '%s\n' "$ports" | while IFS="$(printf '\t')" read -r p h; do
+    if listening "$p"; then now="a server listens on it now"; else now="nothing listens on it yet"; fi
+    printf '  %s here -> http://localhost:%s on the user'"'"'s computer  (%s)\n' "$p" "$h" "$now"
+  done
+  echo "Give the user that http://localhost:<port> address. A server may listen on localhost only."
+  echo "Another port is not reachable: ask the user to add it in AgentBook (Ports... on the laptop card)."
+}
+
+# --- Variables --------------------------------------------------------------------------------
+# The tool rewrites the env file of a running laptop whenever the user changes its Variables, but a
+# session reads it only when it starts. `ws env` reads the file again on every call, so a Variable
+# added after the session started is usable at once (`ws env run <command>`).
+
+# env_names: the Variable names in the env file, in file order. The file holds one POSIX-sh
+# assignment NAME='value' per Variable (a value may span lines; ' is written as '\''), so a line
+# starts a name only outside quotes.
+env_names() {
+  [ -r "$ENV_FILE" ] || return 0
+  awk '
+    {
+      if (!inq && match($0, /^[A-Za-z_][A-Za-z0-9_]*=/)) print substr($0, 1, RLENGTH - 1)
+      n = length($0)
+      for (i = 1; i <= n; i++) {
+        c = substr($0, i, 1)
+        if (!inq && c == "\\") { i++; continue }
+        if (c == "'"'"'") inq = !inq
+      }
+    }' "$ENV_FILE"
+}
+
+# env_value NAME: prints the current value of NAME from the env file (exit 1 when it is not set).
+env_value() {
+  # shellcheck disable=SC1090
+  (set -a && . "$ENV_FILE" && eval "[ \"\${$1+set}\" = set ]" && eval "printf '%s' \"\$$1\"")
+}
+
+# env_check_file: says why there are no Variables to read (exit 1), unless the file is there.
+env_check_file() {
+  [ -r "$ENV_FILE" ] && return 0
+  echo "ws: no Variables file ($ENV_FILE). The laptop has no Variables yet, or AgentBook is not running on the user's computer." >&2
+  return 1
+}
+
+# env_diff: one "NAME<TAB>new|changed" line per Variable whose current value differs from this
+# process's environment (the environment of the session that runs it).
+env_diff() {
+  env_names | while IFS= read -r name; do
+    if ! eval "[ \"\${$name+set}\" = set ]"; then
+      printf '%s\tnew\n' "$name"
+    elif [ "$(env_value "$name")" != "$(eval "printf '%s' \"\$$name\"")" ]; then
+      printf '%s\tchanged\n' "$name"
+    fi
+  done
+}
+
+cmd_env() {
+  sub=${1:-ls}
+  [ "$#" -gt 0 ] && shift
+  case $sub in
+    ls | list)
+      env_check_file || return 1
+      names=$(env_names)
+      if [ -z "$names" ]; then
+        echo "Variables: none"
+        return 0
+      fi
+      diff=$(env_diff)
+      echo "Variables (current values; names only):"
+      printf '%s\n' "$names" | while IFS= read -r name; do
+        state=$(printf '%s\n' "$diff" | awk -F '\t' -v n="$name" '$1 == n { print $2 }')
+        case $state in
+          new) printf '  %s  (added after this session started: use ws env run)\n' "$name" ;;
+          changed) printf '  %s  (changed after this session started: use ws env run)\n' "$name" ;;
+          *) printf '  %s\n' "$name" ;;
+        esac
+      done
+      ;;
+    get)
+      [ -n "${1:-}" ] || { echo "ws: usage: ws env get NAME" >&2; return 2; }
+      case $1 in
+        *[!A-Za-z0-9_]* | [0-9]*) echo "ws: \"$1\" is not a Variable name" >&2; return 2 ;;
+      esac
+      env_check_file || return 1
+      if ! env_value "$1"; then
+        echo "ws: Variable $1 is not set on this laptop (ws env ls)" >&2
+        return 1
+      fi
+      # The value as is, with a newline only when printed to a terminal.
+      [ -t 1 ] && echo
+      return 0
+      ;;
+    run)
+      [ "${1:-}" = "--" ] && shift
+      [ "$#" -gt 0 ] || { echo "ws: usage: ws env run COMMAND [ARGS...]" >&2; return 2; }
+      env_check_file || return 1
+      # shellcheck disable=SC1090
+      set -a
+      . "$ENV_FILE"
+      set +a
+      exec "$@"
+      ;;
+    *)
+      echo "ws: unknown env command \"$sub\" (ls, get NAME, run COMMAND)" >&2
+      return 2
+      ;;
+  esac
+}
+
+# env_hook_line: for the prompt hook, a line when the Variables differ from the session's
+# environment, printed again only when that difference changes.
+env_hook_line() {
+  [ -r "$ENV_FILE" ] || return 0
+  diff=$(env_diff | awk -F '\t' '{ printf "%s%s (%s)", (NR > 1 ? ", " : ""), $1, $2 }')
+  cdir=$(cache_dir)
+  [ -n "$cdir" ] && [ -n "$LAPTOP_ID" ] || return 0
+  vfile=$cdir/vars-$LAPTOP_ID
+  previous=
+  [ -r "$vfile" ] && previous=$(cat "$vfile")
+  if [ -n "$diff" ] && [ "$diff" != "$previous" ]; then
+    printf 'Variables changed after this session started: %s. Run programs that need them as: ws env run <command>\n' "$diff"
+  fi
+  printf '%s' "$diff" > "$vfile.$$" 2>/dev/null && mv -f "$vfile.$$" "$vfile" 2>/dev/null
+}
+
+# __prompt-hook: one line for every prompt, plus a line when the connected folders changed since
+# the hook's last run, and one when the Variables changed after the session started.
+cmd_prompt_hook() {
+  load_state quiet || return 0
+  line=$LAPTOP_NAME
+  repos=$(list_repos "$FOLDER_PATH")
+  if [ -n "$repos" ]; then
+    total=$(printf '%s\n' "$repos" | grep -c .)
+    shown=$(printf '%s\n' "$repos" | head -n "$HOOK_MAX_REPOS" | while IFS= read -r r; do
+      part="$(repo_label "$FOLDER_PATH" "$r"): $(head_branch "$r")"
+      n=$(dirty_count "$r")
+      [ "$n" != 0 ] && part="$part ($n uncommitted)"
+      printf ' · %s' "$part"
+    done)
+    line=$line$shown
+    [ "$total" -gt "$HOOK_MAX_REPOS" ] && line="$line · +$((total - HOOK_MAX_REPOS)) more repos (ws whoami)"
+  fi
+  printf '%s\n' "$line"
+
+  current=$(given_lines "$LAPTOP_FLAT" | awk -F '\t' '
+    { m = ($3 == "view-only") ? "View only" : "read and write"; printf "%s%s (%s)", (NR > 1 ? ", " : ""), $1, m }')
+  [ -n "$current" ] || current="no given folders"
+  cdir=$(cache_dir)
+  if [ -n "$cdir" ] && [ -n "$LAPTOP_ID" ]; then
+    mfile=$cdir/mounts-$LAPTOP_ID
+    if [ -r "$mfile" ]; then
+      previous=$(cat "$mfile")
+      if [ "$previous" != "$current" ]; then
+        printf 'Connected folders changed: %s; shared folder %s (read and write). Details: ws mounts\n' "$current" "$FOLDER_PATH"
+      fi
+    fi
+    printf '%s' "$current" > "$mfile.$$" 2>/dev/null && mv -f "$mfile.$$" "$mfile" 2>/dev/null
+  fi
+  env_hook_line
+  return 0
+}
+
+usage() {
+  cat <<'EOF'
+ws: AgentBook laptop helper
+  ws whoami   this laptop, its shared folder, git repos (branches, worktrees, uncommitted
+              changes), the other laptops of the folder and the Variable names
+  ws mounts   folders from the user's computer this laptop sees, and their modes
+  ws ports    ports of this laptop forwarded to the user's computer (http://localhost:...)
+  ws env [ls]          the Variable names, marking those added or changed after this
+                       session started
+  ws env get NAME      the current value of one Variable
+  ws env run CMD...    runs CMD with the current Variables (also those added later)
+EOF
+}
+
+case ${1:-} in
+  whoami) cmd_whoami ;;
+  mounts) cmd_mounts ;;
+  ports) cmd_ports ;;
+  env)
+    shift
+    cmd_env "$@"
+    ;;
+  __prompt-hook) cmd_prompt_hook ;;
+  -h | --help | help) usage ;;
+  "")
+    usage
+    exit 2
+    ;;
+  *)
+    echo "ws: unknown command \"$1\"" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,23 @@
+# AgentBook: a native desktop tool that gives Claude Desktop isolated, devcontainer-aware Docker
+# laptops over SSH on a shared folder. A separate product in this repo, like work-hub/: not part of
+# Log Hub's build, dist/ or checks. KB: docs/knowledgebase/agentbook.md.
+[workspace]
+resolver = "3"
+members = [
+    "crates/core",
+    "crates/platform",
+    "crates/engine",
+    "crates/app",
+    "crates/setup",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "MIT"
+authors = ["Denis Tsyplakov"]
+publish = false
+
+[profile.release]
+strip = true

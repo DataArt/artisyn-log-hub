@@ -6,7 +6,7 @@ tags:
   - metrics
   - sub-agents
   - aggregation
-generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T18:00:00+04:00" }
 ---
 
 # Session Metric Scope (root vs tree)
@@ -475,6 +475,19 @@ attribute, encoded as `attr:<key>` and listed in an "ATTRIBUTES" section populat
 full in each of the N matching buckets, so bucket totals can exceed the session count. Scalar
 attribute types (`string` / `number` / `boolean`) produce exactly one bucket per session. See
 [turn-end-cost-advisor.md](turn-end-cost-advisor.md#attributes-as-a-chart-dimension).
+
+**Tags as a Group by dimension** (2026-11-24 otel-session-tags). The same Group-by controls carry a
+"TAGS" section below ATTRIBUTES (`TagGroupByItems.tsx`), one `tag:<key>` item per key that
+`GET :repoId/session-tags/values` finds on root sessions in the current scope (period, branch,
+user); a noisy key (> 10 values in one session) carries a warning icon with the fix. Tags live on
+the root session (`session_tags`), so a group takes the whole tree of every root carrying the
+value — §1 still applies. Groups are the key's values plus `__untagged__`, labelled "(untagged)",
+for roots without the key; the key is not validated against attribute definitions. Tags always
+**fan out**: a session with N values of the key counts in full in each of the N groups, so group
+totals can exceed the repository total, and the response carries the same fan-out flag as the
+`attr:` path — `GroupByFanOutCaveat` (with tag wording) is shown. Grouping by a key that is also
+filtered with `tag=` is rejected (400), as for `attr:`. Spend has its own `tag` slice (`tagKey`),
+with the same fan-out — see [budgets.md](budgets.md).
 
 ## Related
 

@@ -1,6 +1,7 @@
 {
   "env": {
-    "MCP_TIMEOUT": "90000"
+    "MCP_TIMEOUT": "90000",
+    "OTEL_RESOURCE_ATTRIBUTES": "license=open-source"
   },
   "autoMemoryEnabled": false,
   "enabledPlugins": {

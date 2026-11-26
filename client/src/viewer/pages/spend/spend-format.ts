@@ -29,7 +29,14 @@ export const SPEND_SLICE_LABELS: Record<SpendSliceKind, string> = {
   subagent: 'Sub-agent',
   skill: 'Skill',
   mcp: 'MCP server',
+  tag: 'Tag',
 };
+
+/**
+ * URL param of the Spend tab's tag slice key (otel-session-tags): `tagKey=<key>` asks the server
+ * for the extra `tag` slice, shown when `ssl=tag`.
+ */
+export const SPEND_TAG_KEY_PARAM = 'tagKey';
 
 export const SPEND_SLICE_ORDER: readonly SpendSliceKind[] = [
   'model',

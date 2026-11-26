@@ -1,0 +1,9 @@
+// Compose-based devcontainer: primary service "app" plus a sidecar "db".
+{
+  "name": "sample-compose",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "containerEnv": { "JIRA_URL": "https://jira.example.invalid" },
+  "postCreateCommand": "echo postcreate >> /tmp/postcreate.ok"
+}

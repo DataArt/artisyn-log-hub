@@ -56,5 +56,7 @@ export function assembleSessionLogs(
     turnEndAdvisor: manifest.turnEndAdvisor,
     sessionAttribution: manifest.sessionAttribution,
     harnessSnapshot: manifest.harnessSnapshot,
+    tags: manifest.tags,
+    tagNoise: manifest.tagNoise,
   };
 }

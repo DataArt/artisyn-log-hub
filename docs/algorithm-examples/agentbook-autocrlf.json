@@ -1,0 +1,74 @@
+[
+  {
+    "id": "CR-01",
+    "input": {"global": "true", "git": true, "windows": true},
+    "expected": {"value": "true"},
+    "note": "Rule 2: the host has git and a valid global value 'true'."
+  },
+  {
+    "id": "CR-02",
+    "input": {"global": "input", "system": "true", "git": true, "windows": true},
+    "expected": {"value": "input"},
+    "note": "Rule 2 before rule 3: the global 'input' wins over the system 'true'."
+  },
+  {
+    "id": "CR-03",
+    "input": {"system": "true", "git": true, "windows": true},
+    "expected": {"value": "true"},
+    "note": "Rule 3: no global value, so the system value (Git for Windows installs core.autocrlf=true there)."
+  },
+  {
+    "id": "CR-04",
+    "input": {"git": true, "windows": true},
+    "expected": {"value": "false"},
+    "note": "Rule 4: git is present but neither level sets it, so git's own default 'false' (not the no-git Windows default)."
+  },
+  {
+    "id": "CR-05",
+    "input": {"git": false, "windows": true},
+    "expected": {"value": "true"},
+    "note": "Rule 1: no git on a Windows host: 'true'."
+  },
+  {
+    "id": "CR-06",
+    "input": {"git": false, "windows": false},
+    "expected": {"value": "input"},
+    "note": "Rule 1: no git on macOS: 'input'."
+  },
+  {
+    "id": "CR-07",
+    "input": {"global": "  Yes ", "git": true, "windows": true},
+    "expected": {"value": "true"},
+    "note": "Normalisation: trimmed and lowercased 'yes' is git's boolean true."
+  },
+  {
+    "id": "CR-08",
+    "input": {"global": "off", "system": "true", "git": true, "windows": true},
+    "expected": {"value": "false"},
+    "note": "'off' is a valid false, so rule 2 stops there; the system 'true' is not consulted."
+  },
+  {
+    "id": "CR-09",
+    "input": {"global": "bogus", "system": "input", "git": true, "windows": false},
+    "expected": {"value": "input"},
+    "note": "An invalid global value counts as not set; rule 3 takes the system 'input'."
+  },
+  {
+    "id": "CR-10",
+    "input": {"global": "", "system": "input", "git": true, "windows": true},
+    "expected": {"value": "input"},
+    "note": "The empty value counts as not set, so rule 3 applies."
+  },
+  {
+    "id": "CR-11",
+    "input": {"global": "false", "git": false, "windows": true},
+    "expected": {"value": "true"},
+    "note": "Rule 1 comes first: without git the values are not read at all, whatever is passed."
+  },
+  {
+    "id": "CR-12",
+    "input": {"global": "1", "git": true, "windows": false},
+    "expected": {"value": "true"},
+    "note": "'1' is git's boolean true."
+  }
+]

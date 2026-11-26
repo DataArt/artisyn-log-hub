@@ -15,13 +15,17 @@ import {
   OTEL_CLEANUP_BATCH,
   OTEL_PROJECTION_BATCH,
   OTEL_PROJECTION_FAILED,
+  OTEL_PROJECTION_FULL_REQUEUE_BELOW,
   OTEL_PROJECTION_VERSION,
   OTEL_RECLASS_BATCH,
+  OTEL_TAG_DENY_PREFIXES,
+  OTEL_TAG_UPGRADE_BATCH,
   resolveOtelProjectionIntervalMs,
   OTEL_SESSION_ENDED_MS,
 } from './otel-facts.constants';
 import {
   applyOtelLines,
+  applyOtelTagsOnly,
   lockOtelState,
   OtelSessionDeletedError,
   reclassifyOtelSession,
@@ -53,6 +57,10 @@ export interface OtelProjectionTickStats {
   failedChunks: number;
   /** Chunks skipped because their session is deleted. */
   deletedChunks: number;
+  /** Older-version chunks given the light tag-only upgrade (step 1b). */
+  tagUpgraded: number;
+  /** Of those, chunks that carried a user resource key and were read for tags. */
+  tagRead: number;
   /** `otel_calls` + `otel_spans` rows first inserted as `fill` (DD-3). */
   fills: number;
   /** Reclassification-queue rows handled (DD-5). */
@@ -84,6 +92,8 @@ function intArray(ids: readonly number[]): SQL {
  *    and the deleted check (DD-2), `applyOtelLines(…, 'chunk')` per claimed body, then
  *    `chunk_last_at` and the gap-close rule (DD-14). A deleted session's chunks are skipped; a
  *    failure is logged and marks the claimed rows `-1` (re-queued by the startup re-mark);
+ * 1b. gives chunks of an older but still compatible version the light **tag-only upgrade**
+ *    (`upgradeTagsOnly`, 2026-11-24 otel-session-tags) instead of a full re-projection;
  * 3. drains the **reclassification queue** (DD-5), one `DELETE … RETURNING` claim per
  *    transaction, up to `OTEL_RECLASS_BATCH` roots;
  * 4. queues **idle provisional roots** for finalising (DD-5);
@@ -139,6 +149,8 @@ export class OtelProjectionService implements OnModuleInit, OnModuleDestroy {
       sessions: 0,
       failedChunks: 0,
       deletedChunks: 0,
+      tagUpgraded: 0,
+      tagRead: 0,
       fills: 0,
       reclassified: 0,
       finalised: 0,
@@ -150,25 +162,30 @@ export class OtelProjectionService implements OnModuleInit, OnModuleDestroy {
     // claim and its work, so a paused tick never holds stamped-but-unprojected chunks.
     await this.governor.admit();
     if (!this.stopped) await this.projectChunks(stats);
+    if (!this.stopped) {
+      await this.governor.admit();
+      await this.upgradeTagsOnly(stats);
+    }
     if (!this.stopped) await this.drainReclassQueue(stats);
     if (!this.stopped) {
       await this.governor.admit();
       stats.finalised = await this.enqueueIdleRoots();
     }
     if (!this.stopped) stats.cleaned = await this.cleanupDeletedRoots();
-    if (
-      stats.chunks + stats.reclassified + stats.finalised + stats.cleaned ===
-      0
-    ) {
+    const worked =
+      stats.chunks +
+      stats.tagUpgraded +
+      stats.reclassified +
+      stats.finalised +
+      stats.cleaned;
+    if (worked === 0) {
       this.governor.reportIdle();
     }
 
-    if (
-      stats.chunks + stats.reclassified + stats.finalised + stats.cleaned >
-      0
-    ) {
+    if (worked > 0) {
       this.logger.log(
         `OTEL projection: chunks=${stats.chunks} sessions=${stats.sessions} ` +
+          `tagUpgraded=${stats.tagUpgraded} tagRead=${stats.tagRead} ` +
           `fills=${stats.fills} failed=${stats.failedChunks} deleted=${stats.deletedChunks} ` +
           `reclassified=${stats.reclassified} finalised=${stats.finalised} ` +
           `cleaned=${stats.cleaned} durationMs=${Date.now() - startedAt}`,
@@ -358,7 +375,105 @@ export class OtelProjectionService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Marks chunks whose projection failed; the startup re-mark (< current) retries them. */
+  // -------------------------------------------------------------------------
+  // Step 1b: light tag-only upgrade of older-version chunks (2026-11-24 otel-session-tags)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Step 1b — chunks stamped from {@link OTEL_PROJECTION_FULL_REQUEUE_BELOW} up to the current
+   * version − 1 only miss the session tags, so instead of a full re-projection they are re-stamped
+   * with the current version in one short SQL statement, which also tells — inside Postgres, from
+   * the jsonb body, without loading it into Node — whether a chunk carries any resource key outside
+   * {@link OTEL_TAG_DENY_PREFIXES}. Only those chunks (rare: a user label in
+   * `OTEL_RESOURCE_ATTRIBUTES`) are read and their tags written, per root under the state lock.
+   * The SQL check may over-match (e.g. a key with surrounding blanks); `extractOtelTags` then
+   * decides. A failed root marks its chunks `-1`, which the startup re-mark fully re-projects.
+   */
+  private async upgradeTagsOnly(stats: OtelProjectionTickStats): Promise<void> {
+    if (OTEL_PROJECTION_FULL_REQUEUE_BELOW >= OTEL_PROJECTION_VERSION) return;
+    const denyLike = JSON.stringify(
+      OTEL_TAG_DENY_PREFIXES.map(
+        (p) => `${p.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
+      ),
+    );
+    const result = await this.db.execute(sql`
+      UPDATE logs_otel lo SET otel_projection_version = ${OTEL_PROJECTION_VERSION}
+       WHERE lo.id IN (
+         SELECT id FROM logs_otel
+          WHERE otel_projection_version >= ${OTEL_PROJECTION_FULL_REQUEUE_BELOW}
+            AND otel_projection_version < ${OTEL_PROJECTION_VERSION}
+          ORDER BY id
+          LIMIT ${OTEL_TAG_UPGRADE_BATCH}
+          FOR UPDATE SKIP LOCKED
+       )
+      RETURNING lo.id, lo.session_id, lo.user_id,
+        EXISTS (
+          SELECT 1
+            FROM jsonb_array_elements(
+                   CASE WHEN jsonb_typeof(lo.body) = 'array' THEN lo.body ELSE '[]'::jsonb END
+                 ) AS l(line),
+                 jsonb_object_keys(
+                   CASE WHEN jsonb_typeof(l.line -> 'resource') = 'object'
+                        THEN l.line -> 'resource' ELSE '{}'::jsonb END
+                 ) AS k(key)
+           WHERE NOT (k.key LIKE ANY (
+                   ARRAY(SELECT jsonb_array_elements_text(${denyLike}::jsonb))
+                 ))
+        ) AS has_user_key
+    `);
+    const rows = result.rows as unknown as {
+      id: number | string;
+      session_id: number | string;
+      user_id: number | string;
+      has_user_key: boolean;
+    }[];
+    stats.tagUpgraded = rows.length;
+    const toRead: ClaimedChunk[] = rows
+      .filter((r) => r.has_user_key)
+      .map((r) => ({
+        id: Number(r.id),
+        sessionId: Number(r.session_id),
+        userId: Number(r.user_id),
+      }))
+      .sort((a, b) => a.id - b.id);
+    stats.tagRead = toRead.length;
+    if (toRead.length === 0) return;
+
+    for (const group of await this.groupByRoot(toRead)) {
+      if (this.stopped) break;
+      try {
+        await this.db.transaction(async (tx) => {
+          await lockOtelState(tx, group.rootId, {
+            create: true,
+            userId: group.userId,
+          });
+          const bodiesRes = await tx.execute(sql`
+            SELECT body FROM logs_otel
+             WHERE id = ANY(${intArray(group.chunkIds)})
+             ORDER BY id
+          `);
+          for (const { body } of bodiesRes.rows as unknown as {
+            body: unknown;
+          }[]) {
+            if (!Array.isArray(body) || body.length === 0) continue;
+            await applyOtelTagsOnly(tx, group.rootId, body as unknown[]);
+          }
+        });
+      } catch (err: unknown) {
+        if (err instanceof OtelSessionDeletedError) continue;
+        this.logFailure(
+          `OTEL tag upgrade of session ${group.rootId} (chunks ${group.chunkIds.join(',')}) failed`,
+          err,
+        );
+        await this.markFailed(group.chunkIds);
+      }
+    }
+  }
+
+  /**
+   * Marks chunks whose projection (or tag-only upgrade) failed; the startup re-mark
+   * (`< OTEL_PROJECTION_FULL_REQUEUE_BELOW`, which `-1` always is) fully re-projects them.
+   */
   private async markFailed(chunkIds: number[]): Promise<void> {
     try {
       await this.db.execute(sql`

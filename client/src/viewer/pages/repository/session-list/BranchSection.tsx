@@ -22,6 +22,7 @@ import {
   hiddenUserBreakdown,
   type AttributeFilterSelection,
 } from './session-list-helpers';
+import type { TagFilter } from '../../../lib/session-tags';
 import { OtherUsersNotice } from './OtherUsersNotice';
 
 interface BranchSectionProps {
@@ -44,6 +45,8 @@ interface BranchSectionProps {
    * branch view fetches its own session list independently, so it must apply both itself
    * rather than inheriting `SessionListPanel`'s already-filtered `displayedSessions`. */
   attributeFilter?: AttributeFilterSelection | null;
+  /** Session tag filters (otel-session-tags) from the URL `tag=` param. */
+  tagFilters?: readonly TagFilter[];
   attributeDefs?: SessionAttributionAttributeDef[];
 }
 
@@ -64,6 +67,7 @@ export function BranchSection({
   onShowAllUsers,
   hideHookSessions,
   attributeFilter,
+  tagFilters,
   attributeDefs,
 }: BranchSectionProps) {
   const { data: rawSessions, isLoading } = useQuery({
@@ -79,8 +83,15 @@ export function BranchSection({
         filterByUserEmail,
         hideHookSessions,
         attributeFilter,
+        tagFilters,
       }),
-    [rawSessions, filterByUserEmail, hideHookSessions, attributeFilter],
+    [
+      rawSessions,
+      filterByUserEmail,
+      hideHookSessions,
+      attributeFilter,
+      tagFilters,
+    ],
   );
 
   const thresholds = useMemo(
@@ -104,8 +115,15 @@ export function BranchSection({
         filterByUserEmail,
         hideHookSessions,
         attributeFilter,
+        tagFilters,
       }),
-    [rawSessions, filterByUserEmail, hideHookSessions, attributeFilter],
+    [
+      rawSessions,
+      filterByUserEmail,
+      hideHookSessions,
+      attributeFilter,
+      tagFilters,
+    ],
   );
 
   const tooltipRows: DetailRow[] = [
@@ -178,6 +196,7 @@ export function BranchSection({
               onSelect={onSelect}
               thresholds={thresholds}
               attributeDefs={attributeDefs}
+              tagChipKeys={tagFilters?.map((f) => f.key)}
             />
           ))
         ))}

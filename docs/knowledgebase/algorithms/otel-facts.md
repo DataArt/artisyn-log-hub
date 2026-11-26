@@ -1,14 +1,14 @@
 ---
 type: "Algorithm"
-title: "OTEL facts: call structure, event time, call key, buckets, intervals, spans, query sources, account"
-description: "The OTEL tabs (repository, session, team) show what Claude Code's telemetry reports: every API call with its cost, where it came from (main thread, sub-agent, or a hidden call no transcript records), when it happened, and the trace spans of each turn."
+title: "OTEL facts: call structure, event time, call key, buckets, intervals, spans, query sources, account, tags"
+description: "The OTEL tabs (repository, session, team) show what Claude Code's telemetry reports: every API call with its cost, where it came from (main thread, sub-agent, or a hidden call no transcript records), when it happened, and the trace spans of each turn; the same lines also give the session's user tags."
 tags: [algorithm]
-generated: { by: "human:denistsyplakov", at: "2026-11-04T22:43:28+04:00" }
+generated: { by: "claude:opus-5.5", at: "2026-11-25T12:00:00+04:00" }
 reviewed: no
 reviewer: none
 ---
 
-# OTEL facts: call structure, event time, call key, buckets, intervals, spans, query sources, account
+# OTEL facts: call structure, event time, call key, buckets, intervals, spans, query sources, account, tags
 
 ## Purpose
 
@@ -17,7 +17,8 @@ call with its cost, where it came from (main thread, sub-agent, or a hidden call
 records), when it happened, and the trace spans of each turn. The server turns the hook's raw
 OTEL lines into `otel_calls`, `otel_spans` and 5-minute `otel_cost_buckets` rows. These pure
 rules decide each row's values, so the realtime channel and the regular chunk upload produce
-the same rows, and a call never lands in the wrong structure or bucket.
+the same rows, and a call never lands in the wrong structure or bucket. The same lines' resource
+attributes give the root session's user tags (`session_tags`, `source = 'otel'`).
 
 ## Code
 
@@ -25,8 +26,11 @@ the same rows, and a call never lands in the wrong structure or bucket.
   - `server/src/logs/otel/otel-classify.ts` — `classifyOtelCall`, `isOtelCallProvisional`,
     `bucketStart5m` (`OTEL_BUCKET_MS`), `pickOtelInterval`, `isValidOtelTimeZone`;
   - `server/src/logs/otel/otel-records.ts` — `resolveOtelEventTime`, `otelCallKey`,
-    `extractOtelCalls`, `extractOtelAccount`, `sanitizeOtelBaseUrl`, `extractOtelSpans`
-    (`OTEL_SPAN_ATTRIBUTES_MAX_BYTES` from `otel-facts.constants.ts`);
+    `extractOtelCalls`, `extractOtelAccount`, `sanitizeOtelBaseUrl`, `extractOtelSpans`,
+    `extractOtelTags` (`OTEL_SPAN_ATTRIBUTES_MAX_BYTES`, `OTEL_TAG_DENY_PREFIXES`,
+    `OTEL_TAG_MAX_KEY`, `OTEL_TAG_MAX_VALUE`, `OTEL_TAG_MAX_PAIRS` from `otel-facts.constants.ts`);
+  - `server/src/logs/otel/otel-facts-writer.ts` — `applyOtelLines` → `upsertOtelTags` (the
+    per-session cap across batches);
   - `server/src/logs/otel-chunk.ts` — `nullableTokenCountOf`, `cappedStringAttrOf`;
   - `server/src/logs/otel/otel-query-source-dictionary.ts` — `OTEL_VISIBLE_QUERY_SOURCES`,
     `lookupQuerySource`; `TRANSCRIPT_QUERY_SOURCES` and `TRANSCRIPT_QUERY_SOURCE_PREFIX` come from
@@ -62,11 +66,12 @@ Every example row has `input.kind`, which picks the rule:
 | `querySource` | `name` | `{ description, hidden, known }` |
 | `account` | `lines` | `{ account }`: `{ plan, seatType, provider, customBaseUrl, eventAt }` (ISO) or null |
 | `baseUrl` | `raw` | `{ url }` (string or null) |
+| `tags` | `lines` | `{ count, tags, first, last }` (listed fields only): `tags` = `[{ key, value }]` in order |
 
-In `spans`, `calls`, `account` and `baseUrl` rows a value `{"$repeat": ["x", 70000]}` stands for
-the string of 70000 `x` characters, and `{"$concat": [part, ...]}` for its parts joined (the test
-expands both, in the input and in the expected `calls` / `baseUrl` values), so a large value fits
-in the doc.
+In `spans`, `calls`, `account`, `baseUrl` and `tags` rows a value `{"$repeat": ["x", 70000]}`
+stands for the string of 70000 `x` characters, `{"$concat": [part, ...]}` for its parts joined,
+and `{"$attrs": ["tag", 25, "v"]}` for the object `{ "tag1": "v", …, "tag25": "v" }` (the test
+expands them in the input and in the expected values), so a large value fits in the doc.
 
 ## Rules
 
@@ -145,6 +150,27 @@ in the doc.
 12. **Base URL** (`sanitizeOtelBaseUrl`, DD-6): non-string, blank or unparsable by `new URL`, or
     no host → null. Otherwise `protocol//host[:port]pathname` — userinfo, query and fragment are
     dropped, the port is kept, a lone `/` path is dropped — cut to 1024.
+13. **Tags** (`extractOtelTags`, 2026-11-24 otel-session-tags FR-2 / FR-3): the user tags of the
+    lines' `resource` maps, any `signal`; a line whose `resource` is not an object adds nothing.
+    - A user tag is a resource attribute whose key does not start with a prefix of
+      `OTEL_TAG_DENY_PREFIXES`: `artisyn.`, `service.`, `telemetry.`, `host.`, `os.`, `process.`,
+      `anthropic.`, `wsl.`, `user.`, `session.`, `organization.`, `terminal.`, `deployment.`,
+      `k8s.`, `cloud.`, `container.`, `device.`, `faas.`, `aws.`, `gcp.`, `azure.`. Dotted keys
+      outside the list (`team.name`) are user tags; matching is by the whole prefix, dot included.
+    - Keys and values: strings, finite numbers and booleans become text; NUL characters are
+      removed; both are trimmed. An empty key or value, `null`, an object or an array is ignored.
+      Keys (and prefixes) are case-sensitive.
+    - Limits: a key longer than `OTEL_TAG_MAX_KEY` = 64 or a value longer than
+      `OTEL_TAG_MAX_VALUE` = 256 drops the pair — never truncated.
+    - Every distinct `(key, value)` is kept once, in first-seen order (line order, then the
+      resource's key order): a key whose value changes keeps all its values. At most
+      `OTEL_TAG_MAX_PAIRS` = 500 pairs; later ones are ignored.
+    - The writer (`applyOtelLines`, under the `otel_session_state` lock) inserts the pairs not yet
+      stored for the root with `source = 'otel'`, in that order, until the root holds 500 `otel`
+      rows (first written wins across batches and channels); a deleted root gets nothing; tag
+      writes do not bump `seq`. Sessions ingested before get their tags from the projection
+      drain's light tag-only upgrade of v2 chunks (same extraction, `applyOtelTagsOnly`), not from
+      a full re-projection.
 
 ## Edge cases
 
@@ -172,10 +198,14 @@ in the doc.
   its start OF-58; no account keys → `null` OF-59.
 - Base URL (rule 12): userinfo / query / fragment stripped OF-60, port kept and trailing `/`
   dropped OF-61, unparsable / blank / non-string → `null` OF-62..OF-64, over 1024 capped OF-65.
+- Tags (rule 13): every deny-list prefix, `team.name` kept, a dot-less look-alike kept OF-66;
+  several values of one key, repeats and odd resources OF-67; trimming, coercion and empty /
+  non-scalar values OF-68; case-sensitive keys and prefixes OF-69; key 64 vs 65 and value 256 vs
+  257 OF-70; 25 attributes plus a 300-char value → 25 pairs OF-71; 510 pairs → the first 500 OF-72.
 
 ## Examples
 
-Rows (65): [`docs/algorithm-examples/otel-facts.json`](../../algorithm-examples/otel-facts.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (72): [`docs/algorithm-examples/otel-facts.json`](../../algorithm-examples/otel-facts.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -196,6 +226,9 @@ Rows (65): [`docs/algorithm-examples/otel-facts.json`](../../algorithm-examples/
   clears a field" -> OF-57; "a span is dated by receivedAt" -> OF-58.
 - "Base URL keeps the query or userinfo" -> OF-60; "keeps the lone `/`" -> OF-61; "no cap" ->
   OF-65.
+- "Deny-list prefix without its dot" -> OF-66; "a key keeps only its last value" -> OF-67; "no
+  trim" or "numbers ignored" -> OF-68; "case-insensitive prefixes" -> OF-69; "over-length values
+  truncated" or "`<` instead of `<=`" -> OF-70, OF-71; "no pair cap" -> OF-72.
 
 ## Where the result is visible
 

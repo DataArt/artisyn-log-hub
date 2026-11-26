@@ -24,7 +24,7 @@ import { PROMPT_HIDDEN_LABEL } from '../../../lib/access-mode-copy';
 
 interface Props {
   sessions: TimelineSession[];
-  groupBy: 'none' | 'branch' | 'user' | `attr:${string}`;
+  groupBy: 'none' | 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   view:
     | 'work-time'
     | 'cost'

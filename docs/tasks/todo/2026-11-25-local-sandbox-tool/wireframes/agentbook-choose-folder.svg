@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="640" viewBox="0 0 1040 640" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+  <!-- Wireframe: AgentBook "Add a shared folder" screen (FR-1; also the first screen when no folder is added yet), with the one-time ".claude/ chooser" dialog shown on top. Light theme. -->
+  <defs>
+    <symbol id="lt-work" viewBox="0 0 72 48">
+      <rect x="8" y="3" width="48" height="33" rx="6" fill="#eef1fb" stroke="#3358cc" stroke-width="2.5"/>
+      <ellipse cx="24" cy="18" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <ellipse cx="40" cy="18" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <circle cx="25.2" cy="16.3" r="1.3" fill="#fff"/>
+      <circle cx="41.2" cy="16.3" r="1.3" fill="#fff"/>
+      <ellipse cx="17.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <ellipse cx="46.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <path d="M28.5 25 Q32 29.5 35.5 25" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>
+      <rect x="2" y="36" width="60" height="7" rx="3.5" fill="#3358cc"/>
+      <rect x="26" y="36" width="12" height="2.5" rx="1.2" fill="#c7d2fe"/>
+    </symbol>
+  </defs>
+  <rect width="1040" height="640" fill="#ffffff"/>
+
+  <!-- Window title bar -->
+  <rect x="0" y="0" width="1040" height="32" fill="#f4f4f5"/>
+  <line x1="0" y1="32" x2="1040" y2="32" stroke="#e4e4e7"/>
+  <text x="14" y="21" fill="#52525b">AgentBook</text>
+  <text x="960" y="21" fill="#71717a">—   ☐   ✕</text>
+
+  <!-- Top bar -->
+  <line x1="0" y1="80" x2="1040" y2="80" stroke="#e4e4e7"/>
+  <circle cx="26" cy="56" r="9" fill="#3358cc"/>
+  <text x="44" y="61" font-weight="600" font-size="15" fill="#09090b">AgentBook</text>
+  <text x="130" y="61" fill="#71717a">›</text>
+  <text x="146" y="61" fill="#3358cc">All folders</text>
+  <text x="222" y="61" fill="#71717a">›</text>
+  <text x="238" y="61" fill="#09090b">Add a shared folder</text>
+  <text x="960" y="61" fill="#09090b">ⓘ Help</text>
+
+  <!-- Page content (under the dialog) -->
+  <use href="#lt-work" x="120" y="100" width="45" height="30"/>
+  <text x="176" y="124" font-size="20" font-weight="600" fill="#09090b">A virtual laptop for the agent, inside your computer</text>
+  <text x="120" y="152" fill="#52525b">Choose the folder the agent works in. It sees that folder and nothing else of your computer.</text>
+
+  <rect x="120" y="170" width="800" height="150" rx="10" fill="#fafafa" stroke="#a1a1aa" stroke-dasharray="6 5"/>
+  <text x="470" y="232" font-size="30" fill="#a1a1aa">📁</text>
+  <text x="396" y="268" font-size="15" fill="#09090b">Drag a folder here, or</text>
+  <rect x="552" y="250" width="112" height="28" rx="6" fill="#3358cc"/>
+  <text x="566" y="269" fill="#fff" font-weight="600">Browse…</text>
+
+  <text x="120" y="356" font-size="11" font-weight="600" fill="#71717a">RECENT FOLDERS</text>
+  <rect x="120" y="366" width="800" height="40" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="138" y="391" fill="#09090b">📁 q3-analysis</text>
+  <text x="300" y="391" fill="#71717a">C:\Users\anna\Projects\q3-analysis</text>
+  <use href="#lt-work" x="760" y="379" width="21" height="14"/>
+  <text x="786" y="391" fill="#52525b">2 laptops</text>
+  <rect x="120" y="412" width="800" height="40" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="138" y="437" fill="#09090b">📁 onboarding-docs</text>
+  <text x="300" y="437" fill="#71717a">D:\Work\onboarding-docs</text>
+  <text x="760" y="437" fill="#71717a">no laptops</text>
+
+  <!-- Modal overlay -->
+  <rect x="0" y="32" width="1040" height="608" fill="#09090b" fill-opacity="0.35"/>
+
+  <!-- Dialog: several .claude/ found -->
+  <rect x="270" y="150" width="500" height="340" rx="10" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="294" y="186" font-size="16" font-weight="600" fill="#09090b">Where should the agent start?</text>
+  <text x="742" y="186" fill="#71717a">✕</text>
+  <text x="294" y="210" fill="#52525b">This folder has more than one project setup (.claude/).</text>
+  <text x="294" y="228" fill="#52525b">Pick one. AgentBook remembers it for this folder.</text>
+
+  <rect x="294" y="248" width="452" height="52" rx="6" fill="#eef1fb" stroke="#3358cc"/>
+  <circle cx="314" cy="274" r="7" fill="#fff" stroke="#3358cc" stroke-width="2"/>
+  <circle cx="314" cy="274" r="3.5" fill="#3358cc"/>
+  <text x="332" y="270" fill="#09090b" font-weight="600">reports</text>
+  <text x="332" y="289" font-size="12" fill="#71717a">q3-analysis\reports\.claude  ·  4 skills</text>
+
+  <rect x="294" y="308" width="452" height="52" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <circle cx="314" cy="334" r="7" fill="#fff" stroke="#a1a1aa" stroke-width="2"/>
+  <text x="332" y="330" fill="#09090b" font-weight="600">repo-a</text>
+  <text x="332" y="349" font-size="12" fill="#71717a">q3-analysis\repo-a\.claude  ·  9 skills</text>
+
+  <rect x="294" y="368" width="452" height="44" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <circle cx="314" cy="390" r="7" fill="#fff" stroke="#a1a1aa" stroke-width="2"/>
+  <text x="332" y="395" fill="#09090b">Folder root (no project setup)</text>
+
+  <line x1="270" y1="430" x2="770" y2="430" stroke="#e4e4e7"/>
+  <rect x="564" y="444" width="84" height="32" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="584" y="465" fill="#09090b">Cancel</text>
+  <rect x="656" y="444" width="90" height="32" rx="6" fill="#3358cc"/>
+  <text x="674" y="465" fill="#fff" font-weight="600">Continue</text>
+
+  <text x="24" y="620" font-size="12" fill="#e4e4e7">Wireframe — FR-1. Dialog appears only when 2+ .claude/ are found (skipping .git and node_modules) and only once per folder.</text>
+</svg>

@@ -1,0 +1,11 @@
+#!/bin/sh
+# AgentBook UserPromptSubmit hook (/opt/agentbook/bin/prompt-hook; this exact path is the merge key
+# of the hook entry in ~/.claude/settings.json). Prints one line for every prompt, e.g.
+#   Q3 reports · repo-a: feature/q3 (3 uncommitted)
+# and one more line when the laptop's connected folders changed since its last run. The branch is
+# read from .git/HEAD, the uncommitted count from `git status --porcelain -uno` with a ~1 s limit
+# ("?" when it runs out), cached per repo for a few seconds. Always exits 0: a hook failure must
+# never block a prompt.
+here=$(dirname "$0")
+/bin/sh "$here/ws" __prompt-hook 2>/dev/null
+exit 0

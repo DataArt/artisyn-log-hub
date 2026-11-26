@@ -230,7 +230,9 @@ export function changeSurfaceGroupColumns(
       ? 'User'
       : groupBy.startsWith('attr:')
         ? groupBy.slice('attr:'.length)
-        : 'Branch';
+        : groupBy.startsWith('tag:')
+          ? groupBy.slice('tag:'.length)
+          : 'Branch';
   return [
     first,
     'Sessions',

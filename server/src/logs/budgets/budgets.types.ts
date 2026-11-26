@@ -84,7 +84,12 @@ export type SpendSliceKind =
   | 'branch'
   | 'subagent'
   | 'skill'
-  | 'mcp';
+  | 'mcp'
+  /**
+   * Fan-out slice by one session tag key — only when `tagKey` is sent (2026-11-24
+   * otel-session-tags); never in the default slice list.
+   */
+  | 'tag';
 
 export interface SpendSliceRow {
   key: string;
@@ -96,6 +101,8 @@ export interface SpendSliceRow {
 
 export interface SpendSlice {
   kind: SpendSliceKind;
+  /** Only on a `tag` slice: the tag key it is sliced by. */
+  tagKey?: string;
   rows: SpendSliceRow[];
 }
 
@@ -142,6 +149,8 @@ export interface SpendView {
   } | null;
   daily: SpendDailyBucket[];
   slices: SpendSlice[];
+  /** Distinct session tag keys on the period's root sessions in scope, sorted (2026-11-24). */
+  tagKeys: string[];
   costlySessions: { mean: number; sigma: number; items: SpendSessionDto[] };
   crossedThresholds: number[];
 }

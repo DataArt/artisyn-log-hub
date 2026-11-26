@@ -137,6 +137,8 @@ export class SessionLogPartsService {
       turnEndAdvisor: extras.turnEndAdvisor,
       sessionAttribution: extras.sessionAttribution,
       harnessSnapshot: extras.harnessSnapshot,
+      tags: extras.tags,
+      tagNoise: extras.tagNoise,
       derivedLagging,
       liveness: computeOtelLiveness(otelState, now),
       serverTime: now.toISOString(),
