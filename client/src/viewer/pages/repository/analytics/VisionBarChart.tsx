@@ -16,7 +16,7 @@ interface Props {
   sessions: TimelineSession[];
   startDate: string;
   endDate: string;
-  groupBy: 'none' | 'branch' | 'user' | `attr:${string}`;
+  groupBy: 'none' | 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   activeMetric: VisionMetricKey;
   onSessionClick?: (sessionId: string) => void;
 }

@@ -4,6 +4,7 @@ import { formatCost } from '@/lib/format';
 import { fetchAnalyticsTimeline } from '../../../api';
 import { CostByGroupChart } from './CostByGroupChart';
 import { GroupByFanOutCaveat } from './GroupByFanOutCaveat';
+import { isFanOutGroupBy } from '../../../lib/session-tags';
 import { ReportDocumentHeader } from './ReportDocumentHeader';
 import { ReportKpiTable } from './ReportKpiTable';
 import { ReportDocumentShell } from './ReportDocumentShell';
@@ -58,6 +59,7 @@ export function CostByUserReport({
       startDate,
       endDate,
       params.groupBy,
+      params.tags,
       generation,
     ],
     queryFn: () =>
@@ -66,6 +68,7 @@ export function CostByUserReport({
         startDate,
         endDate,
         groupBy: params.groupBy !== 'none' ? params.groupBy : undefined,
+        tags: params.tags,
       }),
   });
 
@@ -95,8 +98,10 @@ export function CostByUserReport({
     }
     return Array.from(perGroup.values()).reduce((sum, n) => sum + n, 0);
   })();
+  // A fanned-out session comes back as one row per group: compare with the distinct sessions.
   const showFanOutCaveat =
-    params.groupBy.startsWith('attr:') && groupedSessionTotal > sessions.length;
+    isFanOutGroupBy(params.groupBy) &&
+    groupedSessionTotal > new Set(sessions.map((s) => s.sessionId)).size;
 
   const { downloadError, handleDownload } = useReportPdfDownload(
     () =>
@@ -152,7 +157,7 @@ export function CostByUserReport({
           },
         ]}
       />
-      <GroupByFanOutCaveat show={showFanOutCaveat} />
+      <GroupByFanOutCaveat show={showFanOutCaveat} groupBy={params.groupBy} />
       <section>
         <h2 className="text-sm font-semibold text-foreground">
           Cost per {params.groupBy === 'none' ? 'Day' : params.groupBy}

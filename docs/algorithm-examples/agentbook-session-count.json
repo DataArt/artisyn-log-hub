@@ -1,0 +1,90 @@
+[
+  {
+    "id": "SC-01",
+    "input": {"text": [
+      "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+      "   0: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 18411 1 0000000000000000 100 0 0 10 0"
+    ]},
+    "expected": {"count": 0},
+    "note": "The header is skipped (first field 'sl' has no ':'); sshd's listening socket has state 0A, not 01: 0 sessions."
+  },
+  {
+    "id": "SC-02",
+    "input": {"text": [
+      "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+      "   0: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 18411 1 0000000000000000 100 0 0 10 0",
+      "   1: 020011AC:0016 010011AC:D2A4 01 00000000:00000000 02:000A7B2E 00000000     0        0 23456 2 0000000000000000 20 4 30 10 -1"
+    ]},
+    "expected": {"count": 1},
+    "note": "Line 1: local port 0x0016 = 22 and state 01 (ESTABLISHED): 1 session. The listener does not count."
+  },
+  {
+    "id": "SC-03",
+    "input": {"text": [
+      "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+      "   1: 020011AC:0016 010011AC:D2A4 01 00000000:00000000 02:000A7B2E 00000000     0        0 23456 2 0000000000000000 20 4 30 10 -1",
+      "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+      "   0: 0000000000000000FFFF0000020011AC:0016 0000000000000000FFFF0000010011AC:D2A6 01 00000000:00000000 02:000A7B2E 00000000     0        0 23460 2 0000000000000000 20 4 30 10 -1"
+    ]},
+    "expected": {"count": 2},
+    "note": "tcp and tcp6 are concatenated (two headers, both skipped). One ESTABLISHED socket on port 22 in each: 2."
+  },
+  {
+    "id": "SC-04",
+    "input": {"text": [
+      "   3: 020011AC:9C40 22B8F468:01BB 01 00000000:00000000 02:000A7B2E 00000000  1000        0 30001 2 0000000000000000 20 4 30 10 -1"
+    ]},
+    "expected": {"count": 0},
+    "note": "An outgoing HTTPS connection: local port 0x9C40 = 40000 is not 22, so it does not count."
+  },
+  {
+    "id": "SC-05",
+    "input": {"text": [
+      "   4: 020011AC:A1B2 0A00000A:0016 01 00000000:00000000 02:000A7B2E 00000000  1000        0 30002 2 0000000000000000 20 4 30 10 -1"
+    ]},
+    "expected": {"count": 0},
+    "note": "An ssh client inside the laptop connecting out to port 22 elsewhere: the REMOTE port is 22, the local one is not. Only the local port counts."
+  },
+  {
+    "id": "SC-06",
+    "input": {"text": [
+      "   5: 020011AC:0016 010011AC:D2A8 06 00000000:00000000 03:00001770 00000000     0        0 0 3 0000000000000000"
+    ]},
+    "expected": {"count": 0},
+    "note": "State 06 (TIME_WAIT) is a closed session: only 01 counts."
+  },
+  {
+    "id": "SC-07",
+    "input": {"text": ""},
+    "expected": {"count": 0},
+    "note": "Nothing to read: 0."
+  },
+  {
+    "id": "SC-08",
+    "input": {"text": [
+      "cat: can't open '/proc/net/tcp6': No such file or directory",
+      "   1: 020011AC:0016 010011AC:D2A4 01 00000000:00000000 02:000A7B2E 00000000     0        0 23456 2 0000000000000000 20 4 30 10 -1"
+    ]},
+    "expected": {"count": 1},
+    "note": "A kernel without IPv6: cat's error line has no 'N:' first field and is skipped; the one ESTABLISHED port-22 line counts."
+  },
+  {
+    "id": "SC-09",
+    "input": {"port": 2222, "text": [
+      "   1: 020011AC:0016 010011AC:D2A4 01 00000000:00000000 02:000A7B2E 00000000     0        0 23456 2 0000000000000000 20 4 30 10 -1",
+      "   2: 020011AC:08AE 010011AC:D2B0 01 00000000:00000000 02:000A7B2E 00000000     0        0 23457 2 0000000000000000 20 4 30 10 -1"
+    ]},
+    "expected": {"count": 1},
+    "note": "The port is a parameter: 2222 = 0x08AE, so only line 2 counts; the port-22 line does not."
+  },
+  {
+    "id": "SC-10",
+    "input": {"text": [
+      "   1: 020011AC:0016 010011AC:D2A4 01 00000000:00000000 02:000A7B2E 00000000     0        0 23456 2 0000000000000000 20 4 30 10 -1",
+      "   2: 020011AC:0016 010011AC:D2A5 01 00000000:00000000 02:000A7B2E 00000000     0        0 23457 2 0000000000000000 20 4 30 10 -1",
+      "   3: 020011AC:0016 010011AC:D2A6 01 00000000:00000000 02:000A7B2E 00000000     0        0 23458 2 0000000000000000 20 4 30 10 -1"
+    ]},
+    "expected": {"count": 3},
+    "note": "Each line is one socket: three ESTABLISHED port-22 sockets from the same host count 3 (shown as-is; only zero vs non-zero is guaranteed)."
+  }
+]

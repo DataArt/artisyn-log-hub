@@ -1,4 +1,9 @@
 import type { AnalyticsState } from './analytics-state';
+import {
+  parseTagParams,
+  TAG_PARAM,
+  tagFiltersToParams,
+} from '../../../lib/session-tags';
 
 // Builds Partial<AnalyticsState> from the current URL search params.
 export function analyticsFromParams(
@@ -17,6 +22,12 @@ export function analyticsFromParams(
   if (ag === 'branch' || ag === 'user') out.groupBy = ag;
   else if (ag != null && ag.startsWith('attr:') && ag.length > 5)
     out.groupBy = ag as `attr:${string}`;
+  // `tag:<key>` (otel-session-tags) round-trips the same way.
+  else if (ag != null && ag.startsWith('tag:') && ag.length > 4)
+    out.groupBy = ag as `tag:${string}`;
+  // Repeatable `tag=<key>` / `tag=<key>:<value>` — shared with the session list and Reports.
+  const tags = parseTagParams(p.getAll(TAG_PARAM));
+  if (tags.length > 0) out.tags = tags;
   const abs = p.get('abs');
   if (abs) out.branches = abs.split(',').map(decodeURIComponent);
   const aus = p.get('aus');
@@ -72,6 +83,8 @@ export function applyAnalyticsToParams(
   else p.delete('abs');
   if (state.users.length > 0) p.set('aus', state.users.join(','));
   else p.delete('aus');
+  p.delete(TAG_PARAM);
+  for (const t of tagFiltersToParams(state.tags)) p.append(TAG_PARAM, t);
   if (state.view && state.view !== 'work-time') p.set('av', state.view);
   else p.delete('av');
   if (state.layout === 'horizontal') p.set('al', 'horizontal');

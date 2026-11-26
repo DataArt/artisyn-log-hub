@@ -15,7 +15,7 @@ interface Props {
   sessions: TimelineSession[];
   startDate: string;
   endDate: string;
-  groupBy: 'none' | 'branch' | 'user' | `attr:${string}`;
+  groupBy: 'none' | 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   activeMetric: ProductivityMetricKey;
   onSessionClick?: (sessionId: string) => void;
 }
@@ -27,7 +27,7 @@ interface TooltipState {
   includedSessions: TimelineSession[];
   allSessions: TimelineSession[];
   metric: ProductivityMetricDef;
-  groupBy: 'none' | 'branch' | 'user' | `attr:${string}`;
+  groupBy: 'none' | 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   bucketValue: number;
 }
 

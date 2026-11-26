@@ -642,7 +642,7 @@ export class TeamsService {
             ),
           ];
 
-          // 4c. Delete logs (cascades log_repositories and log_contexts)
+          // 4c. Delete logs (cascades log_repositories)
           await tx.delete(schema.logs).where(inArray(schema.logs.id, logIds));
           this.partCache.removeLogFolders(logIds);
 
@@ -661,6 +661,11 @@ export class TeamsService {
               (id) => !stillReferenced.has(id),
             );
             if (orphanIds.length > 0) {
+              // The sessions' tags go with them (the FK would cascade too; deleted explicitly
+              // so the cleanup does not depend on it).
+              await tx
+                .delete(schema.sessionTags)
+                .where(inArray(schema.sessionTags.sessionId, orphanIds));
               await tx
                 .delete(schema.sessions)
                 .where(inArray(schema.sessions.id, orphanIds));

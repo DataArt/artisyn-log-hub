@@ -28,23 +28,12 @@ call over a config problem.
 
 Relative to project (git repo) root, or absolute. Default: `""` → `<repo-root>/.artisyn/ai_work_dir/telemetry`.
 
-### Context labels
+### Session labels (tags)
 
-Attach arbitrary metadata to every recorded event via the `context` array:
-
-```json
-{
-  "context": [
-    { "key": "project", "value": "my-project" },
-    { "key": "env", "value": "production" },
-    { "key": "team", "value": "backend" }
-  ]
-}
-```
-
-Produces `"context": { "project": "my-project", "env": "production", "team": "backend" }` on every record. Keys are
-lowercased; a non-string `value` is coerced with `String(value)`; an entry with a missing/blank `key` is skipped
-(one `[warn]` line); duplicate keys — last entry wins. Default: `[]`; absent or empty → no `context` field emitted.
+Since hook `3.4.0` the `context` array is no longer read (an old config that still has it is ignored
+silently, no warning). Label sessions through Claude Code's `OTEL_RESOURCE_ATTRIBUTES` instead, e.g.
+`OTEL_RESOURCE_ATTRIBUTES=feature=checkout,team.name=payments` — Log Hub reads them from the OTEL data
+as session tags.
 
 ### Log upload settings
 
@@ -86,12 +75,12 @@ All events are written to `<TELEMETRY_DIR>/<session_id>.jsonl`, one JSON object 
   "timestamp": "2025-01-15T10:23:00.000Z",
   "session_id": "abc123",
   "prompt": "fix the login bug",
-  "context": { "project": "my-project" },
   "git": { "repo": "git@github.com:org/repo.git", "branch": "main", "user": "Jane Dev" }
 }
 ```
 
-`context` is omitted when no `CTX_*` vars are set. `git` is `null` outside a git repo.
+`git` is `null` outside a git repo. Hooks before `3.4.0` also sent a `context` object built from the config's
+`context` array; the server still accepts it and ignores it.
 
 **`cwd` outside a git repo (hook `2.21.0`+).** When `git` is `null`, the event also carries a top-level
 `cwd` — the absolute working folder from the hook payload (e.g. `"cwd": "/home/jane/notes"`). The server

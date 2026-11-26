@@ -16,6 +16,7 @@ import {
   type ParsedAttributeFilter,
 } from '../attribute-filter.sql';
 import { loadTreeCostRows, readTreeCost } from '../session-tree-cost.sql';
+import { tagFilterSql, type TagFilter } from '../tag-filter.sql';
 import type { TeamScope } from '../team-scope';
 
 /**
@@ -79,6 +80,8 @@ export interface AttributionBreakdownOptions {
   users: string[];
   /** Applied to Phase A. */
   attributeFilters: ParsedAttributeFilter[];
+  /** `tag=` filters (otel-session-tags), applied to Phase A like `attr=`. */
+  tagFilters?: TagFilter[];
   resolvedAttributeDefinitions: SessionAttributionAttributeDef[];
 }
 
@@ -384,6 +387,10 @@ export class AttributionBreakdownService {
         : sql``;
     const attrCondition = attributeFilterSql(opts.attributeFilters, sql`s.id`);
     const attrFilter = attrCondition ? sql`AND ${attrCondition}` : sql``;
+    const tagFilter =
+      opts.tagFilters && opts.tagFilters.length > 0
+        ? sql`AND ${tagFilterSql(opts.tagFilters, sql`s.id`)}`
+        : sql``;
 
     // Phase A — eligible sessions with their whole
     // `session_attribution.values` object — a session with no
@@ -412,6 +419,7 @@ export class AttributionBreakdownService {
         ${branchFilter}
         ${userFilter}
         ${attrFilter}
+        ${tagFilter}
     `);
 
     const phaseARows = result.rows as unknown as PhaseARow[];

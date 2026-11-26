@@ -32,6 +32,7 @@ import {
   formatSpendPeriodLabel,
   SPEND_PERIOD_NOUNS,
   SPEND_SLICE_LABELS,
+  SPEND_TAG_KEY_PARAM,
 } from './spend-format';
 import { useSpendUrlState } from './useSpendUrlState';
 
@@ -47,11 +48,18 @@ export function SpendTab({ scope }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [target, setTarget] = useState<SpendSessionsTarget | null>(null);
   const tz = browserTimeZone();
+  // otel-session-tags: the tag slice key (`tagKey` URL param); absent = no tag slice requested.
+  const tagKey = searchParams.get(SPEND_TAG_KEY_PARAM) || undefined;
 
-  // Same key shape as the Budgets section's current-period cell, so both share the cache.
+  // Same key shape as the Budgets section's current-period cell, so both share the cache
+  // (the tag key joins the key only when a tag slice is requested).
   const query = useQuery({
-    queryKey: ['spend', scopeKey, period, offset, tz],
-    queryFn: ({ signal }) => fetchSpend(scope, { period, offset, tz }, signal),
+    queryKey:
+      tagKey === undefined
+        ? ['spend', scopeKey, period, offset, tz]
+        : ['spend', scopeKey, period, offset, tz, 'tag', tagKey],
+    queryFn: ({ signal }) =>
+      fetchSpend(scope, { period, offset, tz, tagKey }, signal),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
@@ -59,7 +67,8 @@ export function SpendTab({ scope }: Props) {
 
   function openBudgetSettings() {
     const next = new URLSearchParams(searchParams);
-    for (const key of ['sp', 'so', 'ssl']) next.delete(key);
+    for (const key of ['sp', 'so', 'ssl', SPEND_TAG_KEY_PARAM])
+      next.delete(key);
     if ('repoId' in scope) {
       next.set('mtab', 'settings');
       next.set('stab', 'budgets');
@@ -200,11 +209,16 @@ export function SpendTab({ scope }: Props) {
             spendMicros={view.spendMicros}
             sessions={view.sessions}
             restricted={view.restricted}
+            tagKeys={view.tagKeys}
+            tagKey={tagKey}
             onRowClick={(kind, key, label) =>
               setTarget({
                 slice: kind,
                 key,
-                title: `${SPEND_SLICE_LABELS[kind]} · ${label}`,
+                title:
+                  kind === 'tag' && tagKey !== undefined
+                    ? `Tag ${tagKey} · ${label}`
+                    : `${SPEND_SLICE_LABELS[kind]} · ${label}`,
               })
             }
           />
@@ -227,6 +241,7 @@ export function SpendTab({ scope }: Props) {
         period={period}
         offset={offset}
         tz={tz}
+        tagKey={tagKey}
         target={target}
         onClose={() => setTarget(null)}
       />

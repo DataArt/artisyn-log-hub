@@ -5,7 +5,7 @@ description: "Core ER diagram and the cross-table rules the DDL cannot show: ses
 tags:
   - database
   - schema
-generated: { by: "ai:claude", at: "2026-11-23T18:50:00+04:00" }
+generated: { by: "ai:claude", at: "2026-11-25T18:00:00+04:00" }
 ---
 
 # Database Structure — current state
@@ -37,7 +37,7 @@ This article keeps only what the DDL does not say: how tables relate in behaviou
    │ harness_elements,       │                       │ CASCADE: team_repo_config, team_repo_tool_monitor_config,
    │ repo_code_inventory     │                       │          team_repo_recompute_queue
    │                         │
-   └── log_repositories ──► logs (session_id, log_type) U ──► log_contexts ──► contexts
+   └── log_repositories ──► logs (session_id, log_type) U
        (N:M, CASCADE)        │
                              │ session_id FK, NO cascade
                              ▼
@@ -47,7 +47,7 @@ This article keeps only what the DDL does not say: how tables relate in behaviou
    session_stats, session_costs, session_call_tokens, session_request_ids, session_tool_stats,
    session_harness_usage, session_changed_paths, session_file_stats*, session_cause_stats*,
    session_okf_access, session_okf_event, session_okf_pointer, session_tool_usage,
-   session_attribution, session_attribution_runs,
+   session_attribution, session_attribution_runs, session_tags (root only),
    session_prompt_watermark, user_favorite_sessions, logs_otel, otel_api_calls,
    otel_calls, otel_spans, otel_cost_buckets, otel_session_state, otel_reclass_queue,
    otel_session_totals, otel_agent_totals
@@ -102,8 +102,9 @@ table stores the integer `sessions.id`.
 **Soft delete** (`deleted = true`, by the owner): `SessionsService.purgeSessionChildData` deletes
 the OTEL facts (state row first, so a running writer finishes), `session_stats`,
 `session_call_tokens`, `session_costs`, `user_favorite_sessions`, `session_file_stats`,
-`session_okf_access`, `session_okf_event`, `session_okf_pointer`, `session_tool_usage`, `logs` (cascading `log_repositories` /
-`log_contexts`), orphan `contexts`, queued `upload_queue` rows, then clears the snapshot ids (and
+`session_okf_access`, `session_okf_event`, `session_okf_pointer`, `session_tool_usage`, `session_tags`
+(explicitly — the kept `sessions` row means the FK cascade never fires), `logs` (cascading `log_repositories`),
+queued `upload_queue` rows, then clears the snapshot ids (and
 resets the OKF marker) and sweeps orphan `harness_snapshots` / `okf_snapshots`. The `sessions` row stays, so a re-upload of
 a deleted session is rejected. Since 2026-11-23-session-logs-streaming (DD-28) the purge also
 deletes the former **survivors** — `logs_otel`, `otel_api_calls`, `session_request_ids`,
@@ -210,8 +211,9 @@ guarantee, which actually comes from the transcript views' `log_type` allow-list
 (`artisyn | claude | claude-subagent`). `tool-calls` logs carry the CLI tool wrapper records
 ([tool-monitoring.md](tool-monitoring.md)).
 
-`contexts` / `log_contexts` hold the distinct `context` key/value pairs of newly inserted
-`artisyn` logs; orphans are removed on session purge.
+`artisyn` logs' `prompt_start.context` (sent by hooks before `3.4.0`) is stored verbatim and no
+longer projected; the former `contexts` / `log_contexts` tables were dropped by migration 0099,
+which moved their pairs to `session_tags` — see § "session_tags".
 
 **Body revision, ingest hash and gzip copy (migration 0096).**
 
@@ -634,3 +636,17 @@ cost columns. `turn_end_advisor_runs.session_id` is a raw string with no FK, bec
 report a run before the session is ingested. Reads match it by `user_id` = session owner, and an
 orphan scheduler purges runs that never resolve. See
 [turn-end-cost-advisor.md](turn-end-cost-advisor.md).
+
+### session_tags
+
+`session_tags` holds a root session's user tags, one row per distinct `(session_id, key, value,
+source)`; `session_id` is always the **root** (sub-agents read their root's tags). `source =
+'otel'` rows are written only by the OTEL projection writer (`applyOtelLines` →
+`upsertOtelTags`, under the `otel_session_state` lock) from the resource attributes outside the
+deny-list, capped at 500 `otel` rows per root, first written wins. History is backfilled by the projection drain's light
+tag-only upgrade of v2 chunks (`upgradeTagsOnly`, no full re-projection; see `otel-tabs.md`). `source = 'config'` rows are the legacy hook `context` pairs migration 0099 copied
+from `contexts` / `log_contexts` (walked up to the root; orphan pairs dropped) before dropping
+those tables. Reads dedupe a pair stored under both sources (reported as `otel`); noise (> 10
+values of one key in a session) is derived at read time, never stored. Soft delete and the team
+cleanup delete the rows explicitly; hard delete cascades. Rules:
+[algorithms/otel-facts.md](algorithms/otel-facts.md) rule 13.

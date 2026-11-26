@@ -3,16 +3,15 @@
  * Claude Code Telemetry Hook — UserPromptSubmit
  * Appends a JSON line to <telemetryDir>/<session_id>.jsonl on every prompt.
  *
- * Context logged per event: git branch, git username, context vars from
- * .artisyn/config/log-hub.json / log-hub.local.json.
+ * Context logged per event: git repo/root/branch/user (or the working folder outside git).
  *
  * Telemetry directory resolution (first match wins):
  *   1. telemetryDir in .artisyn/config/log-hub.json / log-hub.local.json (relative to cwd or absolute)
  *   2. Default: <cwd>/.artisyn/ai_work_dir/telemetry
  *
- * Context key-value pairs (config "context" array):
- *   { "key": "<key>", "value": "<value>" } -> included as "context": { "<key>": "<value>" } in every event
- *   Example: { "key": "project", "value": "prj1" } -> "context": { "project": "prj1" }
+ * Since hook 3.4.0 the config "context" array is no longer read and `prompt_start` carries no
+ * `context` field: session tags come from OTEL_RESOURCE_ATTRIBUTES instead. An old config that still
+ * has "context" is ignored silently; the server keeps accepting `context` from older hooks.
  *
  * Configure in .claude/settings.json:
  *   UserPromptSubmit  ->  new prompt
@@ -22,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const {loadConfig, resolveTelemetryDir, getEnvContext, isCompactJson} = require('./env-context');
+const {loadConfig, resolveTelemetryDir, isCompactJson} = require('./env-context');
 const {getGitContext} = require('./git-context');
 const {writeTelemetry} = require('./write-telemetry');
 const {hookLog} = require('./hook-log');
@@ -113,7 +112,6 @@ async function refreshToolWrapConfig(cwd, sessionId, config) {
 
     const config = loadConfig(cwd);
     const telemetryDir = resolveTelemetryDir(cwd, config);
-    const context = getEnvContext(config);
     const compact = isCompactJson(config);
 
     const git = getGitContext(cwd);
@@ -122,7 +120,6 @@ async function refreshToolWrapConfig(cwd, sessionId, config) {
       timestamp: new Date().toISOString(),
       session_id: sessionId,
       prompt: input.prompt || null,
-      ...(context ? {context} : {}),
       // `root`/`worktreeRoot` are additive: `repo` falls back to `git.root` only for a repo
       // with no remote, so the absolute repo root was previously invisible to the server whenever a
       // remote existed. Change surface strips it off the transcript's absolute `file_path`s to get a

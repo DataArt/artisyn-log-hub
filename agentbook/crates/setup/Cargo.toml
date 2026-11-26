@@ -1,0 +1,17 @@
+[package]
+name = "agentbook-setup"
+description = "AgentBook installer: embeds AgentBook.exe and copies it per-user with a Start-menu shortcut"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "AgentBook-Setup"
+path = "src/main.rs"
+
+[dependencies]
+agentbook-core = { path = "../core" }
+agentbook-platform = { path = "../platform" }

@@ -106,7 +106,10 @@ export interface ReportParams {
   startDate: string;
   endDate: string;
   branches?: string[];
-  groupBy?: 'branch' | 'user';
+  /** `tag:<key>` groups by a session tag (2026-11-24 otel-session-tags). */
+  groupBy?: 'branch' | 'user' | `tag:${string}`;
+  /** Repeatable `tag=<key>` / `tag=<key>:<value>` filters. */
+  tags?: string[];
 }
 
 /** Signs `user` in and opens one report of `repoId` with the given (committed) parameters. */
@@ -122,6 +125,7 @@ export async function openReport(
   const q = new URLSearchParams({ mtab: 'reports', report, startDate: params.startDate, endDate: params.endDate });
   if (params.branches?.length) q.set('branches', params.branches.join(','));
   if (params.groupBy) q.set('groupBy', params.groupBy);
+  for (const t of params.tags ?? []) q.append('tag', t);
   await page.goto(`/#/repos/${repoId}?${q.toString()}`);
   await expect(page.getByRole('button', { name: 'Download as PDF' })).toBeEnabled({ timeout: 15_000 });
 }
@@ -131,7 +135,15 @@ export async function openAnalytics(
   page: Page,
   user: ScenarioUser,
   repoId: number,
-  state: { from: string; to: string; view?: string; layout?: 'horizontal'; groupBy?: 'branch' | 'user' },
+  state: {
+    from: string;
+    to: string;
+    view?: string;
+    layout?: 'horizontal';
+    groupBy?: 'branch' | 'user' | `tag:${string}`;
+    /** Repeatable `tag=` filters (2026-11-24 otel-session-tags). */
+    tags?: string[];
+  },
 ): Promise<void> {
   await skipNewUserNudge(page.context());
   await user.signIn(page);
@@ -139,6 +151,7 @@ export async function openAnalytics(
   if (state.view) q.set('av', state.view);
   if (state.layout) q.set('al', state.layout);
   if (state.groupBy) q.set('ag', state.groupBy);
+  for (const t of state.tags ?? []) q.append('tag', t);
   await page.goto(`/#/repos/${repoId}?${q.toString()}`);
 }
 

@@ -20,7 +20,7 @@ import { descendantSessionsCte } from './session-tree.sql';
  */
 
 /**
- * Four CTEs (no `WITH RECURSIVE`, no trailing comma) over the given root ids:
+ * Six CTEs (no `WITH RECURSIVE`, no trailing comma) over the given root ids:
  *
  * - `tree_subagent_rows(root_id, stats_session_id, cost, model_id, otel_cost)` — one row per
  *   descendant (depth > 0) that has a `claude` / `claude-subagent` transcript; an OTEL-only
@@ -35,7 +35,8 @@ import { descendantSessionsCte } from './session-tree.sql';
  *   named model (a sub-agent without a model has no tokens to price); `subagent_count`
  *   counts those with a `session_stats` row; `subagent_cost_from_otel` says whether some
  *   OTEL cost exceeded its transcript cost.
- * - `utility_costs` — {@link utilityCostsCte}.
+ * - `utility_costs` — {@link utilityCostsCte} (with its helper CTEs `tree_rids` and
+ *   `tree_has_rids` before it, so callers must not define CTEs of those names).
  * - `tree_costs(session_row_id, main_cost, main_model, subagent_cost, subagent_count,
  *   subagent_pricing_missing, subagent_unpriced_models, subagent_cost_from_otel, utility_cost,
  *   utility_pricing_missing, utility_unpriced_models)` — one row per root id.
@@ -45,7 +46,10 @@ import { descendantSessionsCte } from './session-tree.sql';
  * Requires `descendantSessionsCte(rootIdsArray)` earlier in the same `WITH RECURSIVE`.
  */
 export function treeCostCtes(rootIdsArray: SQL): SQL {
-  return sql`tree_subagent_rows AS (
+  // MATERIALIZED: `tree_subagent_costs` references `otel_cost` six times; inlined, Postgres
+  // re-evaluated the Claude Code version check (a regexp) in every copy, per row (~0.8 s of the
+  // sessions list on a Raspberry Pi, 2026-11-25). Materialized, each sub-agent row computes it once.
+  return sql`tree_subagent_rows AS MATERIALIZED (
     SELECT
       ds.root_id,
       sub_ss.session_id AS stats_session_id,

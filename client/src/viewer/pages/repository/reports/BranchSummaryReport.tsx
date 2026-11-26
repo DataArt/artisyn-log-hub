@@ -55,10 +55,16 @@ export function BranchSummaryReport({
       startDate,
       endDate,
       params.branches,
+      params.tags,
       generation,
     ],
     queryFn: () =>
-      fetchRepositoryBranches(repoId, teamId, { startDate, endDate }),
+      fetchRepositoryBranches(
+        repoId,
+        teamId,
+        { startDate, endDate },
+        params.tags,
+      ),
   });
 
   const rows = useMemo(() => {

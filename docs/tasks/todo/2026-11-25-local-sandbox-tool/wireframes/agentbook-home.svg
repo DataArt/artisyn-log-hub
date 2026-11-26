@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="1140" viewBox="0 0 1040 1140" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+  <!-- Wireframe: AgentBook home screen - every shared folder the user added (with or without laptops), its laptops, and the Remove folder confirmation (FR-1, FR-1a, FR-2, FR-6, FR-11). Light theme. Laptop icons: the kawaii character from agentbook-laptop-icons.svg. -->
+  <defs>
+    <symbol id="lt-work" viewBox="0 0 72 48">
+      <rect x="8" y="3" width="48" height="33" rx="6" fill="#eef1fb" stroke="#3358cc" stroke-width="2.5"/>
+      <ellipse cx="24" cy="18" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <ellipse cx="40" cy="18" rx="3.2" ry="4.2" fill="#1e293b"/>
+      <circle cx="25.2" cy="16.3" r="1.3" fill="#fff"/>
+      <circle cx="41.2" cy="16.3" r="1.3" fill="#fff"/>
+      <ellipse cx="17.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <ellipse cx="46.5" cy="25.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.8"/>
+      <path d="M28.5 25 Q32 29.5 35.5 25" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>
+      <rect x="2" y="36" width="60" height="7" rx="3.5" fill="#3358cc"/>
+      <rect x="26" y="36" width="12" height="2.5" rx="1.2" fill="#c7d2fe"/>
+    </symbol>
+    <symbol id="lt-sleep" viewBox="0 0 72 48">
+      <rect x="8" y="11" width="48" height="25" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2.5"/>
+      <path d="M19.5 21 Q24 25 28.5 21" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round"/>
+      <path d="M35.5 21 Q40 25 44.5 21" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="17.5" cy="27.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.7"/>
+      <ellipse cx="46.5" cy="27.5" rx="3.6" ry="2" fill="#fda4af" opacity="0.7"/>
+      <path d="M30 29 Q32 31 34 29" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round"/>
+      <rect x="2" y="36" width="60" height="7" rx="3.5" fill="#94a3b8"/>
+      <rect x="26" y="36" width="12" height="2.5" rx="1.2" fill="#e2e8f0"/>
+      <text x="56" y="14" font-size="8" font-weight="700" fill="#818cf8">z</text>
+      <text x="62" y="8" font-size="11" font-weight="700" fill="#6366f1">Z</text>
+    </symbol>
+  </defs>
+  <rect width="1040" height="1140" fill="#ffffff"/>
+
+  <!-- Window title bar -->
+  <rect x="0" y="0" width="1040" height="32" fill="#f4f4f5"/>
+  <line x1="0" y1="32" x2="1040" y2="32" stroke="#e4e4e7"/>
+  <text x="14" y="21" fill="#52525b">AgentBook</text>
+  <text x="960" y="21" fill="#71717a">—   ☐   ✕</text>
+
+  <!-- Top bar -->
+  <line x1="0" y1="80" x2="1040" y2="80" stroke="#e4e4e7"/>
+  <circle cx="26" cy="56" r="9" fill="#3358cc"/>
+  <text x="44" y="61" font-weight="600" font-size="15" fill="#09090b">AgentBook</text>
+  <text x="130" y="61" fill="#71717a">›</text>
+  <text x="146" y="61" fill="#09090b">All folders</text>
+  <text x="960" y="61" fill="#09090b">ⓘ Help</text>
+
+  <!-- Summary + primary action -->
+  <text x="24" y="114" font-size="18" font-weight="600" fill="#09090b">Your shared folders</text>
+  <circle cx="30" cy="136" r="5" fill="#16a34a"/>
+  <text x="40" y="141" fill="#52525b">2 laptops working</text>
+  <circle cx="160" cy="136" r="5" fill="#a1a1aa"/>
+  <text x="170" y="141" fill="#52525b">3 sleeping</text>
+  <text x="250" y="141" fill="#71717a">·  4 folders</text>
+  <rect x="822" y="100" width="194" height="34" rx="6" fill="#3358cc"/>
+  <text x="840" y="122" fill="#fff" font-weight="600">📁 + Add a shared folder…</text>
+
+  <!-- ===== Folder card 1: q3-analysis ===== -->
+  <rect x="24" y="160" width="992" height="168" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <text x="44" y="188" font-size="15" font-weight="600" fill="#09090b">⇄ 📁 q3-analysis</text>
+  <text x="44" y="208" font-size="12" fill="#71717a">C:\Users\anna\Projects\q3-analysis  ·  Equipment: from the project  ·  2 repos</text>
+  <rect x="726" y="176" width="110" height="30" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="742" y="196" fill="#09090b">Open folder ›</text>
+  <rect x="846" y="176" width="110" height="30" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <use href="#lt-work" x="858" y="184" width="21" height="14"/>
+  <text x="884" y="196" fill="#09090b">+ Laptop</text>
+  <rect x="966" y="176" width="30" height="30" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="975" y="196" fill="#09090b">⋯</text>
+
+  <!-- tile: Q3 reports, Working -->
+  <rect x="44" y="224" width="300" height="84" rx="6" fill="#fff" stroke="#3358cc"/>
+  <use href="#lt-work" x="56" y="234" width="36" height="24"/>
+  <text x="100" y="250" font-weight="600" fill="#09090b">Q3 reports</text>
+  <text x="262" y="250" font-size="12" fill="#3358cc">⧉ like this</text>
+  <circle cx="104" cy="268" r="4" fill="#16a34a"/>
+  <text x="112" y="272" font-size="12" fill="#166534">Working · 2 sessions</text>
+  <rect x="270" y="258" width="64" height="20" rx="5" fill="#fff" stroke="#d4d4d8"/>
+  <text x="281" y="272" font-size="12" fill="#09090b">⏾ Sleep</text>
+  <rect x="58" y="282" width="96" height="22" rx="5" fill="#3358cc"/>
+  <text x="70" y="297" font-size="12" fill="#fff" font-weight="600">Open laptop ↗</text>
+  <text x="166" y="297" font-size="12" fill="#71717a">repo-a: feature/q3 · 3 ✎</text>
+
+  <!-- tile: Mockups, Sleeping -->
+  <rect x="358" y="224" width="300" height="84" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+  <use href="#lt-sleep" x="370" y="234" width="36" height="24"/>
+  <text x="414" y="250" font-weight="600" fill="#52525b">Mockups</text>
+  <text x="576" y="250" font-size="12" fill="#3358cc">⧉ like this</text>
+  <circle cx="418" cy="268" r="4" fill="#a1a1aa"/>
+  <text x="426" y="272" font-size="12" fill="#71717a">Sleeping · since 11:20</text>
+  <rect x="372" y="282" width="96" height="22" rx="5" fill="#3358cc"/>
+  <text x="384" y="297" font-size="12" fill="#fff" font-weight="600">Open laptop ↗</text>
+  <rect x="476" y="282" width="96" height="22" rx="5" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="484" y="297" font-size="12" fill="#92400e" font-weight="600">⏰☕ Wake up</text>
+  <text x="582" y="297" font-size="12" fill="#71717a">1 folder</text>
+
+  <!-- tile: get another -->
+  <rect x="672" y="224" width="324" height="84" rx="6" fill="#fff" stroke="#d4d4d8" stroke-dasharray="5 4"/>
+  <use href="#lt-work" x="752" y="250" width="21" height="14"/>
+  <text x="778" y="262" fill="#71717a">+ Get a laptop</text>
+  <text x="740" y="282" font-size="12" fill="#a1a1aa">one click, opens Claude Desktop</text>
+
+  <!-- ===== Folder card 2: client-portal, with the folder "⋯" menu open ===== -->
+  <rect x="24" y="344" width="992" height="168" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <text x="44" y="372" font-size="15" font-weight="600" fill="#09090b">⇄ 📁 client-portal</text>
+  <text x="44" y="392" font-size="12" fill="#71717a">D:\Work\client-portal  ·  Equipment: standard  ·  1 repo</text>
+  <rect x="726" y="360" width="110" height="30" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="742" y="380" fill="#09090b">Open folder ›</text>
+  <rect x="846" y="360" width="110" height="30" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <use href="#lt-work" x="858" y="368" width="21" height="14"/>
+  <text x="884" y="380" fill="#09090b">+ Laptop</text>
+  <rect x="966" y="360" width="30" height="30" rx="6" fill="#eef1fb" stroke="#3358cc"/>
+  <text x="975" y="380" fill="#09090b">⋯</text>
+
+  <!-- tile: Laptop 1, Working -->
+  <rect x="44" y="408" width="300" height="84" rx="6" fill="#fff" stroke="#3358cc"/>
+  <use href="#lt-work" x="56" y="418" width="36" height="24"/>
+  <text x="100" y="434" font-weight="600" fill="#09090b">Laptop 1</text>
+  <text x="262" y="434" font-size="12" fill="#3358cc">⧉ like this</text>
+  <circle cx="104" cy="452" r="4" fill="#16a34a"/>
+  <text x="112" y="456" font-size="12" fill="#166534">Working · 1 session</text>
+  <rect x="270" y="442" width="64" height="20" rx="5" fill="#fff" stroke="#d4d4d8"/>
+  <text x="281" y="456" font-size="12" fill="#09090b">⏾ Sleep</text>
+  <rect x="58" y="466" width="96" height="22" rx="5" fill="#3358cc"/>
+  <text x="70" y="481" font-size="12" fill="#fff" font-weight="600">Open laptop ↗</text>
+  <text x="166" y="481" font-size="12" fill="#71717a">main · clean</text>
+
+  <!-- tile: Bugfix login, Sleeping -->
+  <rect x="358" y="408" width="300" height="84" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+  <use href="#lt-sleep" x="370" y="418" width="36" height="24"/>
+  <text x="414" y="434" font-weight="600" fill="#52525b">Bugfix login</text>
+  <text x="576" y="434" font-size="12" fill="#3358cc">⧉ like this</text>
+  <circle cx="418" cy="452" r="4" fill="#a1a1aa"/>
+  <text x="426" y="456" font-size="12" fill="#71717a">Sleeping · yesterday</text>
+  <rect x="372" y="466" width="96" height="22" rx="5" fill="#3358cc"/>
+  <text x="384" y="481" font-size="12" fill="#fff" font-weight="600">Open laptop ↗</text>
+  <rect x="476" y="466" width="96" height="22" rx="5" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="484" y="481" font-size="12" fill="#92400e" font-weight="600">⏰☕ Wake up</text>
+  <text x="582" y="481" font-size="12" fill="#71717a">fix/login</text>
+
+  <!-- tile: get another (partly under the open menu) -->
+  <rect x="672" y="408" width="324" height="84" rx="6" fill="#fff" stroke="#d4d4d8" stroke-dasharray="5 4"/>
+  <use href="#lt-work" x="696" y="434" width="21" height="14"/>
+  <text x="722" y="446" fill="#71717a">+ Get a laptop</text>
+
+  <!-- folder "⋯" menu (drawn over card 2) -->
+  <rect x="806" y="394" width="190" height="96" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="822" y="418" fill="#09090b">🔑 Variables…</text>
+  <text x="822" y="444" fill="#09090b">Locate folder…</text>
+  <line x1="806" y1="456" x2="996" y2="456" stroke="#e4e4e7"/>
+  <text x="822" y="478" fill="#991b1b">✕ Remove folder…</text>
+
+  <!-- ===== Folder card 3: folder with no laptops (kept on the list) ===== -->
+  <rect x="24" y="528" width="992" height="96" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <text x="44" y="556" font-size="15" font-weight="600" fill="#09090b">⇄ 📁 hr-policies</text>
+  <text x="44" y="576" font-size="12" fill="#71717a">C:\Users\anna\Documents\hr-policies  ·  Equipment: standard  ·  no laptops yet</text>
+  <text x="44" y="604" font-size="12" fill="#71717a">The folder stays here until you remove it, so you can get a fresh laptop any time.</text>
+  <rect x="726" y="544" width="110" height="30" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="742" y="564" fill="#09090b">Open folder ›</text>
+  <rect x="846" y="544" width="150" height="30" rx="6" fill="#3358cc"/>
+  <use href="#lt-work" x="858" y="552" width="21" height="14"/>
+  <text x="884" y="564" fill="#fff" font-weight="600">+ Get a laptop</text>
+  <rect x="846" y="582" width="150" height="26" rx="6" fill="#fff" stroke="#fecaca"/>
+  <text x="868" y="600" font-size="12" fill="#991b1b">✕ Remove folder…</text>
+
+  <!-- ===== Folder card 4: moved/missing folder (show, don't hide) ===== -->
+  <rect x="24" y="640" width="992" height="96" rx="8" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="44" y="668" font-size="15" font-weight="600" fill="#92400e">⚠ 📁 old-budget</text>
+  <text x="44" y="688" font-size="12" fill="#92400e">E:\Archive\old-budget  ·  folder not found (moved, renamed or the drive is not connected)  ·  1 laptop sleeping</text>
+  <use href="#lt-sleep" x="44" y="698" width="30" height="20"/>
+  <text x="80" y="714" font-size="12" fill="#92400e">Budget draft — its laptop keeps what the agent installed. Point it at the new location, or remove the laptop.</text>
+  <rect x="586" y="648" width="130" height="26" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="602" y="666" fill="#09090b">Locate folder…</text>
+  <rect x="726" y="648" width="130" height="26" rx="6" fill="#fff" stroke="#fecaca"/>
+  <text x="744" y="666" fill="#991b1b">Remove laptop…</text>
+  <rect x="866" y="648" width="130" height="26" rx="6" fill="#fff" stroke="#fecaca"/>
+  <text x="880" y="666" fill="#991b1b">Remove folder…</text>
+
+  <!-- Drop hint -->
+  <rect x="24" y="752" width="992" height="44" rx="8" fill="#fafafa" stroke="#d4d4d8" stroke-dasharray="5 4"/>
+  <text x="330" y="779" fill="#71717a">Drop a folder here to give it laptops  ·  or  Add a shared folder…</text>
+
+  <!-- Status bar -->
+  <line x1="0" y1="816" x2="1040" y2="816" stroke="#e4e4e7"/>
+  <circle cx="30" cy="836" r="5" fill="#16a34a"/>
+  <text x="42" y="841" font-size="12" fill="#52525b">Docker engine: Rancher Desktop  ·  Claude Desktop 2.2560.0  ·  OpenSSH 9.5</text>
+
+  <!-- ===== STATE: Remove folder confirmation ===== -->
+  <text x="24" y="884" font-size="12" font-weight="600" fill="#71717a">STATE: "Remove folder…" on client-portal</text>
+  <rect x="200" y="900" width="640" height="196" rx="10" fill="#fff" stroke="#d4d4d8"/>
+  <text x="224" y="932" font-size="16" font-weight="600" fill="#09090b">Remove "client-portal" from AgentBook?</text>
+  <text x="224" y="958" fill="#52525b">Its 2 laptops are removed with everything the agent installed on them:</text>
+  <use href="#lt-work" x="240" y="971" width="21" height="14"/>
+  <text x="268" y="982" fill="#09090b">Laptop 1 — Working, 1 session will disconnect</text>
+  <use href="#lt-sleep" x="240" y="993" width="21" height="14"/>
+  <text x="268" y="1004" fill="#09090b">Bugfix login — Sleeping</text>
+  <text x="224" y="1034" fill="#166534">✓ The folder D:\Work\client-portal and its files stay on your computer untouched.</text>
+  <rect x="586" y="1050" width="90" height="32" rx="6" fill="#fff" stroke="#d4d4d8"/>
+  <text x="608" y="1071" fill="#09090b">Cancel</text>
+  <rect x="686" y="1050" width="134" height="32" rx="6" fill="#dc2626"/>
+  <text x="704" y="1071" fill="#fff" font-weight="600">Remove folder</text>
+
+  <text x="24" y="1124" font-size="12" fill="#71717a">Wireframe — home screen (FR-1, FR-1a, FR-2, FR-6, FR-11). One card per shared folder, with or without laptops; no laptop limit. "Remove folder…" is in the folder "⋯" menu.</text>
+</svg>

@@ -1751,24 +1751,30 @@ function buildStatements(): WorldStatement[] {
   );
   out.push(insert('log_repositories', ['log_id', 'repo_id'], logRepoRows));
 
+  // session_tags (2026-11-24 otel-session-tags), always on the ROOT session:
+  // - `config` pairs are what migration 0099 carried over from the old hook context
+  //   (jira=ARR-1 on s01, jira=ARR-2 on s04, jira=ARR-6 on the member's s06);
+  // - `otel` pairs come from OTEL resource attributes: s01 feature=checkout + team.name=Fremen,
+  //   and jira=ARR-1 again (both sources: reads report it once, as `otel`); s02 (root of s03)
+  //   carries feature=checkout AND feature=billing (a multi-value key: fans out in
+  //   `groupBy=tag:feature`); s04 feature=billing. s06 is invisible to T2's manager (the member
+  //   never acknowledged T2's disclosure), so ARR-6 proves the visible-users filter.
+  const sessionTagRows: Array<[number, number, string, string, string]> = [
+    [1, S.s01.id, 'jira', 'ARR-1', 'config'],
+    [2, S.s04.id, 'jira', 'ARR-2', 'config'],
+    [3, S.s01.id, 'feature', 'checkout', 'otel'],
+    [4, S.s01.id, 'team.name', 'Fremen', 'otel'],
+    [5, S.s01.id, 'jira', 'ARR-1', 'otel'],
+    [6, S.s02.id, 'feature', 'checkout', 'otel'],
+    [7, S.s02.id, 'feature', 'billing', 'otel'],
+    [8, S.s04.id, 'feature', 'billing', 'otel'],
+    [9, S.s06.id, 'jira', 'ARR-6', 'config'],
+  ];
   out.push(
     insert(
-      'contexts',
-      ['id', 'context_key', 'context_value'],
-      [
-        [1, 'jira', 'ARR-1'],
-        [2, 'jira', 'ARR-2'],
-      ],
-    ),
-  );
-  out.push(
-    insert(
-      'log_contexts',
-      ['log_id', 'context_id'],
-      [
-        [logIdBySession.s01.artisyn, 1],
-        [logIdBySession.s04.artisyn, 2],
-      ],
+      'session_tags',
+      ['id', 'session_id', 'key', 'value', 'source', 'created_at'],
+      sessionTagRows.map((r) => [...r, '2026-01-15T00:00:00.000Z']),
     ),
   );
 

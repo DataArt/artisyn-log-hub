@@ -1,8 +1,8 @@
 /**
  * OTEL facts writer (2026-10-30 otel-tabs-traces) — the only code that writes `otel_calls`,
  * `otel_spans`, `otel_cost_buckets`, `otel_session_totals`, `otel_agent_totals`,
- * `otel_session_state` and `otel_reclass_queue` rows
- * (`sessions.service.ts` purges them). Used by the realtime ingest route, the projection drain
+ * `otel_session_state` and `otel_reclass_queue` rows, and the `source='otel'` rows of
+ * `session_tags` (`sessions.service.ts` purges them). Used by the realtime ingest route, the projection drain
  * and the reclassification queue.
  *
  * Lock order (DD-2), the same for every writer: (realtime only) the advisory lock
@@ -28,11 +28,14 @@ import {
   extractOtelAccount,
   extractOtelCalls,
   extractOtelSpans,
+  extractOtelTags,
   maxHookVersion,
   type ExtractedOtelAccount,
   type ExtractedOtelCall,
   type ExtractedOtelSpan,
+  type ExtractedOtelTag,
 } from './otel-records';
+import { OTEL_TAG_MAX_PAIRS } from './otel-facts.constants';
 import { OTEL_SPAN_LLM_REQUEST } from './otel-span-names';
 
 /** Which channel a write comes from. */
@@ -1418,6 +1421,67 @@ function mergeOtelAccount(
   return merged;
 }
 
+/**
+ * Upserts a root's `source='otel'` tag pairs (2026-11-24 otel-session-tags, FR-2 / FR-3), inside
+ * the transaction that holds the state lock, so the chunk and realtime writers of one root are
+ * serialized and cannot race past {@link OTEL_TAG_MAX_PAIRS}. Pairs already stored are skipped
+ * (idempotent; `ON CONFLICT DO NOTHING` as the last guard); new pairs are inserted in extraction
+ * order up to the cap — first written wins, later ones are ignored. A deleted root gets nothing
+ * (checked in the INSERT itself, on top of {@link lockOtelState}'s check). Tag writes do not touch
+ * `seq`: tags are not part of the OTEL tab's `since=` delta. Returns the number of rows inserted.
+ */
+async function upsertOtelTags(
+  tx: DrizzleDb,
+  rootId: number,
+  tags: readonly ExtractedOtelTag[],
+): Promise<number> {
+  if (tags.length === 0) return 0;
+  const counted = await tx.execute(sql`
+    SELECT count(*)::int AS n
+      FROM session_tags
+     WHERE session_id = ${rootId} AND source = 'otel'
+  `);
+  const stored = Number(
+    (counted.rows as unknown as { n: number }[])[0]?.n ?? 0,
+  );
+  const room = OTEL_TAG_MAX_PAIRS - stored;
+  if (room <= 0) return 0;
+  const pairs = jsonParam(tags.map((t) => [t.key, t.value]));
+  const inserted = await tx.execute(sql`
+    INSERT INTO session_tags (session_id, key, value, source)
+    SELECT ${rootId}, p.pair->>0, p.pair->>1, 'otel'
+      FROM jsonb_array_elements(${pairs}::jsonb) WITH ORDINALITY AS p(pair, ord)
+     WHERE EXISTS (
+             SELECT 1 FROM sessions s WHERE s.id = ${rootId} AND s.deleted = false
+           )
+       AND NOT EXISTS (
+             SELECT 1 FROM session_tags t
+              WHERE t.session_id = ${rootId}
+                AND t.key = p.pair->>0
+                AND t.value = p.pair->>1
+                AND t.source = 'otel'
+           )
+     ORDER BY p.ord
+     LIMIT ${room}
+    ON CONFLICT (session_id, key, value, source) DO NOTHING
+  `);
+  return inserted.rowCount ?? 0;
+}
+
+/**
+ * The light tag-only upgrade of an already projected chunk (2026-11-24 otel-session-tags): upserts
+ * the lines' user tags for the root and nothing else — no calls, spans, buckets or `seq` change.
+ * The caller holds the root's state lock ({@link lockOtelState}) in `tx`, exactly as for
+ * {@link applyOtelLines}, so the 500-pair cap cannot be raced. Returns the rows inserted.
+ */
+export async function applyOtelTagsOnly(
+  tx: DrizzleDb,
+  rootId: number,
+  lines: readonly unknown[],
+): Promise<number> {
+  return upsertOtelTags(tx, rootId, extractOtelTags(lines));
+}
+
 /** Outcome of {@link applyOtelLines}. */
 export interface OtelApplyResult {
   /** The state's `seq` after the write (unchanged when nothing changed). */
@@ -1429,6 +1493,8 @@ export interface OtelApplyResult {
   spans: number;
   /** `spans` lines skipped by the extraction caps. */
   skippedSpans: number;
+  /** `session_tags` rows inserted (they do not count as a change: tags do not bump `seq`). */
+  tagsAdded: number;
 }
 
 /**
@@ -1439,8 +1505,9 @@ export interface OtelApplyResult {
  * `has_provisional`, `otel_hook_version` (the highest seen) and, for `source: 'realtime'`,
  * `rt_last_at = now()`, plus the account fields (`plan`, `seat_type`, `provider`,
  * `custom_base_url`, `account_event_at`) merged latest-wins by {@link mergeOtelAccount} — a
- * changed account value counts as a change. `chunk_last_at` and the `rt_*` gap fields are the callers' (DD-14,
- * DD-16, DD-17).
+ * changed account value counts as a change. It also upserts the lines' user tags into
+ * `session_tags` ({@link upsertOtelTags}; not a change, no `seq` bump). `chunk_last_at` and the
+ * `rt_*` gap fields are the callers' (DD-14, DD-16, DD-17).
  */
 export async function applyOtelLines(
   tx: DrizzleDb,
@@ -1471,6 +1538,7 @@ export async function applyOtelLines(
   const spanRes = await upsertOtelSpans(tx, rootId, spans, source, seq);
   const rolled = await recomputeSpanRollups(tx, rootId, spanRes.traceIds, seq);
   const account = mergeOtelAccount(state, extractOtelAccount(lineList));
+  const tagsAdded = await upsertOtelTags(tx, rootId, extractOtelTags(lineList));
   const changed =
     callRes.changed + callRes.bucketsChanged + spanRes.changed + rolled > 0 ||
     spanRes.traceIds.length > 0 ||
@@ -1504,6 +1572,7 @@ export async function applyOtelLines(
     calls: calls.length,
     spans: spans.length,
     skippedSpans: skipped,
+    tagsAdded,
   };
 }
 

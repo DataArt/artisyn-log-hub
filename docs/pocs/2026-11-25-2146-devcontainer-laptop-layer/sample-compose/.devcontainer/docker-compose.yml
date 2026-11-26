@@ -1,0 +1,9 @@
+services:
+  app:
+    image: debian:bookworm-slim
+    command: sleep infinity
+    volumes:
+      - ..:/workspace:cached
+  db:
+    image: alpine:3.20
+    command: sleep infinity

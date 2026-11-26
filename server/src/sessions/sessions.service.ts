@@ -5,14 +5,12 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq, inArray, isNull, lt, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { loadTreeCostRows, readTreeCost } from '../logs/session-tree-cost.sql';
 import {
-  contexts,
   deletedSessionLog,
-  logContexts,
   logs,
   logsOtel,
   otelAgentTotals,
@@ -37,6 +35,7 @@ import {
   sessionPromptWatermark,
   sessionRequestIds,
   sessionStats,
+  sessionTags,
   sessionToolStats,
   sessionToolUsage,
   sessions,
@@ -277,8 +276,8 @@ export class SessionsService {
 
   /**
    * Deletes all child data (session_stats, session_call_tokens, session_costs,
-   * user_favorite_sessions, session_file_stats, session_okf_access, session_tool_usage, logs,
-   * orphaned contexts and the DD-28 survivor tables) for the given session ids. Every
+   * user_favorite_sessions, session_file_stats, session_okf_access, session_tool_usage,
+   * session_tags, logs and the DD-28 survivor tables) for the given session ids. Every
    * `sessions`-keyed table would cascade on a hard delete of the `sessions` row, but a soft
    * delete keeps that row, so they are purged here.
    * Does NOT touch the `sessions` rows themselves or write audit log rows —
@@ -376,22 +375,17 @@ export class SessionsService {
       .delete(sessionToolUsage)
       .where(inArray(sessionToolUsage.sessionId, ids));
 
-    // d. Delete logs (cascades log_repositories and log_contexts automatically)
+    // c4. Delete session_tags — same reason as c2 (tags live on the root, which is in `ids`
+    // whenever its tree is deleted).
+    await tx.delete(sessionTags).where(inArray(sessionTags.sessionId, ids));
+
+    // d. Delete logs (cascades log_repositories automatically)
     //    Their on-disk part-cache folders go too (fire-and-forget, never throws).
     const deletedLogRows = await tx
       .delete(logs)
       .where(inArray(logs.sessionId, ids))
       .returning({ id: logs.id });
     this.partCache.removeLogFolders(deletedLogRows.map((row) => row.id));
-
-    // e. Delete orphan contexts (contexts not referenced by any log_contexts row)
-    const remainingContextIds = tx
-      .select({ contextId: logContexts.contextId })
-      .from(logContexts);
-
-    await tx
-      .delete(contexts)
-      .where(notInArray(contexts.id, remainingContextIds));
 
     // f. Delete any queued/stuck upload_queue rows for these sessions
     // — upload_queue.session_id is a plain varchar,

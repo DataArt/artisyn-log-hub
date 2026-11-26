@@ -1,5 +1,9 @@
+import { groupByTagKey } from '../../../lib/session-tags';
+
 interface Props {
   show: boolean;
+  /** The active grouping; a `tag:<key>` one gets the tag wording (otel-session-tags). */
+  groupBy?: string;
 }
 
 /**
@@ -13,17 +17,18 @@ interface Props {
  * two reports whose response shape carries no per-group count to check against, where `show`
  * is simply "grouped by an attribute at all").
  */
-export function GroupByFanOutCaveat({ show }: Props) {
+export function GroupByFanOutCaveat({ show, groupBy }: Props) {
   if (!show) return null;
+  const byTag = groupByTagKey(groupBy) !== null;
 
   return (
     <div className="mb-4 flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
       <span aria-hidden="true">⚠</span>
       <span>
-        This attribute can carry more than one value per session — a session
-        grouped by it counts in full in every matching group, so the totals
-        below can legitimately sum above the overall session count and cost
-        shown above.
+        {byTag ? 'This tag key' : 'This attribute'} can carry more than one
+        value per session — a session grouped by it counts in full in every
+        matching group, so the totals below can legitimately sum above the
+        overall session count and cost shown above.
       </span>
     </div>
   );

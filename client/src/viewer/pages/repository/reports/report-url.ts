@@ -1,4 +1,10 @@
 import type { ReportId } from './report-catalog';
+import {
+  parseTagParams,
+  TAG_PARAM,
+  tagFiltersToParams,
+  type TagFilter,
+} from '../../../lib/session-tags';
 
 export interface ReportParamsState {
   report: ReportId | null;
@@ -7,9 +13,11 @@ export interface ReportParamsState {
   // Widened to accept `attr:<key>` — parsing
   // support for that form lands in a later chunk alongside the attribute-group-by UI; this
   // type widening only keeps every consumer's own prop types compiling against it early.
-  groupBy: 'none' | 'branch' | 'user' | `attr:${string}`;
+  groupBy: 'none' | 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   branches: string[];
   users: string[];
+  /** `tag=` filters (otel-session-tags), URL `tag` (shared with Analytics and the session list). */
+  tags: TagFilter[];
 }
 
 function formatDateOnly(d: Date): string {
@@ -31,7 +39,12 @@ export function defaultDateRange(): { startDate: string; endDate: string } {
 // to grouped-by-user the first time it's opened, per its report-catalog entry).
 export function reportParamsFromSearchParams(
   p: URLSearchParams,
-  fallbackGroupBy: 'none' | 'branch' | 'user' | `attr:${string}` = 'none',
+  fallbackGroupBy:
+    | 'none'
+    | 'branch'
+    | 'user'
+    | `attr:${string}`
+    | `tag:${string}` = 'none',
 ): ReportParamsState {
   const { startDate: defaultStart, endDate: defaultEnd } = defaultDateRange();
   const groupBy = p.get('groupBy');
@@ -53,9 +66,13 @@ export function reportParamsFromSearchParams(
           // back like any other unrecognised value.
           groupBy != null && groupBy.startsWith('attr:') && groupBy.length > 5
           ? (groupBy as `attr:${string}`)
-          : fallbackGroupBy,
+          : // `tag:<key>` (otel-session-tags) round-trips the same way.
+            groupBy != null && groupBy.startsWith('tag:') && groupBy.length > 4
+            ? (groupBy as `tag:${string}`)
+            : fallbackGroupBy,
     branches: branches ? branches.split(',').map(decodeURIComponent) : [],
     users: users ? users.split(',').map(decodeURIComponent) : [],
+    tags: parseTagParams(p.getAll(TAG_PARAM)),
   };
 }
 
@@ -133,4 +150,6 @@ export function applyReportParamsToSearchParams(
   } else {
     p.delete('rusers');
   }
+  p.delete(TAG_PARAM);
+  for (const t of tagFiltersToParams(state.tags)) p.append(TAG_PARAM, t);
 }

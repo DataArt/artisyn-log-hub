@@ -14,6 +14,12 @@ import { cacheReadRatio } from '../cache-ratio.sql';
 import type { CacheThresholdSource } from '../repositories.service';
 import type { CauseStatsScope } from '../session-cause-stats-writer';
 import { descendantSessionsCte } from '../session-tree.sql';
+import {
+  parseGroupByTagKey,
+  tagFilterSql,
+  tagGroupLabels,
+  type TagFilter,
+} from '../tag-filter.sql';
 import type { TeamScope } from '../team-scope';
 
 /** Which of the two always-reported scopes an aggregate covers. */
@@ -24,7 +30,12 @@ export type CacheRatioScopeKey = 'root' | 'withDescendants';
  * to also accept `attr:<key>` — validated by the controller against the
  * repo's resolved attribute definitions via `assertKnownGroupByAttrKey()`, not by this type.
  */
-export type CacheRatioGroupBy = 'none' | 'branch' | 'user' | `attr:${string}`;
+export type CacheRatioGroupBy =
+  | 'none'
+  | 'branch'
+  | 'user'
+  | `attr:${string}`
+  | `tag:${string}`;
 
 export interface CacheRatioTokens {
   sessionCount: number;
@@ -102,6 +113,8 @@ export interface CacheReadRatioOptions {
   causeScope: CauseStatsScope;
   /** Applied to Phase A. */
   attributeFilters: ParsedAttributeFilter[];
+  /** `tag=` filters (otel-session-tags), applied to Phase A like `attr=`. */
+  tagFilters?: TagFilter[];
   /** Needed only when `groupBy` is the `attr:<key>` form (orphaned values fold into "Not determined"). */
   resolvedAttributeDefinitions: SessionAttributionAttributeDef[];
 }
@@ -164,6 +177,11 @@ export interface CacheRatioSessionRow {
     string,
     string | string[] | boolean | number | null
   > | null;
+  /**
+   * The root's distinct values of the `groupBy=tag:<key>` key (otel-session-tags), carried
+   * only for that grouping; absent / empty means the session falls into `__untagged__`.
+   */
+  tagValues?: string[];
 }
 
 // --- Raw SQL row shapes -----------------------------------------------------------------
@@ -190,6 +208,7 @@ interface PhaseARow {
     string,
     string | string[] | boolean | number | null
   > | null;
+  tag_values: string[] | null;
 }
 
 interface PhaseBRow {
@@ -462,20 +481,28 @@ export function buildGroups(
   if (groupBy === 'none') return [];
 
   const groupByAttrKey = parseGroupByAttrKey(groupBy);
+  const groupByTagKey = parseGroupByTagKey(groupBy);
 
   const byGroup = new Map<string, CacheRatioSessionRow[]>();
   for (const row of rows) {
     // Matches the `COALESCE(l.git_branch, 'no branch')` convention the branch filter uses.
     // Fan-out: a `string[]`-typed attribute's N values push this row's
     // full metric value into N buckets, not one joined bucket.
+    // `groupBy=tag:<key>` fans out the same way: one bucket per distinct value.
     const keys =
-      groupByAttrKey !== undefined
-        ? attributeGroupLabels(
-            groupByAttrKey,
-            row.attributionValues,
-            resolvedDefinitions,
-          )
-        : [groupBy === 'branch' ? (row.branch ?? 'no branch') : row.userEmail];
+      groupByTagKey !== null
+        ? tagGroupLabels(row.tagValues ?? [])
+        : groupByAttrKey !== undefined
+          ? attributeGroupLabels(
+              groupByAttrKey,
+              row.attributionValues,
+              resolvedDefinitions,
+            )
+          : [
+              groupBy === 'branch'
+                ? (row.branch ?? 'no branch')
+                : row.userEmail,
+            ];
     for (const key of keys) {
       const existing = byGroup.get(key);
       if (existing) {
@@ -563,6 +590,16 @@ export class CacheReadRatioService {
     // wouldn't, but is included here for symmetry with the pattern everywhere else.
     const attrCondition = attributeFilterSql(opts.attributeFilters, sql`s.id`);
     const attrFilter = attrCondition ? sql`AND ${attrCondition}` : sql``;
+    const tagFilter =
+      opts.tagFilters && opts.tagFilters.length > 0
+        ? sql`AND ${tagFilterSql(opts.tagFilters, sql`s.id`)}`
+        : sql``;
+    // `groupBy=tag:<key>`: the root's distinct values of that key (fetched only then).
+    const groupByTagKey = parseGroupByTagKey(opts.groupBy);
+    const tagValuesCol =
+      groupByTagKey !== null
+        ? sql`(SELECT array_agg(DISTINCT st.value ORDER BY st.value) FROM session_tags st WHERE st.session_id = s.id AND st.key = ${groupByTagKey}::text)`
+        : sql`NULL::text[]`;
 
     // Phase A — eligible root sessions with their own cache/TTL columns and their stored
     // cache cost terms (`session_costs`), plus (A2) the scoped cause row. The LEFT JOIN on session_cause_stats is
@@ -591,7 +628,8 @@ export class CacheReadRatioService {
         scs.compaction_turns                    AS compaction_turns,
         scs.file_reread_turns                   AS file_reread_turns,
         scs.unattributed_turns                  AS unattributed_turns,
-        attr_sa.values                          AS attribution_values
+        attr_sa.values                          AS attribution_values,
+        ${tagValuesCol}                        AS tag_values
       FROM sessions s
       INNER JOIN logs l ON l.session_id = s.id
       INNER JOIN log_repositories lr ON lr.log_id = l.id
@@ -616,6 +654,7 @@ export class CacheReadRatioService {
         ${branchFilter}
         ${userFilter}
         ${attrFilter}
+        ${tagFilter}
     `);
 
     const phaseARows = result.rows as unknown as PhaseARow[];
@@ -703,6 +742,7 @@ export class CacheReadRatioService {
               }
             : null,
         attributionValues: r.attribution_values ?? null,
+        tagValues: r.tag_values ?? [],
       };
     });
   }

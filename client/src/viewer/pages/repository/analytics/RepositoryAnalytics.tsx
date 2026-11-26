@@ -11,6 +11,11 @@ import {
 import type { TimelineSession } from '../../../../models/repositories';
 import { resolveSessionAttributionDefinitions } from '../../../lib/session-attribution-ui';
 import {
+  withoutGroupedTagKey,
+  type TagFilter,
+} from '../../../lib/session-tags';
+import { useScopedTagValues } from '../useScopedTagValues';
+import {
   type FilesMetricKey,
   type VisionMetricKey,
   type ProductivityMetricKey,
@@ -123,6 +128,15 @@ export function RepositoryAnalytics({
     [repoSettingsQuery.data],
   );
 
+  // FR-8 tag discovery over the selected window (otel-session-tags): the tag filter's values
+  // and the Group-by TAGS section. Budget burn takes no tag filter (its route has none).
+  const tagValuesQuery = useScopedTagValues(
+    repoId,
+    teamId,
+    startDate != null && endDate != null ? { startDate, endDate } : undefined,
+    state.view !== 'budget-burn',
+  );
+
   // Timeline query — used for both timeline and work-time views
   const timelineQuery = useQuery({
     queryKey: [
@@ -134,6 +148,7 @@ export function RepositoryAnalytics({
       state.groupBy,
       state.branches,
       state.users,
+      state.tags,
     ],
     queryFn: () =>
       fetchAnalyticsTimeline(repoId, {
@@ -143,6 +158,7 @@ export function RepositoryAnalytics({
         groupBy: state.groupBy !== 'none' ? state.groupBy : undefined,
         branches: state.branches.length > 0 ? state.branches : undefined,
         users: state.users.length > 0 ? state.users : undefined,
+        tags: state.tags,
       }),
     enabled: startDate != null,
   });
@@ -162,6 +178,7 @@ export function RepositoryAnalytics({
       state.groupBy,
       state.branches,
       state.users,
+      state.tags,
     ],
     queryFn: () =>
       fetchAnalyticsChangeSurface(repoId, {
@@ -171,6 +188,7 @@ export function RepositoryAnalytics({
         groupBy: state.groupBy !== 'none' ? state.groupBy : undefined,
         branches: state.branches.length > 0 ? state.branches : undefined,
         users: state.users.length > 0 ? state.users : undefined,
+        tags: state.tags,
       }),
     enabled: startDate != null && state.view === 'change-surface',
   });
@@ -294,7 +312,13 @@ export function RepositoryAnalytics({
       // Clear branch/user filters that conflict with grouping
       branches: value === 'branch' ? [] : state.branches,
       users: value === 'user' ? [] : state.users,
+      // The server rejects a tag key that is both grouped and filtered.
+      tags: withoutGroupedTagKey(state.tags, value),
     });
+  }
+
+  function handleTagsChange(next: TagFilter[]) {
+    mutate({ tags: next });
   }
 
   function handleViewToggle(value: string) {
@@ -358,6 +382,8 @@ export function RepositoryAnalytics({
         productivityMetric={productivityMetric}
         changeSurfaceMetric={changeSurfaceMetric}
         attributeDefinitions={attributeDefinitions}
+        tagValues={tagValuesQuery.data}
+        onTagsChange={handleTagsChange}
         onRangeToggle={handleRangeToggle}
         onCustomButtonClick={handleCustomButtonClick}
         formatCustomLabel={formatCustomLabel}

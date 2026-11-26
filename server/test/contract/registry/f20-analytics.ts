@@ -97,6 +97,80 @@ export const f20Analytics: ContractFamily = {
       },
     },
     {
+      // 2026-11-24 otel-session-tags: `tag=jira` (any value) keeps the roots holding the key —
+      // s01 and s04, not the untagged-by-jira s02.
+      id: 'F20-timeline-tag-filter',
+      route: 'GET /api/v1/repositories/:repoId/analytics/timeline',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, tag: 'jira' },
+      expect: { status: 200, minRows: 2 },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT r.session_id, ${treeCostSql('r.id')} AS total_cost
+                FROM roots r
+               WHERE EXISTS (SELECT 1 FROM session_tags st
+                              WHERE st.session_id = r.id AND st.key = 'jira')
+               ORDER BY r.start_time`,
+        args: ['@R1.id'],
+        shape: 'array',
+        fields: {
+          sessionId: 'session_id',
+          totalCost: { col: 'total_cost', as: 'numeric' },
+        },
+      },
+    },
+    {
+      // `groupBy=tag:<key>` fans out: s02 holds feature=billing AND feature=checkout, so it is
+      // one full row per value (values in order); a root without the key would be `__untagged__`.
+      id: 'F20-timeline-group-by-tag',
+      route: 'GET /api/v1/repositories/:repoId/analytics/timeline',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, groupBy: 'tag:feature' },
+      expect: { status: 200, minRows: 4 },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT r.session_id, coalesce(v.value, '__untagged__') AS grp,
+                     ${treeCostSql('r.id')} AS total_cost
+                FROM roots r
+                LEFT JOIN LATERAL (SELECT DISTINCT st.value FROM session_tags st
+                                    WHERE st.session_id = r.id AND st.key = 'feature') v ON true
+               ORDER BY r.start_time, v.value`,
+        args: ['@R1.id'],
+        shape: 'array',
+        fields: {
+          sessionId: 'session_id',
+          group: 'grp',
+          totalCost: { col: 'total_cost', as: 'numeric' },
+        },
+      },
+    },
+    {
+      // A root without the grouped key lands in `__untagged__` (s02 has no jira tag).
+      id: 'F20-timeline-group-by-tag-untagged',
+      route: 'GET /api/v1/repositories/:repoId/analytics/timeline',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, groupBy: 'tag:jira' },
+      expect: { status: 200, minRows: 3 },
+      read: {
+        sql: `SELECT * FROM (VALUES ('w1-s01-plain', 'ARR-1'), ('w1-s02-parent', '__untagged__'),
+                                    ('w1-s04-favorite', 'ARR-2')) AS g(session_id, grp)`,
+        shape: 'array',
+        fields: { sessionId: 'session_id', group: 'grp' },
+      },
+    },
+    {
+      // The same key grouped and filtered is refused, as for `attr:`.
+      id: 'F20-timeline-group-by-tag-conflict',
+      route: 'GET /api/v1/repositories/:repoId/analytics/timeline',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, groupBy: 'tag:feature', tag: 'feature:billing' },
+      expect: { status: 400 },
+    },
+    {
       // FR-6 (2026-11-03 otel-cost-attribution): Rtwins' old-CC root w1-s12 (16th) counts its
       // sub-agent at the OTEL cost (0.37 USD); the new-CC root w1-s14 (17th) keeps the
       // transcript (0.18 USD). See F17's FR-6 rows for the world.

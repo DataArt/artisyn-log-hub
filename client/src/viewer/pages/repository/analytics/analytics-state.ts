@@ -2,15 +2,19 @@
 // Split out of RepositoryAnalytics.tsx (component-size split) — no JSX here,
 // so this stays a plain .ts module rather than .tsx.
 
+import type { TagFilter } from '../../../lib/session-tags';
+
 export interface AnalyticsState {
   range: '1d' | '2d' | '3d' | '1w' | '2w' | '1m' | 'custom';
   customFrom?: string;
   customTo?: string;
   // Widened to accept `attr:<key>` — grouping by a
   // resolved session attribution definition, alongside the existing branch/user options.
-  groupBy: 'none' | 'branch' | 'user' | `attr:${string}`;
+  groupBy: 'none' | 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
   branches: string[];
   users: string[];
+  /** `tag=` filters (otel-session-tags), URL `tag`, forwarded on every request. */
+  tags: TagFilter[];
   view:
     | 'work-time'
     | 'cost'
@@ -42,6 +46,7 @@ export const DEFAULT_STATE: AnalyticsState = {
   groupBy: 'none',
   branches: [],
   users: [],
+  tags: [],
   view: 'work-time',
   layout: 'vertical',
 };

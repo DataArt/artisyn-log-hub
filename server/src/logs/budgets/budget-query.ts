@@ -15,6 +15,7 @@ const SPEND_SESSIONS_SLICES: readonly SpendSessionsSlice[] = [
   'subagent',
   'skill',
   'mcp',
+  'tag',
   'day',
   'costly',
 ];
@@ -45,6 +46,18 @@ export function parseSpendPeriodQuery(raw: {
     offset = Number(raw.offset);
   }
   return { period, offset, tz: raw.tz ?? '' };
+}
+
+/**
+ * The optional `tagKey` param of `spend` / `spend/sessions` (2026-11-24 otel-session-tags):
+ * absent or empty = no tag slice. Tag keys are free-form, so nothing else is checked.
+ */
+export function parseSpendTagKey(raw: unknown): string | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  if (typeof raw !== 'string') {
+    throw new BadRequestException('tagKey must be a single tag key');
+  }
+  return raw;
 }
 
 /** The `spend/sessions` `slice` param. */

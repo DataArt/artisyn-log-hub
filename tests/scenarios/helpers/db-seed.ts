@@ -117,3 +117,20 @@ export async function seedSessionAttributionRun(db: Pool, input: SeedAttribution
   });
   return row.id;
 }
+
+/**
+ * Session tags of a root session (2026-11-24 otel-session-tags), as the OTEL projection writes
+ * them (`source = 'otel'`). For scenarios about what tags DO in analytics / reports / spend on
+ * data that has no OTEL chunk (the golden repository); how tags are extracted from OTEL lines is
+ * S-OTEL-01's business.
+ */
+export async function seedSessionTags(
+  db: Pool,
+  sessionId: string,
+  pairs: ReadonlyArray<readonly [key: string, value: string]>,
+): Promise<void> {
+  const id = await sessionRowId(db, sessionId);
+  for (const [key, value] of pairs) {
+    await insertRow(db, 'session_tags', { session_id: id, key, value, source: 'otel' });
+  }
+}

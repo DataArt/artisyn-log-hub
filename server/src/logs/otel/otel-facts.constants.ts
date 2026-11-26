@@ -29,10 +29,26 @@ export function resolveOtelProjectionIntervalMs(): number {
 export const OTEL_PROJECTION_BATCH = 50;
 
 /**
- * Current projection version stamped into `logs_otel.otel_projection_version` (DD-16). Bumping it
- * makes the startup re-mark in `initializeDatabase()` re-queue every projected chunk.
+ * Current projection version stamped into `logs_otel.otel_projection_version` (DD-16).
+ * v3 (2026-11-24 otel-session-tags): the projection also writes `session_tags` from the lines'
+ * resource attributes. A v2 chunk differs from a v3 one only by those tags, so it is NOT
+ * re-projected: the projection drain's light tag-only upgrade ({@link OTEL_PROJECTION_FULL_REQUEUE_BELOW})
+ * stamps it v3 and writes tags only for the few chunks that carry a user resource key.
  */
-export const OTEL_PROJECTION_VERSION = 2;
+export const OTEL_PROJECTION_VERSION = 3;
+
+/**
+ * Chunks stamped below this version (and failed ones, `-1`) are re-queued for a FULL re-projection
+ * by the startup re-mark in `initializeDatabase()`. Chunks stamped from this version up to
+ * {@link OTEL_PROJECTION_VERSION} − 1 only miss later additive outputs and get the light tag-only
+ * upgrade of the projection drain instead. A future version bump that changes how calls, spans or
+ * buckets are built must raise this to the new version (a full re-projection is a heavy migration:
+ * see the `migrations-data-integrity` skill).
+ */
+export const OTEL_PROJECTION_FULL_REQUEUE_BELOW = 2;
+
+/** `logs_otel` rows checked per tick by the light tag-only upgrade (most are only re-stamped in SQL). */
+export const OTEL_TAG_UPGRADE_BATCH = 200;
 
 /** Value of `logs_otel.otel_projection_version` for a chunk whose projection failed (DD-16). */
 export const OTEL_PROJECTION_FAILED = -1;
@@ -78,6 +94,57 @@ export const OTEL_SPAN_ATTRIBUTES_MAX_BYTES = 65_536;
 
 /** Prefix of the session route's `since=` / `cursor` value: `v1.<seq>` (DD-2). */
 export const OTEL_CURSOR_PREFIX = 'v1.';
+
+// ---------------------------------------------------------------------------
+// Session tags from OTEL resource attributes (2026-11-24 otel-session-tags)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resource-attribute key prefixes that are NOT user tags (FR-2): Log Hub's own, Claude Code's and
+ * the OTel semantic-convention resource namespaces. Any other key (dotted ones such as `team.name`
+ * included) is a user tag. Prefixes are matched case-sensitively, like the keys.
+ */
+export const OTEL_TAG_DENY_PREFIXES: readonly string[] = [
+  'artisyn.',
+  'service.',
+  'telemetry.',
+  'host.',
+  'os.',
+  'process.',
+  'anthropic.',
+  'wsl.',
+  'user.',
+  'session.',
+  'organization.',
+  'terminal.',
+  'deployment.',
+  'k8s.',
+  'cloud.',
+  'container.',
+  'device.',
+  'faas.',
+  'aws.',
+  'gcp.',
+  'azure.',
+];
+
+/** Longest tag key (after trimming); a longer key drops the pair (storage / index guard). */
+export const OTEL_TAG_MAX_KEY = 64;
+
+/** Longest tag value (after trimming); a longer value drops the pair, never truncated. */
+export const OTEL_TAG_MAX_VALUE = 256;
+
+/**
+ * Most `source='otel'` tag pairs one root session keeps — a runaway guard only (first written
+ * kept, later ones ignored; "show, don't limit": the session header warns when it is reached).
+ */
+export const OTEL_TAG_MAX_PAIRS = 500;
+
+/**
+ * A tag key is "noisy" in a session when the session has more than this many distinct values of
+ * it (a volatile value such as a commit SHA put into `OTEL_RESOURCE_ATTRIBUTES`). Read-time only.
+ */
+export const TAG_NOISY_VALUES_PER_SESSION = 10;
 
 // ---------------------------------------------------------------------------
 // OTEL status per session (2026-10-30 otel-shared-receiver, DD-28 – DD-32)

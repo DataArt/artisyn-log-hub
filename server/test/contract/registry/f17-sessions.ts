@@ -322,6 +322,282 @@ const IDENTITY = { 'Content-Encoding': null, Vary: 'Accept-Encoding' };
 const PART_ROUTE =
   'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts/:partSessionId/:logType';
 
+// -------------------------------------------------------------------------------------------
+// 2026-11-24 otel-session-tags. World tags (session_tags, always on the root): s01 jira=ARR-1
+// (config AND otel), feature=checkout, team.name=Fremen; s02 feature=checkout + feature=billing
+// (multi-value); s04 jira=ARR-2 (config), feature=billing; the member's s06 jira=ARR-6 (config).
+
+/**
+ * The deduped `tags` array of root `rootExpr`: each (key, value) once, `otel` when any of its
+ * rows is `otel`, sorted by key then value (byte order); `[]` when untagged.
+ */
+function tagsJsonSql(rootExpr: string): string {
+  return `coalesce((SELECT jsonb_agg(jsonb_build_object('key', p.key, 'value', p.value,
+                                                        'source', p.source)
+                                     ORDER BY p.key COLLATE "C", p.value COLLATE "C")
+                      FROM (SELECT st.key, st.value,
+                                   CASE WHEN bool_or(st.source = 'otel') THEN 'otel'
+                                        ELSE 'config' END AS source
+                              FROM session_tags st WHERE st.session_id = ${rootExpr}
+                             GROUP BY st.key, st.value) p), '[]'::jsonb)`;
+}
+
+/** Discovery map (`tags`) over the given root-id derived table: key -> [{value, sessionCount}]. */
+function tagValuesMapSql(rootsTable: string): string {
+  return `SELECT kv.key,
+                 jsonb_agg(jsonb_build_object('value', kv.value, 'sessionCount', kv.n)
+                           ORDER BY kv.n DESC, kv.value) AS entries
+            FROM (SELECT st.key, st.value, count(DISTINCT r.id) AS n
+                    FROM ${rootsTable} r
+                    JOIN session_tags st ON st.session_id = r.id
+                   GROUP BY st.key, st.value) kv
+           GROUP BY kv.key`;
+}
+
+/** Golden discovery map of R1's owner sessions (s01, s02, s04) — the T2 manager's view too. */
+const R1_OWNER_TAG_VALUES = `
+  SELECT * FROM (VALUES
+    ('feature', '[{"value":"billing","sessionCount":2},{"value":"checkout","sessionCount":2}]'::jsonb),
+    ('jira', '[{"value":"ARR-1","sessionCount":1},{"value":"ARR-2","sessionCount":1}]'::jsonb),
+    ('team.name', '[{"value":"Fremen","sessionCount":1}]'::jsonb)
+  ) AS g(key, entries)`;
+
+const TAG_ROWS: ContractCase[] = [
+  {
+    // FR-8 discovery over R1's listed roots in January.
+    id: 'F17-tag-values',
+    route: 'GET /api/v1/repositories/:repoId/session-tags/values',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: MONTH,
+    expect: { status: 200, minRows: 3, bodyMatches: { noisyKeys: [] } },
+    read: {
+      sql: tagValuesMapSql(listedRootsSql('$1')),
+      args: ['@R1.id'],
+      shape: 'map',
+      path: 'tags',
+      mapKey: 'key',
+      mapValue: { col: 'entries', as: 'json' },
+    },
+  },
+  {
+    id: 'F17-tag-values-golden',
+    route: 'GET /api/v1/repositories/:repoId/session-tags/values',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    expect: { status: 200, minRows: 3 },
+    read: {
+      sql: R1_OWNER_TAG_VALUES,
+      shape: 'map',
+      path: 'tags',
+      mapKey: 'key',
+      mapValue: { col: 'entries', as: 'json' },
+    },
+  },
+  {
+    // Branch scope: only s04 is on feature/sandworm.
+    id: 'F17-tag-values-branch',
+    route: 'GET /api/v1/repositories/:repoId/session-tags/values',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { branch: 'feature/sandworm' },
+    expect: { status: 200, minRows: 2 },
+    read: {
+      sql: `SELECT * FROM (VALUES
+              ('feature', '[{"value":"billing","sessionCount":1}]'::jsonb),
+              ('jira', '[{"value":"ARR-2","sessionCount":1}]'::jsonb)) AS g(key, entries)`,
+      shape: 'map',
+      path: 'tags',
+      mapKey: 'key',
+      mapValue: { col: 'entries', as: 'json' },
+    },
+  },
+  {
+    // Transparent T1: the member's own s06 adds jira=ARR-6.
+    id: 'F17-tag-values-team-transparent',
+    route: 'GET /api/v1/repositories/:repoId/session-tags/values',
+    actor: 'member',
+    params: { repoId: '@R1.id' },
+    query: { teamId: '@T1.id' },
+    expect: { status: 200, minRows: 3 },
+    read: {
+      sql: `SELECT * FROM (VALUES
+              ('feature', '[{"value":"billing","sessionCount":2},{"value":"checkout","sessionCount":2}]'::jsonb),
+              ('jira', '[{"value":"ARR-1","sessionCount":1},{"value":"ARR-2","sessionCount":1},{"value":"ARR-6","sessionCount":1}]'::jsonb),
+              ('team.name', '[{"value":"Fremen","sessionCount":1}]'::jsonb)
+            ) AS g(key, entries)`,
+      shape: 'map',
+      path: 'tags',
+      mapKey: 'key',
+      mapValue: { col: 'entries', as: 'json' },
+    },
+  },
+  {
+    // Restricted T2: the manager must not see another member's pairs (s06's ARR-6).
+    id: 'F17-tag-values-team-restricted-manager',
+    route: 'GET /api/v1/repositories/:repoId/session-tags/values',
+    actor: 'manager',
+    params: { repoId: '@R1.id' },
+    query: { teamId: '@T2.id' },
+    expect: { status: 200, minRows: 3 },
+    read: {
+      sql: R1_OWNER_TAG_VALUES,
+      shape: 'map',
+      path: 'tags',
+      mapKey: 'key',
+      mapValue: { col: 'entries', as: 'json' },
+    },
+  },
+  {
+    id: 'F17-tag-values-outsider',
+    route: 'GET /api/v1/repositories/:repoId/session-tags/values',
+    actor: 'outsider',
+    params: { repoId: '@R1.id' },
+    expect: { status: 403 },
+  },
+  {
+    // The admin role grants no session data.
+    id: 'F17-tag-values-admin',
+    route: 'GET /api/v1/repositories/:repoId/session-tags/values',
+    actor: 'admin',
+    params: { repoId: '@R1.id' },
+    expect: { status: 403 },
+  },
+  {
+    // Every list row carries its root's deduped tags.
+    id: 'F17-list-tags',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    expect: { status: 200, minRows: 3 },
+    read: {
+      sql: `SELECT r.session_id, ${tagsJsonSql('r.id')} AS tags
+              FROM ${listedRootsSql('$1')} r
+             ORDER BY r.end_time DESC`,
+      args: ['@R1.id'],
+      shape: 'array',
+      fields: { sessionId: 'session_id', tags: { col: 'tags', as: 'json' } },
+    },
+  },
+  {
+    // Golden for s01: jira=ARR-1 is stored under both sources and reported once, as `otel`.
+    id: 'F17-list-tags-golden',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    expect: { status: 200 },
+    read: {
+      sql: `SELECT '[{"key":"feature","value":"checkout","source":"otel"},
+                     {"key":"jira","value":"ARR-1","source":"otel"},
+                     {"key":"team.name","value":"Fremen","source":"otel"}]'::jsonb AS tags`,
+      shape: 'object',
+      path: '2',
+      fields: { tags: { col: 'tags', as: 'json' } },
+    },
+  },
+  {
+    // tag=<key>:<value>: OR within a key — feature billing → s04, s02 (newest first).
+    id: 'F17-list-tag-filter',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { tag: 'feature:billing' },
+    expect: { status: 200, minRows: 2 },
+    read: {
+      sql: `SELECT r.session_id FROM ${listedRootsSql('$1')} r
+             WHERE EXISTS (SELECT 1 FROM session_tags st
+                            WHERE st.session_id = r.id AND st.key = 'feature'
+                              AND st.value = 'billing')
+             ORDER BY r.end_time DESC`,
+      args: ['@R1.id'],
+      shape: 'array',
+      fields: { sessionId: 'session_id' },
+    },
+  },
+  {
+    // AND across keys, a bare key = any value: feature (any) AND jira=ARR-1 → s01 only.
+    id: 'F17-list-tag-filter-and',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { tag: ['feature', 'jira:ARR-1'] },
+    expect: { status: 200, minRows: 1 },
+    read: {
+      sql: `SELECT * FROM (VALUES ('w1-s01-plain')) AS g(session_id)`,
+      shape: 'array',
+      fields: { sessionId: 'session_id' },
+    },
+  },
+  {
+    id: 'F17-list-tag-filter-empty-key',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { tag: ':checkout' },
+    expect: { status: 400 },
+  },
+  {
+    // `sessions/branches` honours tag= too: jira (any) → s01 on main, s04 on feature/sandworm.
+    id: 'F17-branches-tag-filter',
+    route: 'GET /api/v1/repositories/:repoId/sessions/branches',
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { ...MONTH, tag: 'jira' },
+    expect: { status: 200, minRows: 2 },
+    read: {
+      sql: `SELECT r.git_branch, count(*) AS session_count
+              FROM ${listedRootsSql('$1')} r
+             WHERE EXISTS (SELECT 1 FROM session_tags st
+                            WHERE st.session_id = r.id AND st.key = 'jira')
+             GROUP BY r.git_branch`,
+      args: ['@R1.id'],
+      shape: 'array',
+      sortBy: 'branch',
+      fields: {
+        branch: 'git_branch',
+        sessionCount: { col: 'session_count', as: 'number' },
+      },
+    },
+  },
+  {
+    // The session detail carries the root's tags and the FR-10 verdict (s02: two values of
+    // `feature`, far below the noisy threshold, no OTEL pair limit reached).
+    id: 'F17-session-logs-tags',
+    route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs',
+    actor: 'owner',
+    params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+    expect: { status: 200 },
+    read: {
+      sql: `SELECT ${tagsJsonSql('$1')} AS tags,
+                   '{"noisyKeys":[],"atLimit":false}'::jsonb AS tag_noise`,
+      args: ['@s02.id'],
+      shape: 'object',
+      fields: {
+        tags: { col: 'tags', as: 'json' },
+        tagNoise: { col: 'tag_noise', as: 'json' },
+      },
+    },
+  },
+  {
+    // The parts manifest carries the same tags.
+    id: 'F17-session-log-parts-tags',
+    route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/parts',
+    actor: 'owner',
+    params: { repoId: '@R1.id', sessionId: '@s04.sessionId' },
+    expect: { status: 200 },
+    read: {
+      sql: `SELECT ${tagsJsonSql('$1')} AS tags,
+                   '{"noisyKeys":[],"atLimit":false}'::jsonb AS tag_noise`,
+      args: ['@s04.id'],
+      shape: 'object',
+      fields: {
+        tags: { col: 'tags', as: 'json' },
+        tagNoise: { col: 'tag_noise', as: 'json' },
+      },
+    },
+  },
+];
+
 export const f17Sessions: ContractFamily = {
   id: 'F17',
   name: 'sessions',
@@ -377,7 +653,8 @@ export const f17Sessions: ContractFamily = {
                                                 'finishedAt', ${isoSql('ar.finished_at')},
                                                 'failureReason', ar.failure_reason)
                         FROM session_attribution_runs ar WHERE ar.session_id = r.id
-                       ORDER BY ar.finished_at DESC LIMIT 1) AS last_run
+                       ORDER BY ar.finished_at DESC LIMIT 1) AS last_run,
+                     ${tagsJsonSql('r.id')} AS tags
                 FROM ${listedRootsSql('$1')} r
                 JOIN users u ON u.id = r.user_id
                 LEFT JOIN session_stats ss ON ss.session_id = r.id
@@ -402,6 +679,7 @@ export const f17Sessions: ContractFamily = {
           claudeVersion: 'claude_version',
           attribution: { col: 'attribution', as: 'json' },
           lastRun: { col: 'last_run', as: 'json' },
+          tags: { col: 'tags', as: 'json' },
         },
         // costBreakdown has its own row; hasCostDiscrepancy needs OTEL cost, which the world
         // has none of.
@@ -685,19 +963,19 @@ export const f17Sessions: ContractFamily = {
       actor: 'owner',
       params: { repoId: '@R1.id', sessionId: '@s01.sessionId' },
       expect: { status: 200, minRows: 1 },
+      // 2026-11-24 otel-session-tags: the root's `session_tags`, each pair once (s01 holds
+      // jira=ARR-1 under both sources), sorted by key then value.
       read: {
-        sql: `SELECT DISTINCT c.context_key, c.context_value
-                FROM contexts c
-                JOIN log_contexts lc ON lc.context_id = c.id
-                JOIN logs l ON l.id = lc.log_id
-               WHERE l.session_id = $1`,
+        sql: `SELECT DISTINCT st.key, st.value FROM session_tags st
+               WHERE st.session_id = $1
+               ORDER BY st.key, st.value`,
         args: ['@s01.id'],
         shape: 'array',
-        sortBy: 'value',
-        fields: { key: 'context_key', value: 'context_value' },
+        fields: { key: 'key', value: 'value' },
         strict: true,
       },
     },
+    ...TAG_ROWS,
     {
       id: 'F17-session-contexts-outsider',
       route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/contexts',
@@ -984,6 +1262,9 @@ export const f17Sessions: ContractFamily = {
           'derivedLagging',
           'liveness',
           'serverTime',
+          // Compared by F17-session-log-parts-tags.
+          'tags',
+          'tagNoise',
         ],
         strict: true,
       },

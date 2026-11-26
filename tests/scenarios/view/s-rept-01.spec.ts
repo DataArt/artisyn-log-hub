@@ -37,6 +37,7 @@ import { uploadOkfSessionTree } from '../helpers/okf';
 import { ownRepoId, rangeAround } from '../helpers/prompt-session';
 import { usd4 } from '../helpers/session-view';
 import { downloadPdfText, kpiRowValues, kpiTile, openReport, repoGet, reportSection, uploadRepoGold } from '../helpers/reports';
+import { seedSessionTags } from '../helpers/db-seed';
 
 test.use({ timezoneId: 'UTC' });
 
@@ -208,6 +209,33 @@ test('@S-REPT-01 executive summary: totals, filters, period, PDF @mode-a @mode-c
     await expect(kpiTile(page, 'Total Sessions')).toContainText('0');
     await expect(reportSection(page, 'Top 5 Most Expensive Sessions').getByText('No sessions in the selected period.')).toBeVisible();
     await expect(page.locator('body')).not.toContainText('NaN');
+  });
+
+  await test.step('7b. AC-6, AC-7a (2026-11-24 otel-session-tags): tag=feature:checkout limits the Executive Summary to GS-02 + GS-04 (API and page, the filter bar shows it); Session Timeline grouped by tag:feature fans GS-04 out into both its groups and shows the tag caveat', async () => {
+    // Seeded as the OTEL projection writes them: GS-04 carries two values of `feature`.
+    await seedSessionTags(db, gold.sid('gs02'), [['feature', 'checkout']]);
+    await seedSessionTags(db, gold.sid('gs04'), [
+      ['feature', 'checkout'],
+      ['feature', 'billing'],
+    ]);
+    const cost = (gold.expected.get('gs02')!.costUsd ?? 0) + (gold.expected.get('gs04')!.costUsd ?? 0);
+    const r = await repoGet<ExecutiveSummary>(owner, gold.repoId, '/reports/executive-summary', { ...gold.range, tag: 'feature:checkout' });
+    expect(r.totalSessions).toBe(2);
+    expect(r.totalCost).toBeCloseTo(cost, 6);
+    const conflict = await owner.api.get(`/api/v1/repositories/${gold.repoId}/reports/cache-read-ratio`, {
+      params: { ...gold.range, groupBy: 'tag:feature', tag: 'feature' },
+    });
+    expect(conflict.status()).toBe(400);
+
+    // A fresh document: a hash-only change keeps the SPA's cached (pre-seed) tag discovery.
+    await page.goto('about:blank');
+    await openReport(page, owner, gold.repoId, 'executive-summary', { startDate: from, endDate: to, tags: ['feature:checkout'] });
+    await expect(page.getByTestId('tag-filter-trigger')).toContainText('Tags:');
+    await expect(kpiTile(page, 'Total AI Cost')).toContainText(usd4(cost));
+    await expect(kpiTile(page, 'Total Sessions')).toContainText('2');
+
+    await openReport(page, owner, gold.repoId, 'session-timeline', { startDate: from, endDate: to, groupBy: 'tag:feature' });
+    await expect(page.getByText('This tag key can carry more than one value per session').first()).toBeVisible();
   });
 
   // ── Repo OKF tab: summary line and hot files (2026-11-21) ─────────────────────────────────

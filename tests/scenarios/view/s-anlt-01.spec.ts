@@ -26,6 +26,7 @@
 //   - tests/e2e/usage-analytics.spec.ts (timeline part)
 import { test, expect } from '../fixtures';
 import { openAnalytics, openReport, repoGet, uploadRepoGold, kpiRowValues } from '../helpers/reports';
+import { seedSessionTags } from '../helpers/db-seed';
 
 test.use({ timezoneId: 'UTC' });
 
@@ -195,5 +196,54 @@ test('@S-ANLT-01 analytics: timeline, cost, work time on the golden repository @
     expect(rows).toEqual([]);
     await openAnalytics(page, owner, gold.repoId, { from: '2020-01-01', to: '2020-01-02', view: 'cost' });
     await expect(page.getByText('no sessions', { exact: true })).toBeVisible();
+  });
+
+  // 2026-11-24 otel-session-tags (AC-6, AC-7a): tags seeded as the OTEL projection writes them —
+  // GS-02 feature=checkout, GS-04 feature=checkout AND feature=billing (multi-value), GS-01
+  // feature=billing; every other root has no `feature`.
+  const costOf = (key: string) => gold.expected.get(key)!.costUsd ?? 0;
+
+  await test.step('7. tag= filter and groupBy=tag: on timeline and work time: values limit every row; a multi-value session fans out into each of its groups; the rest is __untagged__; a grouped key cannot be filtered', async () => {
+    await seedSessionTags(db, gold.sid('gs02'), [['feature', 'checkout']]);
+    await seedSessionTags(db, gold.sid('gs04'), [
+      ['feature', 'checkout'],
+      ['feature', 'billing'],
+    ]);
+    await seedSessionTags(db, gold.sid('gs01'), [['feature', 'billing']]);
+
+    const checkout = await repoGet<TimelineRow[]>(owner, gold.repoId, '/analytics/timeline', { ...gold.range, tag: 'feature:checkout' });
+    expect(checkout.map((r) => gold.keyOf(r.sessionId)).sort()).toEqual(['gs02', 'gs04']);
+    expect(sumCost(checkout)).toBeCloseTo(costOf('gs02') + costOf('gs04'), 6);
+    const anyFeature = await repoGet<TimelineRow[]>(owner, gold.repoId, '/analytics/timeline', { ...gold.range, tag: 'feature' });
+    expect(anyFeature.map((r) => gold.keyOf(r.sessionId)).sort()).toEqual(['gs01', 'gs02', 'gs04']);
+
+    const grouped = await repoGet<TimelineRow[]>(owner, gold.repoId, '/analytics/timeline', { ...gold.range, groupBy: 'tag:feature' });
+    expect(grouped).toHaveLength(t.rootSessions + 1);
+    const keysOf = (group: string) =>
+      grouped
+        .filter((r) => r.group === group)
+        .map((r) => gold.keyOf(r.sessionId))
+        .sort();
+    expect(keysOf('checkout')).toEqual(['gs02', 'gs04']);
+    expect(keysOf('billing')).toEqual(['gs01', 'gs04']);
+    expect(keysOf('__untagged__')).toHaveLength(t.rootSessions - 3);
+    expect(new Set(grouped.map((r) => r.group))).toEqual(new Set(['checkout', 'billing', '__untagged__']));
+
+    const wt = await repoGet<WorkTimeRow[]>(owner, gold.repoId, '/analytics/work-time', { ...gold.range, groupBy: 'tag:feature' });
+    expect(new Set(wt.map((r) => r.group))).toEqual(new Set(['checkout', 'billing', '__untagged__']));
+    const conflict = await owner.api.get(`/api/v1/repositories/${gold.repoId}/analytics/timeline`, {
+      params: { ...gold.range, groupBy: 'tag:feature', tag: 'feature:billing' },
+    });
+    expect(conflict.status()).toBe(400);
+  });
+
+  await test.step('7a. UI: the URL tag= filter shows on the Analytics filter bar and narrows the Cost view (horizontal, by branch) to GS-02 + GS-04 on main', async () => {
+    await page.goto('about:blank');
+    await openAnalytics(page, owner, gold.repoId, { from, to, view: 'cost', layout: 'horizontal', groupBy: 'branch', tags: ['feature:checkout'] });
+    await expect(page.getByTestId('tag-filter-trigger')).toContainText('Tags:', { timeout: 15_000 });
+    const rows = page.getByTestId('bar-row');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('main');
+    await expect(rows.first().getByTestId('bar-value')).toHaveText(chartUsd(costOf('gs02') + costOf('gs04')));
   });
 });

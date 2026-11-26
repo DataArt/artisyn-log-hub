@@ -1,0 +1,16 @@
+{
+  "name": "artisyn-agentbook",
+  "version": "0.1.0",
+  "description": "AgentBook: orchestration scripts for the Rust desktop tool (separate product, not part of Log Hub's build)",
+  "author": "Denis Tsyplakov",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:macos": "node scripts/build-macos.mjs",
+    "lint": "cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && node scripts/license-check.mjs && node scripts/platform-check.mjs",
+    "test:algo": "cargo test -p agentbook-core --test algo --locked",
+    "test:scenarios": "node scripts/scenarios.mjs"
+  }
+}

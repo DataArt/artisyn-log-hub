@@ -7,6 +7,7 @@ import type {
 } from '../../../../models/repositories';
 import { fetchRepositoryBranches, getRepoSettings } from '../../../api';
 import { resolveSessionAttributionDefinitions } from '../../../lib/session-attribution-ui';
+import { noisyKeyHint } from '../../../lib/session-tags';
 import {
   didRefreshJustFail,
   useSessionListRefreshing,
@@ -23,8 +24,19 @@ import { AttributeFilterPopover } from './AttributeFilterPopover';
 import { BranchSection } from './BranchSection';
 import { DateSection, groupSessionsByDate } from './DateSection';
 import { UserSection, groupSessionsByUser } from './UserSection';
+import { TagSection } from './TagSection';
+import {
+  groupSessionsByTag,
+  isTagViewMode,
+  tagViewMode,
+  tagViewModeKey,
+  type TagViewMode,
+} from './tag-view-mode';
+import { useSessionTagFilterParam } from './useSessionTagFilterParam';
+import { useSessionTagValues } from '../useSessionTagValues';
 
-export type ViewMode = 'branch' | 'date' | 'user' | 'plain';
+/** `tag:<key>` = "By tag: <key>" grouping (2026-11-24 otel-session-tags, FR-6). */
+export type ViewMode = 'branch' | 'date' | 'user' | 'plain' | TagViewMode;
 
 export interface SessionListPanelProps {
   sessions: RepositorySession[] | undefined;
@@ -92,6 +104,36 @@ export function SessionListPanel({
   const [attributeFilter, setAttributeFilter] =
     useState<AttributeFilterSelection | null>(null);
 
+  // Session tags (otel-session-tags, FR-6): the filter lives in the URL `tag=` param and is
+  // applied client-side over each row's `tags`, like the attribute filter above. The pickers
+  // and the "By tag" options list only the keys of the view's tag discovery (FR-8).
+  const { tagFilters, setTagFilters } = useSessionTagFilterParam();
+  const { data: tagValues } = useSessionTagValues(
+    repoId,
+    teamId,
+    filterByUserEmail,
+  );
+  const groupedTagKey = tagViewModeKey(viewMode);
+  const tagKeys = useMemo(() => {
+    const keys = Object.keys(tagValues?.tags ?? {}).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    // A remembered "By tag" key no longer in scope still needs its option, or the select blanks.
+    if (groupedTagKey !== null && !keys.includes(groupedTagKey)) {
+      keys.push(groupedTagKey);
+    }
+    return keys;
+  }, [tagValues, groupedTagKey]);
+  const noisyTagKeys = useMemo(
+    () => new Set(tagValues?.noisyKeys ?? []),
+    [tagValues],
+  );
+  // Rows show the filtered keys' values as chips; in "By tag" mode, the grouped key's.
+  const rowTagChipKeys = useMemo(
+    () => tagFilters.map((f) => f.key),
+    [tagFilters],
+  );
+
   const [refreshErrorMsg, setRefreshErrorMsg] = useState<string | null>(null);
   const prevErrorRef = useRef<unknown>(null);
   const prevBranchesErrorRef = useRef<unknown>(null);
@@ -126,13 +168,28 @@ export function SessionListPanel({
         filterByUserEmail,
         hideHookSessions,
         attributeFilter,
+        tagFilters,
       }),
-    [sessions, filterByUserEmail, hideHookSessions, attributeFilter],
+    [
+      sessions,
+      filterByUserEmail,
+      hideHookSessions,
+      attributeFilter,
+      tagFilters,
+    ],
   );
 
   const thresholds = useMemo(
     () => computeCostThresholds(displayedSessions ?? []),
     [displayedSessions],
+  );
+
+  const tagGroups = useMemo(
+    () =>
+      groupedTagKey !== null
+        ? groupSessionsByTag(displayedSessions, groupedTagKey)
+        : [],
+    [groupedTagKey, displayedSessions],
   );
 
   const dateGroups = useMemo(
@@ -153,10 +210,11 @@ export function SessionListPanel({
             filterVisibleSessions(sessions, {
               hideHookSessions,
               attributeFilter,
+              tagFilters,
             }),
           )
         : [],
-    [viewMode, sessions, hideHookSessions, attributeFilter],
+    [viewMode, sessions, hideHookSessions, attributeFilter, tagFilters],
   );
 
   // What the "my sessions only" default is currently withholding, so the list can say so rather
@@ -177,12 +235,26 @@ export function SessionListPanel({
             filterByUserEmail,
             hideHookSessions,
             attributeFilter,
+            tagFilters,
           }),
-    [viewMode, sessions, filterByUserEmail, hideHookSessions, attributeFilter],
+    [
+      viewMode,
+      sessions,
+      filterByUserEmail,
+      hideHookSessions,
+      attributeFilter,
+      tagFilters,
+    ],
   );
 
   function handleModeChange(v: string) {
-    if (v === 'branch' || v === 'date' || v === 'user' || v === 'plain') {
+    if (
+      v === 'branch' ||
+      v === 'date' ||
+      v === 'user' ||
+      v === 'plain' ||
+      isTagViewMode(v)
+    ) {
       onViewModeChange(v);
     }
   }
@@ -207,16 +279,30 @@ export function SessionListPanel({
           <option value="date">By date</option>
           <option value="user">By user</option>
           <option value="plain">Plain list</option>
+          {tagKeys.length > 0 && (
+            <optgroup label="By tag">
+              {tagKeys.map((key) => (
+                <option
+                  key={key}
+                  value={tagViewMode(key)}
+                  title={noisyTagKeys.has(key) ? noisyKeyHint(key) : undefined}
+                >
+                  {`By tag: ${key}${noisyTagKeys.has(key) ? ' ⚠ noisy' : ''}`}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
-        {attributeDefs.length > 0 && (
-          <AttributeFilterPopover
-            repoId={repoId}
-            teamId={teamId}
-            definitions={attributeDefs}
-            value={attributeFilter}
-            onChange={setAttributeFilter}
-          />
-        )}
+        <AttributeFilterPopover
+          repoId={repoId}
+          teamId={teamId}
+          definitions={attributeDefs}
+          value={attributeFilter}
+          onChange={setAttributeFilter}
+          tagValues={tagValues}
+          tagFilters={tagFilters}
+          onTagFiltersChange={setTagFilters}
+        />
       </div>
 
       <OtherUsersNotice hidden={hiddenUsers} onShowAll={onShowAllUsers} />
@@ -252,6 +338,7 @@ export function SessionListPanel({
                   onShowAllUsers={onShowAllUsers}
                   hideHookSessions={hideHookSessions}
                   attributeFilter={attributeFilter}
+                  tagFilters={tagFilters}
                   attributeDefs={attributeDefs}
                 />
               );
@@ -261,6 +348,33 @@ export function SessionListPanel({
           ) : branchesError ? (
             <p className="p-4 text-sm text-muted-foreground">
               Failed to load branches
+            </p>
+          ) : (
+            <p className="p-4 text-sm text-muted-foreground">
+              No sessions found for this repository
+            </p>
+          )}
+        </div>
+      ) : groupedTagKey !== null ? (
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          {tagGroups.length > 0 ? (
+            tagGroups.map(({ groupKey, label, sessions: group }, index) => (
+              <TagSection
+                key={groupKey}
+                tagKey={groupedTagKey}
+                label={label}
+                sessions={group}
+                isInitiallyOpen={index === 0}
+                selectedSession={selectedSession}
+                onSelect={onSelect}
+                attributeDefs={attributeDefs}
+              />
+            ))
+          ) : isLoading ? (
+            loadingIndicator
+          ) : error ? (
+            <p className="p-4 text-sm text-muted-foreground">
+              {error.message || 'Failed to load sessions'}
             </p>
           ) : (
             <p className="p-4 text-sm text-muted-foreground">
@@ -331,6 +445,7 @@ export function SessionListPanel({
                 onSelect={onSelect}
                 thresholds={thresholds}
                 attributeDefs={attributeDefs}
+                tagChipKeys={rowTagChipKeys}
               />
             ))
           ) : isLoading ? (

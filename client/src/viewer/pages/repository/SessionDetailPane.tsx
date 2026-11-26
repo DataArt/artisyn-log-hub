@@ -222,6 +222,8 @@ export function SessionDetailPane({
         sessionCost={sessionCost}
         pricing={pricing ?? null}
         sessionAttribution={logsQuery.data?.sessionAttribution ?? null}
+        tags={logsQuery.data?.tags}
+        tagNoise={logsQuery.data?.tagNoise}
       />
 
       {/* flex-wrap: on narrow panes the trailing Remove button moves to a second row instead

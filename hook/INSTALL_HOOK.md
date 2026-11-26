@@ -561,7 +561,6 @@ It is read from the hook process's environment (inherited from Claude Code), not
 | `apiKey` | _(absent)_ | string | `log-hub.local.json` only. Empty/absent → upload skipped. |
 | `telemetryDir` | `""` | string | Where JSONL event files are written; absolute or relative to repo root. Empty → `<repo-root>/.artisyn/ai_work_dir/telemetry`. |
 | `jsonCompact` | `false` | boolean | `true` writes each record as plain `JSON.stringify` output; `false` adds a space after every `:`/`,`. Either way one record per line. |
-| `context` | `[]` | array of `{key, value}` | Arbitrary metadata attached to every event, e.g. `[{"key":"project","value":"my-project"}]` → `"context": {"project": "my-project"}`. Keys are lowercased; last entry wins on duplicates; absent/empty → no `context` field emitted. |
 | `sendLogsTimeoutMs` | `10000` | number | HTTP timeout for log upload requests. |
 | `sendLogsOnPromptEnabled` | `true` | boolean | Gates whether each `UserPromptSubmit` also spawns a detached, prompt-triggered background upload of the current session's files (in addition to the normal `Stop`-triggered upload). |
 | `sendLogsOnPromptTimeoutMs` | `60000` | number | Watchdog timeout for the prompt-triggered background upload; also drives the shared upload lock's staleness window (`2x` this value) shared with the `Stop`-triggered upload. A lock whose holder process has died on this machine is freed at once, without waiting for that window. |

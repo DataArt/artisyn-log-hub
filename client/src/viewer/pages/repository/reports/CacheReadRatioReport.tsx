@@ -12,6 +12,7 @@ import { CACHE_RATIO_SCOPE_COLORS } from '@/lib/cache-ratio-ui';
 import { fetchCacheReadRatioReport } from '../../../api';
 import { CacheReadRatioChart } from './CacheReadRatioChart';
 import { GroupByFanOutCaveat } from './GroupByFanOutCaveat';
+import { isFanOutGroupBy } from '../../../lib/session-tags';
 import { ReportDocumentHeader } from './ReportDocumentHeader';
 import { ReportKpiTable } from './ReportKpiTable';
 import { ReportDocumentShell } from './ReportDocumentShell';
@@ -142,6 +143,7 @@ export function CacheReadRatioReport({
       endDate,
       params.groupBy,
       params.branches,
+      params.tags,
       params.users,
       generation,
     ],
@@ -152,6 +154,7 @@ export function CacheReadRatioReport({
         endDate,
         groupBy: params.groupBy !== 'none' ? params.groupBy : undefined,
         branches: params.branches.length > 0 ? params.branches : undefined,
+        tags: params.tags,
         users: params.users.length > 0 ? params.users : undefined,
       }),
   });
@@ -167,7 +170,7 @@ export function CacheReadRatioReport({
     : 0;
   const showFanOutCaveat =
     data != null &&
-    params.groupBy.startsWith('attr:') &&
+    isFanOutGroupBy(params.groupBy) &&
     groupedSessionTotal > data.root.sessionCount;
 
   const { downloadError, handleDownload } = useReportPdfDownload(
@@ -199,7 +202,10 @@ export function CacheReadRatioReport({
             valueHeaders={CACHE_RATIO_VALUE_HEADERS}
           />
 
-          <GroupByFanOutCaveat show={showFanOutCaveat} />
+          <GroupByFanOutCaveat
+            show={showFanOutCaveat}
+            groupBy={params.groupBy}
+          />
 
           <section className="mb-6">
             <h2 className="text-sm font-semibold text-foreground">

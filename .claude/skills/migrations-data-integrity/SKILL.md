@@ -11,6 +11,40 @@ Try to figure out possible edge cases in data and if it can break data
 
 Do this on implementation plan stage
 
+## Heavy migrations: call them out, ask, look for a way around
+
+A migration is **heavy** when deploying it makes the server rework a large share of the existing
+data, at migration time or in the background after start. Examples:
+
+- a full-table `UPDATE` / `INSERT … SELECT` over a big table (`logs`, `logs_otel`, `otel_calls`, …);
+- bumping a version stamp that re-queues work for every row (`OTEL_PROJECTION_VERSION`, a
+  re-extraction / re-classification / backfill version) — this one is easy to miss, because the
+  migration file itself can be empty;
+- building an index or rewriting a column on a big table;
+- an irreversible drop of tables or columns that still hold data.
+
+When a plan contains one:
+
+1. **Write it down separately** — its own `### Heavy migration` subsection in the plan (and one
+   line in the chat when you present the plan), not a bullet buried in External surface → DB. Say
+   what is reworked, how many rows on a large install, and an estimate of time, CPU, memory and
+   disk on the **smallest install Log Hub supports** (a Raspberry Pi-class box: 1 GB RAM, slow SD
+   card, a memory-limited app container with several workers), not on the dev machine.
+2. **Look for a way without it first** and write down what you considered: a targeted pass that
+   touches only the rows that need the new data, reading the value lazily on read, writing it only
+   for new data and leaving history as it is, a cheaper extraction that does not redo the whole
+   pipeline. Choose the heavy path only when none of these works.
+3. **Ask the user to confirm explicitly** that the heavy migration is wanted, quoting the estimate
+   — never let it ship as a side effect of another change.
+4. If it ships: make it resumable and batched (a crash or an OOM mid-way must not lose work or
+   restart from zero), bounded in memory per batch, and logged with progress, so an operator can
+   see it is moving.
+
+Observed 2026-11-25 (`2026-11-24-otel-session-tags`): bumping `OTEL_PROJECTION_VERSION` 2 → 3 only
+to backfill session tags re-queued all 21 k OTEL chunks of a small install; on a Pi-class box that
+meant hours of 100 % Postgres CPU, a 12 s session list and one worker heap OOM, while reading only
+the resource attributes would have been enough.
+
 Once a new migration is applied to the local dev DB, follow the `db-state-update` skill: comment
 new tables / non-obvious columns with `COMMENT ON` and regenerate `docs/knowledgebase/db_state.sql`.
 

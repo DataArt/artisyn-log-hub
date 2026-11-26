@@ -14,8 +14,10 @@
 //   - the session list row shows the end time, cost, first prompt and branch, not a duration; the
 //     4-minute span is read from the session pane's Info tab (Timeline → Duration), which also
 //     shows the repository, branch and user;
-//   - `count: 3` is stored as «3» and `tags: ["a","b"]` as its JSON text «["a","b"]»
-//     (`coerceContextValue`); an empty key and a non-object context are skipped;
+//   - the hook `context` of `prompt_start` is no longer projected (2026-11-24 otel-session-tags:
+//     session tags come from OTEL resource attributes); an old hook that still sends it is
+//     ingested without error, the line is stored verbatim and no `session_tags` row appears
+//     (AC-11, step 8);
 //   - a whitespace-only `git.repo` is dropped after normalisation (`logs.service.ts`), a numeric
 //     one before it (`extractRepoUrls`).
 //
@@ -64,6 +66,10 @@ interface SessionRow {
 async function countRows(db: Pool, sql: string, params: unknown[]): Promise<number> {
   return Number((await db.query<{ n: string }>(sql, params)).rows[0].n);
 }
+
+/** `session_tags` rows of the session with string id `$1` (tags live on the root row). */
+const sessionTagCountSql = `SELECT count(*) AS n FROM session_tags st JOIN sessions s ON s.id = st.session_id
+                             WHERE s.session_id = $1`;
 
 test('@S-INGEST-02 first v2 upload: repository, branch, user, context; re-uploads add no duplicates @mode-a @mode-c', async ({
   api,
@@ -242,8 +248,7 @@ test('@S-INGEST-02 first v2 upload: repository, branch, user, context; re-upload
     expect(await ownerRepos()).toBe(1);
   });
 
-  await test.step('7. Junk: git.repo «   » and 42, context {"": "x"} and "str" → 201, no new repository, no context', async () => {
-    const contextsBefore = await countRows(db, 'SELECT count(*) AS n FROM contexts', []);
+  await test.step('7. Junk: git.repo «   » and 42, context {"": "x"} and "str" → 201, no new repository, no tag', async () => {
     const junk = [
       { event: 'prompt_start', timestamp: at('12:00:00'), session_id: sidJunk, prompt: `junk ${run}`, git: { repo: '   ', branch: 'main' }, context: { '': 'x' } },
       { event: 'prompt_start', timestamp: at('12:01:00'), session_id: sidJunk, prompt: `junk 2 ${run}`, git: { repo: 42 }, context: 'str' },
@@ -251,29 +256,24 @@ test('@S-INGEST-02 first v2 upload: repository, branch, user, context; re-upload
     await send(key.key, sidJunk, 'artisyn', ndjson(junk));
     await queueA();
     expect(await ownerRepos()).toBe(1);
-    expect(await countRows(db, 'SELECT count(*) AS n FROM contexts', [])).toBe(contextsBefore);
-    expect(
-      await countRows(
-        db,
-        `SELECT count(*) AS n FROM log_contexts lc JOIN logs l ON l.id = lc.log_id JOIN sessions s ON s.id = l.session_id
-          WHERE s.session_id = $1`,
-        [sidJunk],
-      ),
-    ).toBe(0);
+    expect(await countRows(db, sessionTagCountSql, [sidJunk])).toBe(0);
     expect(await sessionRowCount(db, sidJunk)).toBe(1);
   });
 
-  await test.step('8. Context: project=shop, lab=team-a, count «3» and tags as text', async () => {
-    const contexts = (await (await owner.api.get(`${base}/contexts`)).json()) as Array<{ key: string; value: string }>;
-    expect(contexts).toEqual(
-      expect.arrayContaining([
-        { key: 'project', value: 'shop' },
-        { key: 'lab', value: 'team-a' },
-        { key: 'count', value: '3' },
-        { key: 'tags', value: '["a","b"]' },
-      ]),
+  await test.step('8. Old hook (AC-11): the `context` of prompt_start is stored verbatim, ingests without error and projects no tag', async () => {
+    // Session tags come from OTEL resource attributes only (2026-11-24 otel-session-tags); an
+    // old hook still sends `prompt_start.context` — the line is kept as sent and ignored.
+    const body = (await storedBody(db, sidX, 'artisyn')) as Array<{ event?: string; context?: unknown }>;
+    expect(body.find((l) => l.event === 'prompt_start')?.context).toEqual({ project: 'shop', lab: 'team-a', count: 3, tags: ['a', 'b'] });
+    expect(await countRows(db, sessionTagCountSql, [sidX])).toBe(0);
+    expect(await countRows(db, 'SELECT count(*) AS n FROM upload_queue WHERE session_id = $1 AND status = $2', [sidX, 'failed'])).toBe(0);
+    expect((await owner.api.get(`${base}/contexts`)).status()).toBe(200);
+    expect(await (await owner.api.get(`${base}/contexts`)).json()).toEqual([]);
+    const row = ((await (await owner.api.get(`${base}/sessions`)).json()) as Array<SessionRow & { tags?: unknown[] }>).find(
+      (s) => s.sessionId === sidX,
     );
-    expect(contexts).toHaveLength(4);
+    expect(row?.tags).toEqual([]);
+    expect(await (await owner.api.get(`${base}/session-tags/values`)).json()).toEqual({ tags: {}, noisyKeys: [] });
   });
 
   await test.step('9. User B uploads the same repository URL with its own key → B gets its own repository; A is untouched', async () => {

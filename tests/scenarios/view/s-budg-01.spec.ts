@@ -134,6 +134,8 @@ test('@S-BUDG-01 a repository budget: settings, spend, threshold notices, burn, 
         input: 10,
         output: 5,
         attributes: { 'skill.name': 'budget-skill' },
+        // A session tag (2026-11-24 otel-session-tags): B is tagged, A is not.
+        resourceAttributes: { feature: 'budget-feature' },
       }),
     );
     await uploadOtelChunk(api, key.key, sidB, lines, { db, userId: owner.id });
@@ -175,6 +177,41 @@ test('@S-BUDG-01 a repository budget: settings, spend, threshold notices, burn, 
     return s;
   });
   const spend = view.spendMicros;
+
+  await test.step('2b. AC-7 (2026-11-24 otel-session-tags). Spend by tag: tagKeys lists `feature`; tagKey=feature adds a tag slice — B under budget-feature, A under «(untagged)», together the spend; the «Tag: feature» chip shows it and a row opens its sessions', async () => {
+    expect(view.tagKeys).toEqual(['feature']);
+    expect(view.slices.some((x) => x.kind === 'tag')).toBe(false);
+    const byTag = await getSpend(owner.api, scope, 'month', 'UTC', { tagKey: 'feature' });
+    const tagSlice = byTag.slices.find((x) => x.kind === 'tag');
+    expect(tagSlice?.tagKey).toBe('feature');
+    const rowsByKey = new Map((tagSlice?.rows ?? []).map((r) => [r.key, r]));
+    expect([...rowsByKey.keys()].sort()).toEqual(['__untagged__', 'budget-feature']);
+    expect(rowsByKey.get('budget-feature')).toMatchObject({ label: 'budget-feature', sessions: 1, micros: 2 * OTEL_COST_USD * 1e6 });
+    expect(rowsByKey.get('__untagged__')).toMatchObject({ label: '(untagged)', sessions: 1 });
+    // No session has two values, so the rows cover the period total exactly.
+    expect((tagSlice?.rows ?? []).reduce((n, r) => n + r.micros, 0)).toBe(spend);
+    const drill = await owner.api.get(
+      `/api/v1/repositories/${repoId}/spend/sessions?period=month&offset=0&tz=UTC&slice=tag&tagKey=feature&key=__untagged__`,
+    );
+    expect(drill.status()).toBe(200);
+    expect(((await drill.json()) as { sessions: Array<{ sessionId: string }> }).sessions.map((x) => x.sessionId)).toEqual([sidA]);
+
+    await openRepo(page, owner, repoId, 'mtab=spend');
+    const slices = page.getByTestId('spend-tab').getByTestId('spend-slices');
+    await slices.getByTestId('spend-slice-tag').click({ timeout: 15_000 });
+    await page.getByTestId('spend-tag-keys').getByTestId('spend-tag-key').filter({ hasText: 'feature' }).click();
+    await expect(page).toHaveURL(/tagKey=feature/);
+    await expect(slices.getByTestId('spend-slice-tag')).toHaveText(/Tag: feature/);
+    await expect(slices.getByTestId('slice-row')).toHaveCount(2);
+    await expect(slices.getByTestId('slice-row').filter({ hasText: '(untagged)' })).toHaveCount(1);
+    await expect(slices.getByTestId('spend-tag-fanout')).toHaveCount(0);
+    await slices.getByTestId('slice-row').filter({ hasText: 'budget-feature' }).click();
+    const modal = page.getByTestId('spend-sessions-modal');
+    await expect(modal.getByTestId('spend-session-row')).toHaveCount(1);
+    await expect(modal.getByTestId('spend-session-row')).toContainText(usd2(2 * OTEL_COST_USD * 1e6));
+    await page.keyboard.press('Escape');
+    await expect(modal).toHaveCount(0);
+  });
 
   await test.step('3. lower the amount so 75, 90 and 100 % are crossed in turn: one notice each, the bell counts them, the banner shows them, × survives a reload, the tray opens Spend at sp=month&so=0', async () => {
     let budget = (await listBudgets(owner.api, scope)).budgets[0];

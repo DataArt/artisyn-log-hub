@@ -1,0 +1,9 @@
+# dependencies
+node_modules/
+# runtime garbage
+*.log
+.cache/
+.env
+# generated per run
+keys/
+out/

@@ -39,6 +39,7 @@ import {
 import { fetchChangeSurfaceReport } from '../../../api';
 import { ChartResponsiveContainer } from '../../../components/ChartResponsiveContainer';
 import { GroupByFanOutCaveat } from './GroupByFanOutCaveat';
+import { isFanOutGroupBy } from '../../../lib/session-tags';
 import { ReportDocumentHeader } from './ReportDocumentHeader';
 import { ReportDocumentShell } from './ReportDocumentShell';
 import { ReportKpiTable } from './ReportKpiTable';
@@ -261,6 +262,7 @@ export function ChangeSurfaceReport({
       endDate,
       params.groupBy,
       params.branches,
+      params.tags,
       params.users,
       generation,
     ],
@@ -271,6 +273,7 @@ export function ChangeSurfaceReport({
         endDate,
         groupBy: params.groupBy !== 'none' ? params.groupBy : undefined,
         branches: params.branches.length > 0 ? params.branches : undefined,
+        tags: params.tags,
         users: params.users.length > 0 ? params.users : undefined,
       }),
   });
@@ -286,7 +289,7 @@ export function ChangeSurfaceReport({
     : 0;
   const showFanOutCaveat =
     data != null &&
-    params.groupBy.startsWith('attr:') &&
+    isFanOutGroupBy(params.groupBy) &&
     groupedSessionTotal > data.sessionsWithChanges + data.noChangeSessions;
 
   const { downloadError, handleDownload } = useReportPdfDownload(
@@ -342,7 +345,10 @@ export function ChangeSurfaceReport({
               valueHeaders={CHANGE_SURFACE_VALUE_HEADERS}
             />
 
-            <GroupByFanOutCaveat show={showFanOutCaveat} />
+            <GroupByFanOutCaveat
+              show={showFanOutCaveat}
+              groupBy={params.groupBy}
+            />
 
             <section className="mb-6">
               <h2 className="text-sm font-semibold text-foreground">

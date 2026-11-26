@@ -32,6 +32,8 @@ export interface SpendSliceRow {
 
 export interface SpendSlice {
   kind: string;
+  /** Only on a `tag` slice (2026-11-24 otel-session-tags): the key it is sliced by. */
+  tagKey?: string;
   rows: SpendSliceRow[];
 }
 
@@ -55,6 +57,8 @@ export interface SpendView {
   unpricedTrees: number;
   forecast: BudgetForecast | null;
   slices: SpendSlice[];
+  /** Session tag keys on the period's roots (2026-11-24 otel-session-tags). */
+  tagKeys: string[];
   daily: { key: string; micros: number }[];
   crossedThresholds: number[];
 }
@@ -159,8 +163,9 @@ export async function getSpend(
   scope: ScopeRef,
   period: BudgetPeriod = 'month',
   tz = 'UTC',
+  extra: Record<string, string> = {},
 ): Promise<SpendView> {
-  const res = await api.get(url(scope, '/spend', { period, offset: '0', tz }));
+  const res = await api.get(url(scope, '/spend', { period, offset: '0', tz, ...extra }));
   expect(res.status(), `spend: ${await res.text()}`).toBe(200);
   return (await res.json()) as SpendView;
 }

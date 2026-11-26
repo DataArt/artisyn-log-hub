@@ -1,0 +1,62 @@
+[
+  {
+    "id": "OV-01",
+    "input": {"output": "OpenSSH_for_Windows_9.5p1, LibreSSL 3.8.2"},
+    "expected": {"version": "9.5", "ok": true},
+    "note": "Rule 1: the Windows marker is found; 9 and 5 are read up to the 'p'. Rule 2: (9,5) >= (9,4)."
+  },
+  {
+    "id": "OV-02",
+    "input": {"output": "OpenSSH_for_Windows_9.4p1, LibreSSL 3.7.3"},
+    "expected": {"version": "9.4", "ok": true},
+    "note": "Boundary: (9,4) equals the floor, which passes (>=)."
+  },
+  {
+    "id": "OV-03",
+    "input": {"output": "OpenSSH_for_Windows_9.3p2, LibreSSL 3.7.3"},
+    "expected": {"version": "9.3", "ok": false},
+    "note": "Boundary from below: (9,3) < (9,4)."
+  },
+  {
+    "id": "OV-04",
+    "input": {"output": "OpenSSH_for_Windows_8.1p1, LibreSSL 3.0.2"},
+    "expected": {"version": "8.1", "ok": false},
+    "note": "The OpenSSH that older Windows 10/11 builds ship: major 8 < 9."
+  },
+  {
+    "id": "OV-05",
+    "input": {"output": "OpenSSH_for_Windows_9.10p1, LibreSSL 4.0.0"},
+    "expected": {"version": "9.10", "ok": true},
+    "note": "Rule 2 compares numbers: minor 10 > 4 (a string compare would put \"9.10\" below \"9.4\")."
+  },
+  {
+    "id": "OV-06",
+    "input": {"output": "OpenSSH_for_Windows_10.0p2, LibreSSL 4.0.0"},
+    "expected": {"version": "10.0", "ok": true},
+    "note": "Major 10 > 9; the minor no longer matters."
+  },
+  {
+    "id": "OV-07",
+    "input": {"output": "OpenSSH_9.6p1 Ubuntu-3ubuntu13.5, OpenSSL 3.0.13 30 Jan 2024"},
+    "expected": {"version": "9.6", "ok": true},
+    "note": "Rule 1: no Windows marker, so the plain 'OpenSSH_' marker is used (macOS / Linux form)."
+  },
+  {
+    "id": "OV-08",
+    "input": {"output": "'ssh' is not recognized as an internal or external command,\r\noperable program or batch file."},
+    "expected": {"version": null, "ok": false},
+    "note": "Rule 1: no marker at all, so no version, and no version never passes."
+  },
+  {
+    "id": "OV-09",
+    "input": {"output": "OpenSSH_for_Windows_beta"},
+    "expected": {"version": null, "ok": false},
+    "note": "Rule 1: the marker is followed by no digits."
+  },
+  {
+    "id": "OV-10",
+    "input": {"output": "OpenSSH_for_Windows_9p1"},
+    "expected": {"version": null, "ok": false},
+    "note": "Rule 1 needs '<digits>.<digits>': there is no '.' after the 9."
+  }
+]

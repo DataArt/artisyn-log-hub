@@ -1,0 +1,8 @@
+{
+  "name": "poc-devcontainer-laptop-layer",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@devcontainers/cli": "0.91.0"
+  }
+}

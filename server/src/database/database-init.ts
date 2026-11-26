@@ -7,7 +7,10 @@ import { Pool } from 'pg';
 import { AppLogger } from '../common/app-logger';
 import { isProduction } from '../common/runtime-env';
 import { TOOL_USAGE_EXTRACTOR_VERSION } from '../logs/tool-monitoring/tool-usage.constants';
-import { OTEL_PROJECTION_VERSION } from '../logs/otel/otel-facts.constants';
+import {
+  OTEL_PROJECTION_FULL_REQUEUE_BELOW,
+  OTEL_PROJECTION_VERSION,
+} from '../logs/otel/otel-facts.constants';
 import {
   loadAppliedMigrations,
   verifyAppliedMigrations,
@@ -168,13 +171,16 @@ export async function initializeDatabase(
         );
       }
 
-      // 3c. Re-queue OTEL chunks projected by an older projection version, or whose
-      //     projection failed (-1) (DD-16): NULL marks the logs_otel row as pending, and the
-      //     projection drain projects it again. Every row is projected at most once per
-      //     version, so after the drain this touches no rows. Still under the lock.
+      // 3c. Re-queue OTEL chunks projected by a version older than the last full-re-projection
+      //     version, or whose projection failed (-1) (DD-16): NULL marks the logs_otel row as
+      //     pending, and the projection drain projects it again. Chunks from
+      //     OTEL_PROJECTION_FULL_REQUEUE_BELOW up to the current version are left alone — the
+      //     drain's light tag-only upgrade handles them (2026-11-24 otel-session-tags). Every row
+      //     is re-queued at most once per version, so after the drain this touches no rows.
+      //     Still under the lock.
       const otelRequeued = await client.query(
         'UPDATE logs_otel SET otel_projection_version = NULL WHERE otel_projection_version < $1',
-        [OTEL_PROJECTION_VERSION],
+        [OTEL_PROJECTION_FULL_REQUEUE_BELOW],
       );
       if (otelRequeued.rowCount) {
         logger.log(

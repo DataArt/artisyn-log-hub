@@ -7,6 +7,7 @@
  */
 import { formatCacheReadRatio } from '@/lib/format';
 import { CACHE_RATIO_SCOPE_COLORS } from '@/lib/cache-ratio-ui';
+import { isFanOutGroupBy } from '@/lib/session-tags';
 import type { TimelineSession } from '../../../../models/repositories';
 import {
   aggregateCacheRatio,
@@ -89,10 +90,10 @@ export function CacheRatioScopeSummary({
    * but the displayed session count can double-count, so we add a
    * caveat rather than recomputing anything.
    */
-  groupBy?: 'none' | 'branch' | 'user' | `attr:${string}`;
+  groupBy?: 'none' | 'branch' | 'user' | `attr:${string}` | `tag:${string}`;
 }) {
   const pair = aggregateCacheRatio(sessions);
-  const fanOutCaveat = groupBy?.startsWith('attr:')
+  const fanOutCaveat = isFanOutGroupBy(groupBy)
     ? 'session count may double-count fanned sessions'
     : undefined;
 

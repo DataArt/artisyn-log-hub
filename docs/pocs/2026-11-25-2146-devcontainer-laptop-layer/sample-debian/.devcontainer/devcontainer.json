@@ -1,0 +1,9 @@
+// Debian devcontainer built from a Dockerfile (relative path) with an extra tool (jq).
+{
+  "name": "sample-debian",
+  "build": { "dockerfile": "Dockerfile" },
+  "containerEnv": { "JIRA_URL": "https://jira.example.invalid", "JIRA_PAT": "" },
+  "remoteEnv": { "FROM_REMOTE": "r1" },
+  "postCreateCommand": "echo postcreate >> /tmp/postcreate.ok",
+  "postStartCommand": "date >> /tmp/poststart.log"
+}

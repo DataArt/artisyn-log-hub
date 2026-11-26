@@ -29,3 +29,24 @@ dimensions:
       - Are error states handled (what happens on failure, network error, empty result)?
       - Are boundary values covered (empty list, single item, max items, concurrent requests)?
       - Are permission/auth constraints mentioned if the feature touches access control?
+
+  - key: deploy-impact
+    label: Post-deploy impact (load, memory, disk)
+    guidance: |
+      - What happens on the first start after the upgrade: does a migration, a version bump
+        (e.g. `OTEL_PROJECTION_VERSION`, a re-extraction / backfill version) or a startup job make
+        the server rework existing data? How many rows on a large install, and how long, how much
+        CPU and memory does it take on the smallest supported install (Raspberry Pi-class: 1 GB
+        RAM, slow SD card, memory-limited app container with several workers)?
+      - Is that rework really needed, or is there a cheaper path (only the affected rows, lazy on
+        read, new data only)? If it stays, is it called out explicitly and confirmed by the user
+        (see the `migrations-data-integrity` skill)?
+      - Is any background work batched, resumable after a crash or OOM, bounded in memory per
+        batch, and does it leave the UI usable (session list, analytics) while it runs?
+      - Steady-state cost: new per-request queries, per-row work on hot paths (session list,
+        ingest, OTEL receiver), N+1 reads, new indexes or tables and their growth on disk, cache
+        or queue directories that grow without a cap.
+      - Disk: does the change write new files or rows per session / per OTEL line, and is there a
+        cleanup or retention path for them?
+      - Rollback: if the deploy has to be undone, what is lost (irreversible drops, rewritten
+        data), and is a DB dump called for before the upgrade?

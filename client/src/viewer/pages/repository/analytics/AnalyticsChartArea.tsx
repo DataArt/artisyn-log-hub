@@ -79,6 +79,7 @@ export function AnalyticsChartArea({
         endDate={endDate}
         branches={state.branches}
         users={state.users}
+        tags={state.tags}
         onSessionClick={onSessionClick}
       />
     );

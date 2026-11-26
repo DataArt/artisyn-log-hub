@@ -21,6 +21,7 @@ import { ProductivityCountersView } from './ProductivityCountersView';
 import { TokenBreakdownView } from './TokenBreakdownView';
 import { ToolAnalyticsView } from './ToolAnalyticsView';
 import type { AnalyticsState } from './analytics-state';
+import type { TagFilter } from '../../../lib/session-tags';
 
 /** The `AnalyticsState['view']` values this panel owns. */
 export type UsageAnalyticsView =
@@ -50,6 +51,8 @@ interface Props {
   endDate?: string;
   branches: string[];
   users: string[];
+  /** `tag=` filters (otel-session-tags). */
+  tags: readonly TagFilter[];
   onSessionClick: (sessionId: string) => void;
 }
 
@@ -78,6 +81,7 @@ export function UsageAnalyticsPanel({
   endDate,
   branches,
   users,
+  tags,
   onSessionClick,
 }: Props) {
   const enabled = startDate != null && endDate != null;
@@ -87,9 +91,18 @@ export function UsageAnalyticsPanel({
     endDate: endDate ?? '',
     branches,
     users,
+    tags,
   };
   // One shared key prefix so switching views refetches only what that view needs.
-  const key = [repoId, teamId, startDate, endDate, branches, users] as const;
+  const key = [
+    repoId,
+    teamId,
+    startDate,
+    endDate,
+    branches,
+    users,
+    tags,
+  ] as const;
 
   const toolsQuery = useQuery({
     queryKey: ['usage-analytics-tools', ...key],

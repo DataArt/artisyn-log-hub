@@ -19,6 +19,11 @@ import type { DrizzleDb } from '../../database/database.module';
 import { selectBudgetTreeCostMicros } from '../otel-cost.sql';
 import { isValidOtelTimeZone } from '../otel/otel-classify';
 import { readTreeCost } from '../session-tree-cost.sql';
+import {
+  tagGroupLabels,
+  UNTAGGED_GROUP,
+  UNTAGGED_GROUP_LABEL,
+} from '../tag-filter.sql';
 import { maskFirstPrompt } from '../team-scope';
 import {
   computeBudgetForecast,
@@ -64,6 +69,7 @@ import {
   loadPeriodTrees,
   loadScopeBudgets,
   loadSliceParts,
+  loadTreeTags,
   resolveScopeRows,
   type PeriodTree,
   type ScopeRows,
@@ -401,6 +407,70 @@ function aggregateSlices(
   });
 }
 
+type TreeTags = Map<number, { key: string; value: string }[]>;
+
+/** Distinct tag keys over every tree, sorted (`SpendView.tagKeys`). */
+function collectTagKeys(treeTags: TreeTags): string[] {
+  const keys = new Set<string>();
+  for (const pairs of treeTags.values()) {
+    for (const p of pairs) keys.add(p.key);
+  }
+  return [...keys].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The row keys of one tree in the `tag` slice by `tagKey`: its distinct values of the key, or
+ * `[UNTAGGED_GROUP]` when it has none (fan-out, the `groupBy=tag:` rule).
+ */
+function treeTagRowKeys(
+  treeTags: TreeTags,
+  treeId: number,
+  tagKey: string,
+): string[] {
+  return tagGroupLabels(
+    (treeTags.get(treeId) ?? [])
+      .filter((p) => p.key === tagKey)
+      .map((p) => p.value),
+  );
+}
+
+/**
+ * The `tag` slice (2026-11-24 otel-session-tags): a whole-tree slice like user / repo / branch,
+ * with fan-out — a tree with several values of `tagKey` counts its full cost in each of their
+ * rows, so the rows then sum to more than the spend. Trees without the key land in the
+ * `__untagged__` row ("(untagged)"). Zero-cost trees are kept so session counts are complete.
+ * No `Not reported` row: every tree is attributed whole.
+ */
+function buildTagSlice(
+  trees: readonly PricedTree[],
+  treeTags: TreeTags,
+  tagKey: string,
+  spendMicros: number,
+): SpendSlice {
+  const rows = new Map<string, SpendSliceRow>();
+  for (const t of trees) {
+    for (const key of treeTagRowKeys(treeTags, t.id, tagKey)) {
+      const row = rows.get(key) ?? {
+        key,
+        label: key === UNTAGGED_GROUP ? UNTAGGED_GROUP_LABEL : key,
+        sessions: 0,
+        micros: 0,
+        share: 0,
+      };
+      row.sessions++;
+      row.micros += t.micros;
+      rows.set(key, row);
+    }
+  }
+  const list = [...rows.values()]
+    .map((r) => ({
+      ...r,
+      share: spendMicros > 0 ? r.micros / spendMicros : 0,
+    }))
+    .sort((a, b) => b.micros - a.micros || a.label.localeCompare(b.label));
+  return { kind: 'tag', tagKey, rows: list };
+}
+
 function emptyCostly(): SpendView['costlySessions'] {
   return { mean: 0, sigma: 0, items: [] };
 }
@@ -534,7 +604,7 @@ export class SpendService {
   async getSpendView(
     access: ScopeAccess,
     viewerId: number,
-    query: SpendQuery,
+    query: SpendQuery & { tagKey?: string },
   ): Promise<SpendView> {
     const q = this.normalizeQuery(query);
     const { budget, bounds, rows, trees } = await this.loadSpendPeriod(
@@ -543,6 +613,11 @@ export class SpendService {
       access.fullView ? undefined : [viewerId],
     );
     const spendMicros = sumMicros(trees);
+    const treeTags = await loadTreeTags(
+      this.db,
+      trees.map((t) => t.id),
+    );
+    const tagKeys = collectTagKeys(treeTags);
     const base = {
       period: q.period,
       offset: bounds.offset,
@@ -570,6 +645,7 @@ export class SpendService {
         previous: null,
         daily: [],
         slices: [],
+        tagKeys,
         costlySessions: emptyCostly(),
         crossedThresholds: over
           ? crossedThresholds(
@@ -635,7 +711,14 @@ export class SpendService {
       forecast: forecastOf(spendMicros, amount, bounds),
       previous,
       daily,
-      slices: aggregateSlices(trees, treeParts, spendMicros),
+      slices:
+        query.tagKey === undefined
+          ? aggregateSlices(trees, treeParts, spendMicros)
+          : [
+              ...aggregateSlices(trees, treeParts, spendMicros),
+              buildTagSlice(trees, treeTags, query.tagKey, spendMicros),
+            ],
+      tagKeys,
       costlySessions: {
         mean: costly.mean,
         sigma: costly.sigma,
@@ -653,21 +736,38 @@ export class SpendService {
    * `GET …/spend/sessions`: the period's root sessions behind one slice row (`slice` + row
    * `key`), one anomaly day (`slice=day`, `key=YYYY-MM-DD` / `HH`) or the costly list
    * (`slice=costly`, `key=all|2|3`), costliest first, at most `BUDGET_SESSIONS_LIMIT`.
+   * `slice=tag` needs `tagKey`; `key` is a value of it or `__untagged__` (fan-out, as the slice).
    * Full-view callers only (DD-9: 403 otherwise).
    */
   async getSpendSessions(
     access: ScopeAccess,
     viewerId: number,
-    query: SpendQuery & { slice: SpendSessionsSlice; key: string },
+    query: SpendQuery & {
+      slice: SpendSessionsSlice;
+      key: string;
+      tagKey?: string;
+    },
   ): Promise<SpendSessionsResult> {
     this.assertFullView(access);
     const q = this.normalizeQuery(query);
     const slice = query.slice;
     const key = String(query.key ?? '');
+    const tagKey = query.tagKey;
+    if (slice === 'tag' && tagKey === undefined) {
+      throw new BadRequestException('slice=tag requires tagKey');
+    }
     const { trees } = await this.loadSpendPeriod(access, q);
 
     let matched: { tree: PricedTree; level?: 2 | 3 }[];
-    if (slice === 'day') {
+    if (slice === 'tag' && tagKey !== undefined) {
+      const treeTags = await loadTreeTags(
+        this.db,
+        trees.map((t) => t.id),
+      );
+      matched = trees
+        .filter((t) => treeTagRowKeys(treeTags, t.id, tagKey).includes(key))
+        .map((tree) => ({ tree }));
+    } else if (slice === 'day') {
       matched = trees
         .filter((t) => t.bucketKey === key)
         .map((tree) => ({ tree }));
@@ -696,7 +796,7 @@ export class SpendService {
         .map((tree) => ({ tree }));
     } else {
       throw new BadRequestException(
-        'slice must be one of model, user, repo, branch, subagent, skill, mcp, day, costly',
+        'slice must be one of model, user, repo, branch, subagent, skill, mcp, tag, day, costly',
       );
     }
 

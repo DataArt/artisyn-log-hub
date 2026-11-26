@@ -42,6 +42,7 @@ export function ClaudeVersionUsageReport({
       startDate,
       endDate,
       params.branches,
+      params.tags,
       params.users,
       generation,
     ],
@@ -51,6 +52,7 @@ export function ClaudeVersionUsageReport({
         startDate,
         endDate,
         branches: params.branches.length > 0 ? params.branches : undefined,
+        tags: params.tags,
         users: params.users.length > 0 ? params.users : undefined,
       }),
   });

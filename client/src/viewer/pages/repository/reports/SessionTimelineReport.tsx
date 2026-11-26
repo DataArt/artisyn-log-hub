@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { formatCost } from '@/lib/format';
 import { fetchAnalyticsTimeline } from '../../../api';
 import { GroupByFanOutCaveat } from './GroupByFanOutCaveat';
+import { isFanOutGroupBy } from '../../../lib/session-tags';
 import { SessionCountByDayChart } from './SessionCountByDayChart';
 import { ReportDocumentHeader } from './ReportDocumentHeader';
 import { ReportKpiTable } from './ReportKpiTable';
@@ -55,6 +56,7 @@ export function SessionTimelineReport({
       endDate,
       params.groupBy,
       params.branches,
+      params.tags,
       generation,
     ],
     queryFn: () =>
@@ -64,6 +66,7 @@ export function SessionTimelineReport({
         endDate,
         groupBy: params.groupBy !== 'none' ? params.groupBy : undefined,
         branches: params.branches.length > 0 ? params.branches : undefined,
+        tags: params.tags,
       }),
   });
 
@@ -83,11 +86,9 @@ export function SessionTimelineReport({
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([label, value]) => ({ label, value }));
 
-  // Sum of per-group session counts vs the
-  // report's own total; each session carries exactly one `group` value today (the server
-  // folds a `string[]` attribute's values into one joined label rather than fanning a
-  // session into several rows), so this is currently always equal — the check stays exact
-  // rather than assumed, so it starts firing correctly if that ever changes.
+  // Sum of per-group session counts vs the number of distinct sessions: the server fans a
+  // session with several values of the grouped key (a tag, a `string[]` attribute) out into
+  // one row per value, so the sum exceeds the distinct count exactly when that happened.
   const groupedSessionTotal = (() => {
     const perGroup = new Map<string, number>();
     for (const s of sessions) {
@@ -96,8 +97,11 @@ export function SessionTimelineReport({
     }
     return Array.from(perGroup.values()).reduce((sum, n) => sum + n, 0);
   })();
+  // A fanned-out session comes back as one row per group (`groupBy=tag:` and string[]
+  // attributes), so compare with the distinct sessions, not the rows.
   const showFanOutCaveat =
-    params.groupBy.startsWith('attr:') && groupedSessionTotal > sessions.length;
+    isFanOutGroupBy(params.groupBy) &&
+    groupedSessionTotal > new Set(sessions.map((s) => s.sessionId)).size;
 
   const { downloadError, handleDownload } = useReportPdfDownload(
     () =>
@@ -149,7 +153,7 @@ export function SessionTimelineReport({
           },
         ]}
       />
-      <GroupByFanOutCaveat show={showFanOutCaveat} />
+      <GroupByFanOutCaveat show={showFanOutCaveat} groupBy={params.groupBy} />
       <section>
         <h2 className="text-sm font-semibold text-foreground">
           Sessions per Day

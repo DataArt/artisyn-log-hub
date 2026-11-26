@@ -5,7 +5,7 @@ description: "Install, upgrade, or uninstall the hook as a Claude Code plugin vi
 tags:
   - hooks
   - otel
-generated: { by: "claude-code", at: "2026-11-25T14:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T18:00:00+04:00" }
 ---
 
 # Hook Installation Guide
@@ -238,8 +238,10 @@ installer-authored entries in `.claude/settings.json`'s `hooks` block — and mi
 
 1. **Convert config**: `.env`/`.env.local` → `.artisyn/config/log-hub.json` / `log-hub.local.json`. If
    `log-hub.json` already exists, it's authoritative — conversion only fills keys absent from it (same rule for
-   `.local.json`/`apiKey`); `--server-url`/`--api-key` flags still win over both files. `CTX_*` variables collapse
-   into the `context` array. The written files are re-read to confirm they parse before continuing.
+   `.local.json`/`apiKey`); `--server-url`/`--api-key` flags still win over both files. `CTX_*` variables are
+   not converted (hook `3.4.0`+ has no `context` key): when any is present, the installer prints one note that they
+   are unused and that session labels go into `OTEL_RESOURCE_ATTRIBUTES` — see "Labelling sessions (session
+   tags)" below. The written files are re-read to confirm they parse before continuing.
 2. **Rewrite settings**: remove only the installer-authored `hooks` entries from `.claude/settings.json` (matched
    by command path — any hook entry you added yourself, even inside the same matcher, is left byte-identical), and
    write the `enabledPlugins`/`extraKnownMarketplaces` keys — one read-modify-write, one `.claude/settings.json.bak`.
@@ -291,11 +293,24 @@ and `hooks/hooks.json` are written by `scripts/build-hooks-installer.js` (`npm r
 | `serverUrl` | `log-hub.local.json` (a shared value in `log-hub.json` also works) | Base URL of artisyn-log-hub (`http://host:3000`) |
 | `apiKey` | `log-hub.local.json` | API key from artisyn-log-hub |
 
-### Context Metadata
+### Labelling sessions (session tags)
 
-| Key | Default | Description |
-|---|---|---|
-| `context` | `[]` | Array of `{key, value}` pairs attached to every event as `context.<key>`. Keys lowercased; last entry wins on duplicates; absent/empty → no `context` field. |
+`log-hub.json` has no `context` key any more (hook `3.4.0`+; see `hook-api-versioning.md`, "`context`
+removed — session tags from OTEL"). A config that still has one is ignored silently, and `prompt_start` no longer
+carries a `context` field. Sessions are labelled through the standard OTEL variable instead:
+
+```json
+{ "env": { "OTEL_RESOURCE_ATTRIBUTES": "feature=checkout,team.name=payments" } }
+```
+
+Set it wherever Claude Code reads its environment — `~/.claude/settings.json`, `.claude/settings.local.json`, a
+managed settings file or the shell. The installer keeps such user keys when it merges its own
+`artisyn.repo=<repoKey>` entry into the mirror (see "`OTEL_RESOURCE_ATTRIBUTES` in the mirror" below). Every
+resource attribute whose key is outside the server's deny-list (`artisyn.`, `service.`, `telemetry.`, `host.`,
+`os.`, `user.`, `session.`, … — the full list and limits are in `algorithms/otel-facts.md`, rule 13) becomes a
+session tag of the root session (`session_tags`, `source='otel'`). Tags are shown in the session header and can
+filter / group the session list, Analytics, Reports and Spend. Pairs written by older hooks' `context` were moved
+to `session_tags` with `source='config'` by the migration.
 
 ### Telemetry Storage
 

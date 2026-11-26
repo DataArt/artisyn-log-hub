@@ -1,12 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { and, eq, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import {
-  contexts,
   deletedSessionLog,
-  logContexts,
   logRepositories,
   logs,
   logsOtel,
@@ -18,7 +16,6 @@ import {
 } from '../database/schema/index';
 import {
   extractCodeInventory,
-  extractContextPairs,
   extractEditResultRecords,
   extractFirstPrompt,
   extractGitBranch,
@@ -1059,7 +1056,9 @@ export class LogsService {
         // or a newly learned root): artisyn chunks re-upload often, and reparsing every body on
         // every chunk would be wasted work. A root bound to its OKF snapshot only now (a backlog
         // re-upload of a session whose transcripts were already extracted without one) also
-        // needs it: the OKF rows depend on the snapshot. Must run before Step 6's new-insert-only exit.
+        // needs it: the OKF rows depend on the snapshot. A `prompt_start` line's legacy `context`
+        // field (old hooks) is stored verbatim in the body and not projected — session tags come
+        // from OTEL resource attributes now.
         const effectiveRoot = gitRoots.root ?? priorRoots.root;
         const effectiveWorktreeRoot =
           gitRoots.worktreeRoot ?? priorRoots.worktreeRoot;
@@ -1073,45 +1072,6 @@ export class LogsService {
           okfBound
         ) {
           await rewriteSessionTreeFileStats(tx, sessionRowId, userId);
-        }
-
-        // Step 6 — Context upsert + link (new inserts only)
-        if (!logResult.isNewInsert) return;
-        const contextPairs = extractContextPairs(lines);
-        if (contextPairs.length > 0) {
-          await tx
-            .insert(contexts)
-            .values(
-              contextPairs.map(({ key, value }) => ({
-                contextKey: key,
-                contextValue: value,
-              })),
-            )
-            .onConflictDoNothing();
-
-          const contextRows = await tx
-            .select({ id: contexts.id })
-            .from(contexts)
-            .where(
-              or(
-                ...contextPairs.map(({ key, value }) =>
-                  and(
-                    eq(contexts.contextKey, key),
-                    eq(contexts.contextValue, value),
-                  ),
-                ),
-              ),
-            );
-
-          await tx
-            .insert(logContexts)
-            .values(
-              contextRows.map((c) => ({
-                logId: logResult.id,
-                contextId: c.id,
-              })),
-            )
-            .onConflictDoNothing();
         }
       });
     } catch (error) {

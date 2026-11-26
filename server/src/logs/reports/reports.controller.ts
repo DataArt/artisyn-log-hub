@@ -80,6 +80,11 @@ import {
   type HarnessUsageReportData,
 } from './harness-usage.service';
 import { OkfUsageService } from '../okf/okf-usage.service';
+import {
+  assertNoGroupByTagFilterConflict,
+  parseGroupByTagKey,
+  parseTagFilters,
+} from '../tag-filter.sql';
 import type { OkfUsageResponse } from '../okf/okf-usage.types';
 
 // Whitelist for the cache-read-ratio report's fixed (non-`attr:`) `groupBy` values.
@@ -141,6 +146,7 @@ export class ReportsController {
     @Query('branches') branchesParam?: string,
     @Query('users') usersParam?: string,
     @Query('attr') attrParam?: string | string[],
+    @Query('tag') tagParam?: string | string[],
   ): Promise<ExecutiveSummaryReport> {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
@@ -169,6 +175,8 @@ export class ReportsController {
       usersParam !== undefined && usersParam !== ''
         ? usersParam.split(',').map((u) => decodeURIComponent(u))
         : [];
+    // `tag=<key>[:<value>]` (otel-session-tags) — shape-only, 400 on an empty key.
+    const tagFilters = parseTagFilters(tagParam);
 
     const user = req.user as AuthUser;
     const repo = await this.repositoriesService.assertRepoAccess(
@@ -198,6 +206,7 @@ export class ReportsController {
       branches,
       users,
       attributeFilters,
+      tagFilters,
     });
   }
 
@@ -212,6 +221,7 @@ export class ReportsController {
     @Query('branches') branchesParam?: string,
     @Query('users') usersParam?: string,
     @Query('attr') attrParam?: string | string[],
+    @Query('tag') tagParam?: string | string[],
   ): Promise<CacheReadRatioReportData> {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
@@ -236,13 +246,16 @@ export class ReportsController {
     // the repo's resolved attribute definitions are known — the fixed whitelist here only
     // rejects a value that is neither one of the three fixed groupings nor the `attr:` form.
     const groupByAttrKey = parseGroupByAttrKey(groupByParam);
+    // `groupBy=tag:<key>` — free-form key, never validated against definitions.
+    const groupByTagKey = parseGroupByTagKey(groupByParam);
     const groupBy = (groupByParam ?? 'none') as CacheRatioGroupBy;
     if (
       groupByAttrKey === undefined &&
+      groupByTagKey === null &&
       !CACHE_RATIO_GROUP_BY_VALUES.includes(groupBy)
     ) {
       throw new BadRequestException(
-        `groupBy must be one of: ${CACHE_RATIO_GROUP_BY_VALUES.join(', ')}, or attr:<key>`,
+        `groupBy must be one of: ${CACHE_RATIO_GROUP_BY_VALUES.join(', ')}, attr:<key> or tag:<key>`,
       );
     }
 
@@ -254,6 +267,8 @@ export class ReportsController {
       usersParam !== undefined && usersParam !== ''
         ? usersParam.split(',').map((u) => decodeURIComponent(u))
         : [];
+    // `tag=<key>[:<value>]` (otel-session-tags) — shape-only, 400 on an empty key.
+    const tagFilters = parseTagFilters(tagParam);
 
     const user = req.user as AuthUser;
     const repo = await this.repositoriesService.assertRepoAccess(
@@ -285,6 +300,7 @@ export class ReportsController {
       ]);
     assertKnownGroupByAttrKey(groupByAttrKey, resolvedDefinitions);
     assertNoGroupByAttrFilterConflict(groupByAttrKey, filters);
+    assertNoGroupByTagFilterConflict(groupByTagKey, tagFilters);
 
     return this.cacheReadRatioService.build(repoIds, {
       teamId,
@@ -299,6 +315,7 @@ export class ReportsController {
       thresholdSource: source,
       causeScope,
       attributeFilters: filters,
+      tagFilters,
       resolvedAttributeDefinitions: resolvedDefinitions,
     });
   }
@@ -314,17 +331,20 @@ export class ReportsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<HarnessUsageReportData> {
     // Same split as `cache-read-ratio` — the fixed whitelist
     // here, `attr:<key>` validated below against the repo's resolved definitions.
     const groupByAttrKey = parseGroupByAttrKey(groupByParam);
+    const groupByTagKey = parseGroupByTagKey(groupByParam);
     const groupBy = (groupByParam ?? 'none') as HarnessUsageGroupBy;
     if (
       groupByAttrKey === undefined &&
+      groupByTagKey === null &&
       !HARNESS_USAGE_GROUP_BY_VALUES.includes(groupBy)
     ) {
       throw new BadRequestException(
-        `groupBy must be one of: ${HARNESS_USAGE_GROUP_BY_VALUES.join(', ')}, or attr:<key>`,
+        `groupBy must be one of: ${HARNESS_USAGE_GROUP_BY_VALUES.join(', ')}, attr:<key> or tag:<key>`,
       );
     }
 
@@ -336,12 +356,14 @@ export class ReportsController {
         branches,
         users,
         attr,
+        tag,
       });
     assertKnownGroupByAttrKey(groupByAttrKey, resolvedDefinitions);
     assertNoGroupByAttrFilterConflict(
       groupByAttrKey,
       scope.attributeFilters ?? [],
     );
+    assertNoGroupByTagFilterConflict(groupByTagKey, scope.tagFilters ?? []);
 
     return this.harnessUsageService.build(repoIds, {
       ...scope,
@@ -366,6 +388,7 @@ export class ReportsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
     @Query('bundle') bundle?: string,
   ): Promise<OkfUsageResponse> {
     const { repoIds, scope } = await this.resolveUsageScope(req, repoId, {
@@ -375,6 +398,7 @@ export class ReportsController {
       branches,
       users,
       attr,
+      tag,
     });
     const bundleRoot =
       typeof bundle === 'string' && bundle.length > 0 ? bundle : undefined;
@@ -401,15 +425,18 @@ export class ReportsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<ChangeSurfaceReportData> {
     const groupByAttrKey = parseGroupByAttrKey(groupByParam);
+    const groupByTagKey = parseGroupByTagKey(groupByParam);
     const groupBy = (groupByParam ?? 'none') as ChangeSurfaceGroupBy;
     if (
       groupByAttrKey === undefined &&
+      groupByTagKey === null &&
       !CHANGE_SURFACE_GROUP_BY_VALUES.includes(groupBy)
     ) {
       throw new BadRequestException(
-        `groupBy must be one of: ${CHANGE_SURFACE_GROUP_BY_VALUES.join(', ')}, or attr:<key>`,
+        `groupBy must be one of: ${CHANGE_SURFACE_GROUP_BY_VALUES.join(', ')}, attr:<key> or tag:<key>`,
       );
     }
 
@@ -421,12 +448,14 @@ export class ReportsController {
         branches,
         users,
         attr,
+        tag,
       });
     assertKnownGroupByAttrKey(groupByAttrKey, resolvedDefinitions);
     assertNoGroupByAttrFilterConflict(
       groupByAttrKey,
       scope.attributeFilters ?? [],
     );
+    assertNoGroupByTagFilterConflict(groupByTagKey, scope.tagFilters ?? []);
 
     return this.changeSurfaceReportService.build(repoIds, {
       ...scope,
@@ -449,6 +478,7 @@ export class ReportsController {
     @Query('branches') branchesParam?: string,
     @Query('users') usersParam?: string,
     @Query('attr') attrParam?: string | string[],
+    @Query('tag') tagParam?: string | string[],
   ): Promise<AttributionBreakdownReportData> {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
@@ -477,6 +507,8 @@ export class ReportsController {
       usersParam !== undefined && usersParam !== ''
         ? usersParam.split(',').map((u) => decodeURIComponent(u))
         : [];
+    // `tag=<key>[:<value>]` (otel-session-tags) — shape-only, 400 on an empty key.
+    const tagFilters = parseTagFilters(tagParam);
 
     const user = req.user as AuthUser;
     const repo = await this.repositoriesService.assertRepoAccess(
@@ -506,6 +538,7 @@ export class ReportsController {
       branches,
       users,
       attributeFilters: filters,
+      tagFilters,
       resolvedAttributeDefinitions: resolvedDefinitions,
     });
   }
@@ -604,6 +637,7 @@ export class ReportsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<ToolAnalyticsResponse> {
     const { repoIds, scope } = await this.resolveUsageScope(req, repoId, {
       teamId,
@@ -612,6 +646,7 @@ export class ReportsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.toolAnalyticsService.build(repoIds, scope);
   }
@@ -626,6 +661,7 @@ export class ReportsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<TokenAnalyticsResponse> {
     const { repoIds, scope } = await this.resolveUsageScope(req, repoId, {
       teamId,
@@ -634,6 +670,7 @@ export class ReportsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.tokenAnalyticsService.build(repoIds, scope);
   }
@@ -648,6 +685,7 @@ export class ReportsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<ProductivityAnalyticsResponse> {
     const { repoIds, scope } = await this.resolveUsageScope(req, repoId, {
       teamId,
@@ -656,6 +694,7 @@ export class ReportsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.productivityAnalyticsService.build(repoIds, scope);
   }
@@ -670,6 +709,7 @@ export class ReportsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
   ): Promise<ActiveSessionsResponse> {
     const { repoIds, scope } = await this.resolveUsageScope(req, repoId, {
@@ -679,6 +719,7 @@ export class ReportsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.activeSessionsService.build(
       repoIds,
@@ -697,6 +738,7 @@ export class ReportsController {
     @Query('branches') branches?: string,
     @Query('users') users?: string,
     @Query('attr') attr?: string | string[],
+    @Query('tag') tag?: string | string[],
   ): Promise<ClaudeVersionUsageResponse> {
     const { repoIds, scope } = await this.resolveUsageScope(req, repoId, {
       teamId,
@@ -705,6 +747,7 @@ export class ReportsController {
       branches,
       users,
       attr,
+      tag,
     });
     return this.claudeVersionUsageService.build(repoIds, scope);
   }
@@ -781,6 +824,7 @@ export class ReportsController {
       branches?: string;
       users?: string;
       attr?: string | string[];
+      tag?: string | string[];
     },
   ): Promise<{
     repoIds: number[];
@@ -790,6 +834,8 @@ export class ReportsController {
     repoUrl: string;
   }> {
     const query = parseAnalyticsQuery(raw);
+    // `tag=<key>[:<value>]` (otel-session-tags) — shape-only, 400 on an empty key.
+    const tagFilters = parseTagFilters(raw.tag);
     const user = req.user as AuthUser;
 
     const repo = await this.repositoriesService.assertRepoAccess(
@@ -824,6 +870,7 @@ export class ReportsController {
         branches: query.branches,
         users: query.users,
         attributeFilters: filters,
+        tagFilters,
       },
     };
   }

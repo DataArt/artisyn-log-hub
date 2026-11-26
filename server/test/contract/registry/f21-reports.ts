@@ -104,6 +104,47 @@ export const f21Reports: ContractFamily = {
       },
     },
     {
+      // 2026-11-24 otel-session-tags: `tag=feature:billing` limits every number to s02 (with
+      // its sub-agent) and s04.
+      id: 'F21-executive-summary-tag-filter',
+      route: 'GET /api/v1/repositories/:repoId/reports/executive-summary',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, tag: 'feature:billing' },
+      expect: { status: 200 },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT sum(${treeCostSql('r.id')}) AS total_cost, count(*) AS sessions
+                FROM roots r
+               WHERE EXISTS (SELECT 1 FROM session_tags st
+                              WHERE st.session_id = r.id AND st.key = 'feature'
+                                AND st.value = 'billing')`,
+        args: ['@R1.id'],
+        shape: 'object',
+        fields: {
+          totalCost: { col: 'total_cost', as: 'numeric' },
+          totalSessions: { col: 'sessions', as: 'number' },
+        },
+      },
+    },
+    {
+      // Golden of the same: 1.8 (s02 tree) + 0.4 (s04).
+      id: 'F21-executive-summary-tag-filter-golden',
+      route: 'GET /api/v1/repositories/:repoId/reports/executive-summary',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, tag: 'feature:billing' },
+      expect: { status: 200 },
+      read: {
+        sql: `SELECT 2.2 AS total_cost, 2 AS sessions`,
+        shape: 'object',
+        fields: {
+          totalCost: { col: 'total_cost', as: 'numeric' },
+          totalSessions: 'sessions',
+        },
+      },
+    },
+    {
       // FR-6 (2026-11-03 otel-cost-attribution): Rtwins' period cost counts the old-CC
       // sub-agent at its OTEL cost — 0.37 (w1-s12) + 0.18 (w1-s14). Formula here, golden below.
       id: 'F21-executive-summary-subagent-otel-cost',
@@ -327,6 +368,58 @@ export const f21Reports: ContractFamily = {
         args: ['@R1.id'],
         shape: 'object',
         path: 'withDescendants',
+        fields: {
+          sessionCount: { col: 'sessions', as: 'number' },
+          cacheReadTokens: { col: 'cr', as: 'number' },
+          cacheWriteTokens: { col: 'cw', as: 'number' },
+        },
+      },
+    },
+    {
+      // `groupBy=tag:feature` fans out: s02 counts in both `billing` and `checkout`, so the
+      // groups' session counts (2 + 2) exceed the three roots.
+      id: 'F21-cache-read-ratio-group-by-tag',
+      route: 'GET /api/v1/repositories/:repoId/reports/cache-read-ratio',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, groupBy: 'tag:feature' },
+      expect: { status: 200, minRows: 2 },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT v.value AS grp
+                FROM roots r
+                JOIN LATERAL (SELECT DISTINCT st.value FROM session_tags st
+                               WHERE st.session_id = r.id AND st.key = 'feature') v ON true
+               GROUP BY v.value`,
+        args: ['@R1.id'],
+        shape: 'array',
+        path: 'groups',
+        sortBy: 'group',
+        fields: { group: 'grp' },
+      },
+    },
+    {
+      // Each fanned-out group's root totals hold every session carrying the value (checkout:
+      // s01 and s02).
+      id: 'F21-cache-read-ratio-group-by-tag-counts',
+      route: 'GET /api/v1/repositories/:repoId/reports/cache-read-ratio',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, groupBy: 'tag:feature' },
+      expect: { status: 200 },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT count(*) AS sessions, sum(ss.cache_read_tokens) AS cr,
+                     sum(ss.cache_write_tokens) AS cw
+                FROM roots r JOIN session_stats ss ON ss.session_id = r.id
+               WHERE EXISTS (SELECT 1 FROM session_tags st
+                              WHERE st.session_id = r.id AND st.key = 'feature'
+                                AND st.value = 'checkout')`,
+        args: ['@R1.id'],
+        shape: 'object',
+        // Groups sort by root cache tokens, descending: billing (s02 50k + s04 400k) first,
+        // checkout (s01 300k + s02 50k) second.
+        path: 'groups.1.root',
         fields: {
           sessionCount: { col: 'sessions', as: 'number' },
           cacheReadTokens: { col: 'cr', as: 'number' },

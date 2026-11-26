@@ -1,0 +1,8 @@
+# generated SSH key pair (never commit)
+keys/
+# run output
+out/
+# runtime garbage
+*.log
+.cache/
+.env

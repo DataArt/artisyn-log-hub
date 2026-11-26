@@ -61,6 +61,7 @@ export function ProductivityReport({
       startDate,
       endDate,
       params.branches,
+      params.tags,
       generation,
     ],
     queryFn: () =>
@@ -69,6 +70,7 @@ export function ProductivityReport({
         startDate,
         endDate,
         branches: params.branches.length > 0 ? params.branches : undefined,
+        tags: params.tags,
       }),
   });
 

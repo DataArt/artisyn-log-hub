@@ -15,6 +15,8 @@ import {
   parseGroupByAttrKey,
 } from '../attribute-filter.sql';
 import { descendantSessionsCte } from '../session-tree.sql';
+import { loadTagGroupLabels } from '../session-tags.reader';
+import { parseGroupByTagKey, UNTAGGED_GROUP } from '../tag-filter.sql';
 
 /** Harness Elements Usage report (mirrors `cache-read-ratio.service.ts`'s shape). */
 
@@ -24,7 +26,12 @@ export type HarnessElementKind = 'skill' | 'rule' | 'mcp' | 'tool';
  * Optional per-group breakdown, same three fixed values `cache-read-ratio` supports, widened
  * to also accept `attr:<key>`.
  */
-export type HarnessUsageGroupBy = 'none' | 'branch' | 'user' | `attr:${string}`;
+export type HarnessUsageGroupBy =
+  | 'none'
+  | 'branch'
+  | 'user'
+  | `attr:${string}`
+  | `tag:${string}`;
 
 export interface HarnessUsageRow {
   kind: HarnessElementKind;
@@ -359,10 +366,16 @@ export function buildGroups(
     number,
     Record<string, string | string[] | boolean | number | null>
   > = new Map(),
+  /**
+   * `groupBy=tag:<key>` (otel-session-tags): each root's tag buckets
+   * (`loadTagGroupLabels()`), fanning out exactly like a `string[]` attribute.
+   */
+  tagLabelsBySessionRowId: ReadonlyMap<number, string[]> = new Map(),
 ): HarnessUsageGroup[] {
   if (groupBy === 'none') return [];
 
   const groupByAttrKey = parseGroupByAttrKey(groupBy);
+  const groupByTagKey = parseGroupByTagKey(groupBy);
 
   // Fan-out: a `string[]`-typed attribute's N values fan one root/fact
   // into every one of its N groups, not one joined group.
@@ -371,6 +384,11 @@ export function buildGroups(
     branch: string | null;
     userEmail: string;
   }): string[] => {
+    if (groupByTagKey !== null) {
+      return (
+        tagLabelsBySessionRowId.get(entry.sessionRowId) ?? [UNTAGGED_GROUP]
+      );
+    }
     if (groupByAttrKey !== undefined) {
       return attributeGroupLabels(
         groupByAttrKey,
@@ -443,6 +461,16 @@ export class HarnessUsageService {
             number,
             Record<string, string | string[] | boolean | number | null>
           >();
+    // `groupBy=tag:<key>` — the roots' tag buckets, fetched only for that grouping.
+    const groupByTagKey = parseGroupByTagKey(opts.groupBy);
+    const tagLabelsBySessionRowId =
+      groupByTagKey !== null && roots.length > 0
+        ? await loadTagGroupLabels(
+            this.db,
+            roots.map((r) => r.sessionRowId),
+            groupByTagKey,
+          )
+        : new Map<number, string[]>();
 
     return {
       inventoryReported: repoState.inventoryReported,
@@ -461,6 +489,7 @@ export class HarnessUsageService {
               repoState.reportedAt,
               opts.resolvedAttributeDefinitions ?? [],
               attributionValuesBySessionRowId,
+              tagLabelsBySessionRowId,
             ),
           }
         : {}),

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="560" viewBox="0 0 1040 560" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+  <!-- Wireframe: AgentBook prerequisite check at start (FR-9, FR-10, AC-8). Light theme. -->
+  <rect width="1040" height="560" fill="#ffffff"/>
+
+  <!-- Window title bar -->
+  <rect x="0" y="0" width="1040" height="32" fill="#f4f4f5"/>
+  <line x1="0" y1="32" x2="1040" y2="32" stroke="#e4e4e7"/>
+  <text x="14" y="21" fill="#52525b">AgentBook</text>
+  <text x="960" y="21" fill="#71717a">—   ☐   ✕</text>
+
+  <!-- Top bar -->
+  <line x1="0" y1="80" x2="1040" y2="80" stroke="#e4e4e7"/>
+  <circle cx="26" cy="56" r="9" fill="#3358cc"/>
+  <text x="44" y="61" font-weight="600" font-size="15" fill="#09090b">AgentBook</text>
+  <text x="960" y="61" fill="#09090b">ⓘ Help</text>
+
+  <text x="120" y="124" font-size="20" font-weight="600" fill="#09090b">A few things are needed before the first laptop</text>
+  <text x="120" y="148" fill="#52525b">AgentBook checked your computer. Fix the items below, then check again.</text>
+
+  <!-- Check 1: Docker fail -->
+  <rect x="120" y="168" width="800" height="80" rx="8" fill="#fef2f2" stroke="#fecaca"/>
+  <circle cx="146" cy="196" r="11" fill="#dc2626"/>
+  <text x="141" y="201" fill="#fff" font-weight="700">✕</text>
+  <text x="168" y="201" font-weight="600" fill="#991b1b">Docker engine</text>
+  <text x="168" y="222" fill="#991b1b">No Docker-compatible engine found. Start Docker Desktop / Rancher Desktop or ask your administrator.</text>
+  <text x="168" y="240" font-size="12" fill="#b91c1c">Checked: DOCKER_HOST, current Docker context, \\.\pipe\docker_engine</text>
+
+  <!-- Check 2: Claude Desktop old -->
+  <rect x="120" y="260" width="800" height="62" rx="8" fill="#fef2f2" stroke="#fecaca"/>
+  <circle cx="146" cy="288" r="11" fill="#dc2626"/>
+  <text x="141" y="293" fill="#fff" font-weight="700">✕</text>
+  <text x="168" y="293" font-weight="600" fill="#991b1b">Claude Desktop 2.2401.0</text>
+  <text x="168" y="312" fill="#991b1b">Version 2.2553.0 or later is needed on Windows. Update Claude Desktop (Help → Check for updates).</text>
+
+  <!-- Check 3: OpenSSH ok -->
+  <rect x="120" y="334" width="800" height="48" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <circle cx="146" cy="358" r="11" fill="#16a34a"/>
+  <text x="140" y="363" fill="#fff" font-weight="700">✓</text>
+  <text x="168" y="363" font-weight="600" fill="#166534">OpenSSH 9.5</text>
+  <text x="270" y="363" fill="#166534">OK (9.4 or later)</text>
+
+  <rect x="120" y="406" width="130" height="34" rx="6" fill="#3358cc"/>
+  <text x="140" y="428" fill="#fff" font-weight="600">↻ Check again</text>
+  <text x="268" y="428" fill="#3358cc" text-decoration="underline">What is this? (built-in help)</text>
+
+  <text x="120" y="470" font-size="12" fill="#71717a">AgentBook never installs Docker, Claude Desktop or OpenSSH itself.</text>
+
+  <text x="24" y="540" font-size="12" fill="#71717a">Wireframe — FR-9, FR-10, AC-8. One row per check; a failed row says what to do in plain words. OpenSSH row only on Windows.</text>
+</svg>

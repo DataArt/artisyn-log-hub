@@ -1,0 +1,170 @@
+[
+  {
+    "id": "CP-01",
+    "input": {"op": "basename", "host": "C:\\work\\Q3 reports"},
+    "expected": {"name": "Q3 reports"},
+    "note": "Rule 1: the last segment, spaces kept."
+  },
+  {
+    "id": "CP-02",
+    "input": {"op": "basename", "host": "C:\\work\\Отчёты\\"},
+    "expected": {"name": "Отчёты"},
+    "note": "Rule 1: the trailing separator gives no segment; the last non-empty one is kept as-is (non-ASCII)."
+  },
+  {
+    "id": "CP-03",
+    "input": {"op": "basename", "host": "C:\\"},
+    "expected": {"name": "C"},
+    "note": "Rule 2: a drive root's only segment is 'C:', so the name is the letter."
+  },
+  {
+    "id": "CP-04",
+    "input": {"op": "basename", "host": "\\\\?\\D:\\data\\mockups"},
+    "expected": {"name": "mockups"},
+    "note": "Rule 1: the verbatim prefix is dropped; last segment 'mockups'."
+  },
+  {
+    "id": "CP-05",
+    "input": {"op": "basename", "host": "/"},
+    "expected": {"name": "root"},
+    "note": "Rule 2: no segment at all: ROOT_NAME."
+  },
+  {
+    "id": "CP-06",
+    "input": {"op": "basename", "host": "/Users/den/My Project"},
+    "expected": {"name": "My Project"},
+    "note": "POSIX path: same rule."
+  },
+  {
+    "id": "CP-07",
+    "input": {"op": "shared", "host": "C:\\work\\Q3 reports"},
+    "expected": {"path": "/work/Q3 reports"},
+    "note": "Rule 3: no workspaceFolder, so /work/<basename>, space kept."
+  },
+  {
+    "id": "CP-08",
+    "input": {"op": "shared", "host": "C:\\work\\Q3 reports", "workspaceFolder": "/workspaces/app"},
+    "expected": {"path": "/workspaces/app"},
+    "note": "Rule 3: the devcontainer's workspaceFolder wins."
+  },
+  {
+    "id": "CP-09",
+    "input": {"op": "shared", "host": "C:\\work\\Q3 reports", "workspaceFolder": "   "},
+    "expected": {"path": "/work/Q3 reports"},
+    "note": "Rule 3: a blank workspaceFolder counts as not set."
+  },
+  {
+    "id": "CP-10",
+    "input": {"op": "given", "hosts": ["C:\\a\\docs", "D:\\b\\docs", "E:\\docs"]},
+    "expected": {"paths": ["/work/given/docs", "/work/given/docs-2", "/work/given/docs-3"]},
+    "note": "Rule 4: the first 'docs' is free; the second collides and takes -2; the third finds docs and docs-2 taken and takes -3."
+  },
+  {
+    "id": "CP-11",
+    "input": {"op": "given", "hosts": ["C:\\x\\My Files", "D:\\y\\My Files"]},
+    "expected": {"paths": ["/work/given/My Files", "/work/given/My Files-2"]},
+    "note": "Rule 4 with a space in the name: the suffix is appended to the name as-is."
+  },
+  {
+    "id": "CP-12",
+    "input": {"op": "given", "hosts": ["C:\\Макеты", "D:\\old\\Макеты", "E:\\Макеты\\"]},
+    "expected": {"paths": ["/work/given/Макеты", "/work/given/Макеты-2", "/work/given/Макеты-3"]},
+    "note": "Rule 4 with non-ASCII names: -2, then -3 (the trailing separator of the third changes nothing)."
+  },
+  {
+    "id": "CP-13",
+    "input": {"op": "given", "hosts": ["C:\\a\\docs-2", "C:\\b\\docs", "C:\\c\\docs"]},
+    "expected": {"paths": ["/work/given/docs-2", "/work/given/docs", "/work/given/docs-3"]},
+    "note": "Rule 4 picks the first FREE suffix: the third 'docs' finds 'docs' and the literal 'docs-2' taken, so -3."
+  },
+  {
+    "id": "CP-14",
+    "input": {"op": "given", "hosts": ["C:\\a\\Docs", "C:\\b\\docs"]},
+    "expected": {"paths": ["/work/given/Docs", "/work/given/docs"]},
+    "note": "Rule 4 compares exactly: the container file system is case-sensitive, so 'Docs' and 'docs' do not collide."
+  },
+  {
+    "id": "CP-15",
+    "input": {"op": "given", "hosts": ["C:\\", "D:\\"]},
+    "expected": {"paths": ["/work/given/C", "/work/given/D"]},
+    "note": "Rule 2 drive names (after the whole-disk confirmation)."
+  },
+  {
+    "id": "CP-16",
+    "input": {"op": "alias", "id": "k3m7q2xa"},
+    "expected": {"alias": "sbx-k3m7q2xa"},
+    "note": "Rule 5: 'sbx-' + id."
+  },
+  {
+    "id": "CP-17",
+    "input": {"op": "link", "id": "k3m7q2xa", "folder": "/work/sample"},
+    "expected": {"link": "claude://code/new?ssh_host=sbx-k3m7q2xa&ssh_folder=%2Fwork%2Fsample"},
+    "note": "Rule 6: '/' is not unreserved, so %2F; the alias has only unreserved characters (the link the Desktop PoC opened)."
+  },
+  {
+    "id": "CP-18",
+    "input": {"op": "link", "id": "k3m7q2xa", "folder": "/work/Q3 reports"},
+    "expected": {"link": "claude://code/new?ssh_host=sbx-k3m7q2xa&ssh_folder=%2Fwork%2FQ3%20reports"},
+    "note": "Rule 6: space is byte 0x20: %20 (never '+')."
+  },
+  {
+    "id": "CP-19",
+    "input": {"op": "link", "id": "k3m7q2xa", "folder": "/work/Отчёты"},
+    "expected": {"link": "claude://code/new?ssh_host=sbx-k3m7q2xa&ssh_folder=%2Fwork%2F%D0%9E%D1%82%D1%87%D1%91%D1%82%D1%8B"},
+    "note": "Rule 6 on UTF-8 bytes: О=D0 9E, т=D1 82, ч=D1 87, ё=D1 91, т=D1 82, ы=D1 8B (same as JavaScript encodeURIComponent)."
+  },
+  {
+    "id": "CP-20",
+    "input": {"op": "link", "id": "k3m7q2xa", "folder": "/work/a&b=c(1)'s"},
+    "expected": {"link": "claude://code/new?ssh_host=sbx-k3m7q2xa&ssh_folder=%2Fwork%2Fa%26b%3Dc(1)'s"},
+    "note": "Rule 6: '&' (%26) and '=' (%3D) would break the query and are encoded; ( ) ' are in the unreserved set and stay."
+  },
+  {
+    "id": "CP-21",
+    "input": {"op": "wsl", "host": "D:\\work\\Q3 Отчёты", "distro": "Ubuntu", "mountRoot": "/mnt/"},
+    "expected": {"path": "/mnt/d/work/Q3 Отчёты"},
+    "note": "Rule 7: drive letter lowercased under the automount root, separators to '/', the rest kept as-is."
+  },
+  {
+    "id": "CP-22",
+    "input": {"op": "wsl", "host": "C:\\", "distro": "Ubuntu", "mountRoot": "/mnt/"},
+    "expected": {"path": "/mnt/c"},
+    "note": "Rule 7: a drive root is the drive folder itself, no trailing '/'."
+  },
+  {
+    "id": "CP-23",
+    "input": {"op": "wsl", "host": "\\\\?\\E:\\Data\\", "distro": "Ubuntu", "mountRoot": "/"},
+    "expected": {"path": "/e/Data"},
+    "note": "Rule 7: verbatim prefix and trailing separator dropped; a custom automount root '/' gives '/e'."
+  },
+  {
+    "id": "CP-24",
+    "input": {"op": "wsl", "host": "\\\\wsl.localhost\\Ubuntu\\home\\den\\repo", "distro": "ubuntu", "mountRoot": "/mnt/"},
+    "expected": {"path": "/home/den/repo"},
+    "note": "Rule 8: a folder inside the engine's own distro is its Linux path (distro name compared case-insensitively)."
+  },
+  {
+    "id": "CP-25",
+    "input": {"op": "wsl", "host": "\\\\wsl$\\Ubuntu", "distro": "Ubuntu", "mountRoot": "/mnt/"},
+    "expected": {"path": "/"},
+    "note": "Rule 8: the old \\\\wsl$ form; the distro root is '/'."
+  },
+  {
+    "id": "CP-26",
+    "input": {"op": "wsl", "host": "\\\\wsl.localhost\\Debian\\home\\den", "distro": "Ubuntu", "mountRoot": "/mnt/"},
+    "expected": {"path": null},
+    "note": "Rule 8: another distro's files are not visible to this engine."
+  },
+  {
+    "id": "CP-27",
+    "input": {"op": "wsl", "host": "\\\\?\\UNC\\fileserver\\share\\docs", "distro": "Ubuntu", "mountRoot": "/mnt/"},
+    "expected": {"path": null},
+    "note": "Rule 8: a network share cannot be mounted by the engine."
+  },
+  {
+    "id": "CP-28",
+    "input": {"op": "wsl", "host": "/home/den/repo", "distro": "Ubuntu", "mountRoot": "/mnt/"},
+    "expected": {"path": "/home/den/repo"},
+    "note": "Rule 7: a POSIX path is already the engine's path."
+  }
+]

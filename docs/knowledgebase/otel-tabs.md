@@ -234,7 +234,15 @@ it equals the TS rule; `now` is taken once per request in TS). Change the rule i
    deleted session, never blocks the queue.
 2. **Per session** (own transaction): state lock (create) + deleted check, `applyOtelLines(…,
    'chunk')` over the claimed bodies, `chunk_last_at`, the gap-close rule. On failure the claimed
-   rows get `-1`; the startup re-mark in `initializeDatabase()` (`< current` → NULL) retries them.
+   rows get `-1`; the startup re-mark in `initializeDatabase()` (`< OTEL_PROJECTION_FULL_REQUEUE_BELOW`
+   → NULL) fully re-projects them.
+2b. **Tag-only upgrade** (`upgradeTagsOnly`, task `2026-11-24-otel-session-tags`): up to
+   `OTEL_TAG_UPGRADE_BATCH` (200) chunks stamped from `OTEL_PROJECTION_FULL_REQUEUE_BELOW` to the
+   current version − 1 are re-stamped with the current version in one SQL statement that also
+   reports, from the jsonb body inside Postgres, whether a chunk has any `resource` key outside the
+   tag deny-list. Only those chunks are read into Node and get `applyOtelTagsOnly` (session tags
+   only, under the state lock); every other chunk costs one SQL check. A failure marks the chunks
+   `-1` (full re-projection after the next start).
 3. **Reclassification queue**, up to `OTEL_RECLASS_BATCH` (50) roots.
 4. **Idle-root finalising** (above).
 5. **Deleted-session cleanup**: OTEL rows of up to `OTEL_CLEANUP_BATCH` (50) roots with
@@ -248,7 +256,19 @@ One summary log line per tick with work (chunks, sessions, fills, failures, dura
 `2026-11-03-otel-cost-attribution` (v1 had no attribution / account fields). The startup re-mark
 (`database-init.ts`, `< current` → NULL) requeues every v1 chunk, and the normal drain re-projects
 all history: the new `otel_calls` columns, the attribution bucket grain and the account fields fill
-in without an extra startup wait. Bump it again whenever extraction gains fields history should get.
+in without an extra startup wait.
+
+It is `3` since task `2026-11-24-otel-session-tags`, which only adds `session_tags` from resource
+attributes — so `OTEL_PROJECTION_FULL_REQUEUE_BELOW` stays `2`: the startup re-mark requeues only
+v1 / failed chunks, and v2 chunks take the light tag-only upgrade (2b above) instead of a full
+re-projection. Measured on a Raspberry Pi 3B with 21 k chunks: a full re-projection took ~38 min
+with Postgres at 100 % CPU and four worker heap OOMs, while the tag check over the whole table is
+~100 s of Postgres time and reads 37 chunks in Node.
+
+When you bump the version: if the change is additive and can be backfilled cheaply, extend the
+tag-only upgrade (or add a similar light step) and keep `OTEL_PROJECTION_FULL_REQUEUE_BELOW`; raise
+it to the new version only when calls / spans / buckets themselves change. A full re-projection is a
+heavy migration — call it out and confirm it (`migrations-data-integrity` skill).
 
 ## Account fields (latest wins, task `2026-11-03-otel-cost-attribution`)
 

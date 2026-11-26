@@ -1,0 +1,93 @@
+[
+  {
+    "id": "EQ-01",
+    "input": {"op": "hash", "files": [], "std": "1", "layer": "1"},
+    "expected": {"hash": "5dbea84897ec1330f4374278f3ab0999d3eb756339b9819e26f70beb2966c74d"},
+    "note": "Rule 3 with no files (standard Equipment): sha256 of 'agentbook-equipment-v1\\nstd=1\\nlayer=1\\n', computed independently with Node's crypto."
+  },
+  {
+    "id": "EQ-02",
+    "input": {"op": "hash", "files": [[".devcontainer/devcontainer.json", "{}"]], "std": "1", "layer": "1"},
+    "expected": {"hash": "fc37d9d458fd0f2710ffbc578ef748c8c7dbd0c1820609c9e94ea3ba895aa5c0"},
+    "note": "Rule 3: sha256 of tag+'\\n', the path, byte 0, length 2 as 8 big-endian bytes, '{}', then 'std=1\\nlayer=1\\n' (Node's crypto over the same bytes)."
+  },
+  {
+    "id": "EQ-03",
+    "input": {"op": "compare",
+      "a": {"files": [[".devcontainer/devcontainer.json", "{}"], [".devcontainer/Dockerfile", "FROM ubuntu"]], "std": "1", "layer": "1"},
+      "b": {"files": [[".devcontainer/Dockerfile", "FROM ubuntu"], [".devcontainer/devcontainer.json", "{}"]], "std": "1", "layer": "1"}},
+    "expected": {"same": true},
+    "note": "Rule 1 sorts by path, so the order the engine lists files in does not matter."
+  },
+  {
+    "id": "EQ-04",
+    "input": {"op": "compare",
+      "a": {"files": [[".devcontainer/Dockerfile", "FROM ubuntu:24.04"]], "std": "1", "layer": "1"},
+      "b": {"files": [[".devcontainer/Dockerfile", "FROM ubuntu:24.05"]], "std": "1", "layer": "1"}},
+    "expected": {"same": false},
+    "note": "Rule 3: the bytes are hashed; one changed character changes the hash (Equipment changed)."
+  },
+  {
+    "id": "EQ-05",
+    "input": {"op": "compare",
+      "a": {"files": [["d/devcontainer.json", "{\n}"]], "std": "1", "layer": "1"},
+      "b": {"files": [["d/devcontainer.json", "{\r\n}"]], "std": "1", "layer": "1"}},
+    "expected": {"same": false},
+    "note": "Rule 3 hashes raw bytes: a CRLF checkout differs from LF (the engine reads files as they are on disk)."
+  },
+  {
+    "id": "EQ-06",
+    "input": {"op": "compare",
+      "a": {"files": [[".devcontainer\\devcontainer.json", "{}"]], "std": "1", "layer": "1"},
+      "b": {"files": [[".devcontainer/devcontainer.json", "{}"]], "std": "1", "layer": "1"}},
+    "expected": {"same": true},
+    "note": "Rule 1: '\\' in paths is turned into '/' before hashing."
+  },
+  {
+    "id": "EQ-07",
+    "input": {"op": "compare",
+      "a": {"files": [], "std": "1", "layer": "1"},
+      "b": {"files": [], "std": "2", "layer": "1"}},
+    "expected": {"same": false},
+    "note": "Rule 3: a new standard Equipment version changes every hash."
+  },
+  {
+    "id": "EQ-08",
+    "input": {"op": "compare",
+      "a": {"files": [["d/devcontainer.json", "{}"]], "std": "1", "layer": "1"},
+      "b": {"files": [["d/devcontainer.json", "{}"]], "std": "1", "layer": "2"}},
+    "expected": {"same": false},
+    "note": "Rule 3: a new laptop layer version changes project Equipment hashes too."
+  },
+  {
+    "id": "EQ-09",
+    "input": {"op": "compare",
+      "a": {"files": [["d/a.sh", "echo"]], "std": "1", "layer": "1"},
+      "b": {"files": [["d/b.sh", "echo"]], "std": "1", "layer": "1"}},
+    "expected": {"same": false},
+    "note": "Rule 3: the path is hashed, so a rename with the same content is a change."
+  },
+  {
+    "id": "EQ-10",
+    "input": {"op": "compare",
+      "a": {"files": [["a", "bc"]], "std": "1", "layer": "1"},
+      "b": {"files": [["ab", "c"]], "std": "1", "layer": "1"}},
+    "expected": {"same": false},
+    "note": "Rule 3: the 0 byte and the length keep file boundaries apart ('a'+'bc' vs 'ab'+'c' concatenate to the same text)."
+  },
+  {
+    "id": "EQ-11",
+    "input": {"op": "compare",
+      "a": {"files": [["x", "1"], ["x", "2"]], "std": "1", "layer": "1"},
+      "b": {"files": [["x", "1"]], "std": "1", "layer": "1"}},
+    "expected": {"same": true},
+    "note": "Rule 2: a repeated path counts once, its first entry."
+  },
+  {"id": "EQ-12", "input": {"op": "state", "current": "abc"}, "expected": {"state": "not-built"}, "note": "Rule 4: no recorded hash: not built yet."},
+  {"id": "EQ-13", "input": {"op": "state", "recorded": "abc", "current": "abc"}, "expected": {"state": "current"}, "note": "Rule 4: equal hashes."},
+  {"id": "EQ-14", "input": {"op": "state", "recorded": "abc", "current": "abd"}, "expected": {"state": "changed"}, "note": "Rule 4: different hashes: Equipment changed — Update laptop."},
+  {"id": "EQ-15", "input": {"op": "libc", "recorded": "glibc", "new": "musl"}, "expected": {"clear": true}, "note": "Rule 5: Debian to Alpine: the ccd-cli build no longer runs; clear it."},
+  {"id": "EQ-16", "input": {"op": "libc", "recorded": "glibc", "new": "glibc"}, "expected": {"clear": false}, "note": "Rule 5: same family: keep the downloaded CLI."},
+  {"id": "EQ-17", "input": {"op": "libc", "new": "glibc"}, "expected": {"clear": true}, "note": "Rule 5: nothing recorded counts as a switch."},
+  {"id": "EQ-18", "input": {"op": "libc", "recorded": "musl", "new": "glibc"}, "expected": {"clear": true}, "note": "Rule 5: Alpine to Debian is a switch too."}
+]

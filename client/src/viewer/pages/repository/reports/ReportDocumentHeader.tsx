@@ -4,6 +4,11 @@ import type { Pin } from '../../../lib/home-pins';
 import { findReport } from './report-catalog';
 import { formatGeneratedAt, formatPeriodLabel } from './report-format';
 import { formatAttributeFilterLabel } from './report-url';
+import {
+  describeTagFilters,
+  parseTagParams,
+  TAG_PARAM,
+} from '../../../lib/session-tags';
 
 interface Props {
   title: string;
@@ -41,6 +46,10 @@ export function ReportDocumentHeader({
   const attrFilterLabels = searchParams
     .getAll('attr')
     .map(formatAttributeFilterLabel);
+  // The `tag=` filter (otel-session-tags) is printed the same way.
+  const tagFilterLabel = describeTagFilters(
+    parseTagParams(searchParams.getAll(TAG_PARAM)),
+  );
 
   // The report pin (FR-F3, `report:<id>`): the repository and team come from the route, the
   // report from the `report` URL param, so every report gets it through this one header. Outside
@@ -82,6 +91,14 @@ export function ReportDocumentHeader({
       {attrFilterLabels.length > 0 && (
         <p className="mt-0.5 text-xs font-medium text-foreground">
           Attribute filter: {attrFilterLabels.join(' · ')}
+        </p>
+      )}
+      {tagFilterLabel !== '' && (
+        <p
+          className="mt-0.5 text-xs font-medium text-foreground"
+          data-testid="report-tag-filter"
+        >
+          Tag filter: {tagFilterLabel}
         </p>
       )}
       {periodAsBadge ? (

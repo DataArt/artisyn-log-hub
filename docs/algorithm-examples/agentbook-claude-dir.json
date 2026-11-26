@@ -1,0 +1,110 @@
+[
+  {
+    "id": "CD-01",
+    "input": {"op": "decide", "dirs": []},
+    "expected": {"candidates": [], "decision": "root"},
+    "note": "Rule 3: no candidates: Claude starts in the shared folder's root."
+  },
+  {
+    "id": "CD-02",
+    "input": {"op": "decide", "dirs": ["repo-a", "repo-a/src", "repo-b"]},
+    "expected": {"candidates": [], "decision": "root"},
+    "note": "Rule 2: no directory is named .claude: no candidates, root."
+  },
+  {
+    "id": "CD-03",
+    "input": {"op": "decide", "dirs": [".claude", "repo-a"]},
+    "expected": {"candidates": [""], "decision": "use", "folder": ""},
+    "note": "Rules 2, 4: the root's own .claude gives the candidate \"\" (the root); one candidate is used without asking."
+  },
+  {
+    "id": "CD-04",
+    "input": {"op": "decide", "dirs": ["repo-a", "repo-a/.claude", "repo-a/src"]},
+    "expected": {"candidates": ["repo-a"], "decision": "use", "folder": "repo-a"},
+    "note": "Rule 4: exactly one .claude, in repo-a: start there."
+  },
+  {
+    "id": "CD-05",
+    "input": {"op": "decide", "dirs": ["repo-b/.claude", "repo-a/.claude"]},
+    "expected": {"candidates": ["repo-a", "repo-b"], "decision": "ask", "ask": ["repo-a", "repo-b"]},
+    "note": "Rules 2, 5: two candidates, sorted; nothing remembered: ask."
+  },
+  {
+    "id": "CD-06",
+    "input": {"op": "decide", "dirs": ["repo-b/.claude", "repo-a/.claude"], "remembered": "repo-b"},
+    "expected": {"decision": "use", "folder": "repo-b"},
+    "note": "Rule 5: the remembered answer is still a candidate: use it, do not ask again."
+  },
+  {
+    "id": "CD-07",
+    "input": {"op": "decide", "dirs": ["repo-b/.claude", "repo-a/.claude"], "remembered": "repo-c"},
+    "expected": {"decision": "ask", "ask": ["repo-a", "repo-b"]},
+    "note": "Rule 5: the remembered folder lost its .claude, so the answer no longer applies: ask again."
+  },
+  {
+    "id": "CD-08",
+    "input": {"op": "decide", "dirs": ["node_modules/pkg/.claude", ".git/hooks/.claude", "app/.claude"]},
+    "expected": {"candidates": ["app"], "decision": "use", "folder": "app"},
+    "note": "Rule 2: paths through node_modules or .git are skipped; only app remains."
+  },
+  {
+    "id": "CD-09",
+    "input": {"op": "decide", "dirs": [".claude", ".claude/skills/x/.claude"]},
+    "expected": {"candidates": [""], "decision": "use", "folder": ""},
+    "note": "Rule 2: a .claude inside another .claude is configuration, not a start folder."
+  },
+  {
+    "id": "CD-10",
+    "input": {"op": "decide", "dirs": ["repo-a\\.claude"]},
+    "expected": {"candidates": ["repo-a"], "decision": "use", "folder": "repo-a"},
+    "note": "Rule 1: '\\' separates like '/'; the candidate is written with '/'."
+  },
+  {
+    "id": "CD-11",
+    "input": {"op": "decide", "dirs": ["a/.claude", "a/.claude/", "./a/.claude"]},
+    "expected": {"candidates": ["a"], "decision": "use", "folder": "a"},
+    "note": "Rule 1 ignores empty and '.' segments, so all three are the same; rule 2 deduplicates: one candidate."
+  },
+  {
+    "id": "CD-12",
+    "input": {"op": "decide", "dirs": ["repo-a/.claude", ".claude"]},
+    "expected": {"candidates": ["", "repo-a"], "decision": "ask", "ask": ["", "repo-a"]},
+    "note": "Rule 2: the root and repo-a both have one; \"\" sorts first. Two candidates: ask."
+  },
+  {
+    "id": "CD-13",
+    "input": {"op": "decide", "dirs": ["repo-a/.claude", ".claude"], "remembered": ""},
+    "expected": {"decision": "use", "folder": ""},
+    "note": "Rule 5: the remembered answer can be the root itself (\"\")."
+  },
+  {
+    "id": "CD-14",
+    "input": {"op": "decide", "dirs": ["Отчёты/.claude"]},
+    "expected": {"candidates": ["Отчёты"], "decision": "use", "folder": "Отчёты"},
+    "note": "Names are kept as-is, non-ASCII included."
+  },
+  {
+    "id": "CD-15",
+    "input": {"op": "descends", "name": ".git"},
+    "expected": {"descends": false},
+    "note": "Rule 1: .git is skipped."
+  },
+  {
+    "id": "CD-16",
+    "input": {"op": "descends", "name": "node_modules"},
+    "expected": {"descends": false},
+    "note": "Rule 1: node_modules is skipped."
+  },
+  {
+    "id": "CD-17",
+    "input": {"op": "descends", "name": ".claude"},
+    "expected": {"descends": false},
+    "note": "Rule 1: the scan records a .claude but does not enter it."
+  },
+  {
+    "id": "CD-18",
+    "input": {"op": "descends", "name": ".github"},
+    "expected": {"descends": true},
+    "note": "Rule 1: only the three exact names are skipped; .github is entered."
+  }
+]

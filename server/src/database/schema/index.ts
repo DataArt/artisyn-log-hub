@@ -322,16 +322,6 @@ export const repositories = pgTable(
   ],
 );
 
-export const contexts = pgTable(
-  'contexts',
-  {
-    id: serial('id').primaryKey(),
-    contextKey: varchar('context_key', { length: 255 }).notNull(),
-    contextValue: varchar('context_value', { length: 4000 }).notNull(),
-  },
-  (table) => [unique().on(table.contextKey, table.contextValue)],
-);
-
 export const logs = pgTable(
   'logs',
   {
@@ -904,17 +894,43 @@ export const logRepositories = pgTable(
   (table) => [primaryKey({ columns: [table.logId, table.repoId] })],
 );
 
-export const logContexts = pgTable(
-  'log_contexts',
+/**
+ * Session tags (migration 0099): `key = value` pairs of a ROOT session. `source = 'otel'` rows
+ * come from the session's OTEL resource attributes (written by the OTEL projection);
+ * `source = 'config'` rows are the legacy hook-config `context` labels copied once by the
+ * migration (read-only history). A key may carry several values per session. Soft delete
+ * (`purgeSessionChildData`) removes the rows explicitly; a hard delete cascades.
+ */
+export const sessionTags = pgTable(
+  'session_tags',
   {
-    logId: integer('log_id')
+    id: serial('id').primaryKey(),
+    sessionId: integer('session_id')
       .notNull()
-      .references(() => logs.id, { onDelete: 'cascade' }),
-    contextId: integer('context_id')
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    source: varchar('source', { length: 32 })
+      .$type<'otel' | 'config'>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
-      .references(() => contexts.id),
+      .defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.logId, table.contextId] })],
+  (table) => [
+    unique('session_tags_session_key_value_source_unique').on(
+      table.sessionId,
+      table.key,
+      table.value,
+      table.source,
+    ),
+    // `tag=` EXISTS filters and the discovery endpoint look pairs up by key / value.
+    index('session_tags_key_value_session_idx').on(
+      table.key,
+      table.value,
+      table.sessionId,
+    ),
+  ],
 );
 
 export const teams = pgTable(

@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { PackageSearch } from 'lucide-react';
 import { fetchHarnessUsageReport } from '../../../api';
 import { GroupByFanOutCaveat } from './GroupByFanOutCaveat';
+import { isFanOutGroupBy } from '../../../lib/session-tags';
 import { ReportDocumentHeader } from './ReportDocumentHeader';
 import { ReportDocumentShell } from './ReportDocumentShell';
 import { HarnessUsageTable } from './HarnessUsageTable';
@@ -166,6 +167,7 @@ export function HarnessUsageReport({
       endDate,
       params.groupBy,
       params.branches,
+      params.tags,
       params.users,
       generation,
     ],
@@ -176,6 +178,7 @@ export function HarnessUsageReport({
         endDate,
         groupBy: params.groupBy !== 'none' ? params.groupBy : undefined,
         branches: params.branches.length > 0 ? params.branches : undefined,
+        tags: params.tags,
         users: params.users.length > 0 ? params.users : undefined,
       }),
   });
@@ -187,7 +190,7 @@ export function HarnessUsageReport({
   // compare against here the way `session-timeline`/`cost-by-user`/`cache-read-ratio` can.
   // Falls back to always showing the caveat once grouped by an attribute, since it can't be
   // ruled out from this report's response shape.
-  const showFanOutCaveat = params.groupBy.startsWith('attr:');
+  const showFanOutCaveat = isFanOutGroupBy(params.groupBy);
 
   const { downloadError, handleDownload } = useReportPdfDownload(
     () => buildPdf(data!, repoUrl, teamName, params),
@@ -214,7 +217,10 @@ export function HarnessUsageReport({
       {data && (
         <>
           <HarnessKpiTiles data={data} />
-          <GroupByFanOutCaveat show={showFanOutCaveat} />
+          <GroupByFanOutCaveat
+            show={showFanOutCaveat}
+            groupBy={params.groupBy}
+          />
           {!data.inventoryReported ? (
             <EmptyState />
           ) : data.groups && data.groups.length > 0 ? (

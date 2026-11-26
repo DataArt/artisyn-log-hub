@@ -6,7 +6,7 @@ tags:
   - hooks
   - api
   - otel
-generated: { by: "claude-code", at: "2026-11-24T20:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-25T12:00:00+04:00" }
 ---
 
 # Hook API Versioning (v2 logs upload, v1 removed)
@@ -84,6 +84,7 @@ mechanism feeds).
 | `>= 3.1.0` | unchanged — the root `artisyn` upload's `okf-snapshot` line gains optional bundle `okfVersion` / `title` / `description` and file `meta` | unchanged | As `>= 1.7.0`; any server stores the body verbatim and an older one ignores the fields; the snapshot id changes once (one full resend) — see "OKF snapshot metadata" below |
 | `>= 3.2.0` | `POST /api/v2/logs` + optional `contentSha256` (single upload and chunk 0) and `uploadFeedback=1` (every request) | `201`, `{ …, failedUploads?, sessionDeleted? }` (only when `uploadFeedback=1` was sent) | As `>= 1.7.0`, plus: a body that does not match its `contentSha256` fails server-side (`content-hash-mismatch`), and that failure and any other server-side failure of the caller's uploads come back in `failedUploads`, which makes the hook re-send those files; a deleted session answers `sessionDeleted: true`. An older server ignores both params and sends neither field — see "`contentSha256` / `uploadFeedback`" below |
 | `>= 3.3.0` | `POST /api/v2/logs/append` for the new lines of `claude` / `claude-subagent` files (falls back to `POST /api/v2/logs`) | `201`, same shape as a single `POST /api/v2/logs` upload | As `>= 3.2.0`; a delta that does not fit the stored log is never a synchronous error: it fails server-side as `upload-full` and comes back once in `failedUploads`, and the hook re-sends the whole file. An older server answers the unknown route `404` — or `413` when its 512,000-byte global text parser sees the body first — and the hook uploads the full file and turns append off for that server for 1 h (`append-off.json`). Deltas are capped at 512,000 bytes uncompressed for exactly that reason — see "`POST /api/v2/logs/append`" below |
+| `>= 3.4.0` | unchanged — `prompt_start` no longer carries `context`; the `log-hub.json` `context` key is not read | unchanged | As `>= 3.3.0`; nothing changes for any server. A newer server ignores `prompt_start.context` from older hooks (stores the line verbatim, no projection) and takes session tags from OTEL resource attributes instead — see "`context` removed — session tags from OTEL" below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
@@ -533,6 +534,25 @@ This is the **only** source of `+`/`−` and `changeKind` for workflow-agent tra
 `toolUseResult` is never usable. Hook records are an input to extraction, never a patch applied to
 an already-computed row: an un-updated install just falls back to `modified` with uncovered lines,
 which is why `change_kind` must never be presented as diff *coverage*.
+
+---
+
+## `context` removed — session tags from OTEL (hook `3.4.0`+)
+
+Hook `3.4.0` (a MINOR bump) drops the `log-hub.json` `context` array: `CONFIG_DEFAULTS` /
+`CONFIG_TYPES` no longer list it, `getEnvContext()` is gone and `prompt_start` no longer carries a
+`context` field. Session labels are set through `OTEL_RESOURCE_ATTRIBUTES` and land in
+`session_tags` (`source='otel'`). A config that still has `context` is merged through as an
+unknown key and ignored silently — no warning. The installer's `log-hub.json` template has no
+`context`, and its legacy `.env` → `log-hub.json` conversion no longer maps `CTX_*`: when it sees
+any, it prints one line that they are unused and labels go into `OTEL_RESOURCE_ATTRIBUTES`.
+Existing configs are not rewritten.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 3.4.0` → server with session tags | `prompt_start.context` is accepted and stored verbatim, not projected; legacy pairs were moved to `session_tags` (`source='config'`) by the migration |
+| Hook `3.4.0` → older server | No `context` field — the optional field is simply absent; nothing else changes |
+| Hook `3.4.0` → server with session tags | Tags come only from OTEL resource attributes |
 
 ---
 

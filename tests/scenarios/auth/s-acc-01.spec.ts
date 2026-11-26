@@ -48,10 +48,12 @@ test('@S-ACC-01 a foreign personal repo is closed; guards do not mix credentials
     `${base}/sessions/${sessions[0].sessionId}/logs`,
     `${base}/summary`,
     `${base}/contexts`,
+    // 2026-11-24 otel-session-tags: tag discovery follows the same guard (AC-8).
+    `${base}/session-tags/values`,
   ];
   const status = async (user: ScenarioUser, path: string) => (await user.api.get(path)).status();
 
-  await test.step('1. OWNER: repository, sessions, raw logs, summary, contexts → 200', async () => {
+  await test.step('1. OWNER: repository, sessions, raw logs, summary, contexts, tag discovery → 200', async () => {
     for (const path of reads) expect(await status(owner, path), path).toBe(200);
   });
 

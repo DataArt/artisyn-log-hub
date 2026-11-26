@@ -528,5 +528,100 @@
     "input": {"kind": "baseUrl", "raw": {"$concat": ["https://h.example/", {"$repeat": ["a", 1100]}]}},
     "expected": {"url": {"$concat": ["https://h.example/", {"$repeat": ["a", 1006]}]}},
     "note": "Rule 12: the 1118-character result is cut to 1024 (18 + 1006)"
+  },
+  {
+    "id": "OF-66",
+    "input": {"kind": "tags", "lines": [
+      {"signal": "logs", "resource": {
+        "feature": "checkout-v2", "team.name": "core", "artisyn.repo": "r", "service.name": "claude-code",
+        "service.version": "2.1.320", "telemetry.sdk.name": "opentelemetry", "host.arch": "amd64",
+        "os.type": "linux", "process.pid": "42", "anthropic.plan": "max", "wsl.version": "2",
+        "user.email": "a@b.c", "session.id": "s1", "organization.id": "o1", "terminal.type": "vscode",
+        "deployment.environment": "prod", "k8s.pod.name": "p", "cloud.region": "eu", "container.id": "c",
+        "device.id": "d", "faas.name": "f", "aws.region": "us-east-1", "gcp.project": "g",
+        "azure.vm": "v", "cloudy": "yes"
+      }}
+    ]},
+    "expected": {"count": 3, "tags": [
+      {"key": "feature", "value": "checkout-v2"},
+      {"key": "team.name", "value": "core"},
+      {"key": "cloudy", "value": "yes"}
+    ]},
+    "note": "Rule 13: every deny-list prefix is dropped; a dotted key outside it (team.name) and a key that only starts like a prefix without its dot (cloudy) are user tags"
+  },
+  {
+    "id": "OF-67",
+    "input": {"kind": "tags", "lines": [
+      {"signal": "logs", "resource": {"feature": "a"}},
+      {"signal": "spans"},
+      {"signal": "logs", "resource": "not an object"},
+      {"signal": "spans", "resource": {"feature": "b"}},
+      {"signal": "logs", "resource": {"feature": "a"}}
+    ]},
+    "expected": {"count": 2, "tags": [
+      {"key": "feature", "value": "a"},
+      {"key": "feature", "value": "b"}
+    ]},
+    "note": "Rule 13 (FR-3): a key whose value changes keeps every distinct value once, first-seen order; lines without an object resource add nothing"
+  },
+  {
+    "id": "OF-68",
+    "input": {"kind": "tags", "lines": [
+      {"signal": "logs", "resource": {
+        " feature ": "  x  ", "n": 42, "flag": true, "empty": "", "blank": "   ", "nul": null,
+        "obj": {"a": 1}, "arr": [1], "": "v", "   ": "v"
+      }}
+    ]},
+    "expected": {"count": 3, "tags": [
+      {"key": "feature", "value": "x"},
+      {"key": "n", "value": "42"},
+      {"key": "flag", "value": "true"}
+    ]},
+    "note": "Rule 13: keys and values are trimmed, numbers and booleans coerced to text; empty / blank keys or values, null, objects and arrays are ignored"
+  },
+  {
+    "id": "OF-69",
+    "input": {"kind": "tags", "lines": [
+      {"signal": "logs", "resource": {"Feature": "A", "feature": "a", "Service.version": "1"}}
+    ]},
+    "expected": {"count": 3, "tags": [
+      {"key": "Feature", "value": "A"},
+      {"key": "feature", "value": "a"},
+      {"key": "Service.version", "value": "1"}
+    ]},
+    "note": "Rule 13: keys are case-sensitive, so are the deny-list prefixes (Service. is not service.)"
+  },
+  {
+    "id": "OF-70",
+    "input": {"kind": "tags", "lines": [
+      {"signal": "logs", "resource": {
+        "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": "key64",
+        "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": "key65",
+        "v256": {"$repeat": ["v", 256]},
+        "v257": {"$repeat": ["v", 257]}
+      }}
+    ]},
+    "expected": {"count": 2, "tags": [
+      {"key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk", "value": "key64"},
+      {"key": "v256", "value": {"$repeat": ["v", 256]}}
+    ]},
+    "note": "Rule 13: a 64-char key and a 256-char value are kept; a 65-char key or a 257-char value drops the pair (never truncated)"
+  },
+  {
+    "id": "OF-71",
+    "input": {"kind": "tags", "lines": [
+      {"signal": "logs", "resource": {"$attrs": ["tag", 25, "v"]}},
+      {"signal": "logs", "resource": {"long": {"$repeat": ["x", 300]}, "service.name": "claude-code"}}
+    ]},
+    "expected": {"count": 25, "first": {"key": "tag1", "value": "v"}, "last": {"key": "tag25", "value": "v"}},
+    "note": "Rule 13 (AC-9): 25 user attributes give 25 pairs; the 300-char value is not stored at all"
+  },
+  {
+    "id": "OF-72",
+    "input": {"kind": "tags", "lines": [
+      {"signal": "logs", "resource": {"$attrs": ["tag", 510, "v"]}}
+    ]},
+    "expected": {"count": 500, "first": {"key": "tag1", "value": "v"}, "last": {"key": "tag500", "value": "v"}},
+    "note": "Rule 13 (AC-9): 510 distinct pairs keep the first 500, the rest are ignored"
   }
 ]

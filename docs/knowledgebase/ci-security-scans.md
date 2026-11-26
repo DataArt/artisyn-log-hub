@@ -26,6 +26,7 @@ Secret scanning is separate and unchanged: see [Git Hooks and Secret Scanning](g
 | `security-report` | `.github/workflows/security-report.yml` | `workflow_run` (`completed`) of `security-scans` and `virustotal` | the triggering run came from a `pull_request` |
 | `checks` | `.github/workflows/checks.yml` | `pull_request` into `main`, `release` (no path filter); `workflow_call` from `release` | always — not a scan: the FR-5 fast checks (typechecks, algorithm tests, build-script and hook tests); its job `fast-checks` is a required check next to `scan` |
 | `release` | `.github/workflows/release.yml` | `push` to `release`; `workflow_dispatch` (refused on any other ref) | always — not a scan: builds and publishes the GHCR image and the GitHub Release; its `vt-scan` job scans the release assets (see below) |
+| `agentbook-release` | `.github/workflows/agentbook-release.yml` | `workflow_dispatch` only (refused off the default branch) | always — not a scan: builds AgentBook (`agentbook/`, a separate product) on a Windows runner and attaches `AgentBook.exe`, `AgentBook-Setup.exe` and `SHA256SUMS` to the release `agentbook-v<version>`, never marked latest; see [AgentBook](agentbook.md) |
 
 `checks` and `release` are not report-only scans and feed nothing into the PR block; they are
 listed here because they share the pinned actions, the `VIRUS_TOTAL_KEY` secret and

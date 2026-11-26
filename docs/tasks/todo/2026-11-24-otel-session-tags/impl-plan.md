@@ -150,8 +150,11 @@ admin still gets no session data):
 - Data move: insert one row per distinct `(root session, context_key, context_value)` from
   `log_contexts ⋈ contexts ⋈ logs ⋈ sessions` with `source='config'`; then `DROP TABLE log_contexts,
   contexts`. Runs as a no-op on a clean DB. Not reversible by design (requirements).
-- Backfill of OTEL tags: no SQL — `OTEL_PROJECTION_VERSION` 3 makes the startup re-queue
-  (`database-init.ts`) re-project every root with `logs_otel` rows.
+- Backfill of OTEL tags: no SQL migration. Changed after the Pi deploy on 2026-11-25: a full
+  re-projection (requeue of every v2 chunk) took ~38 min at 100 % Postgres CPU with four worker
+  heap OOMs on a Pi 3B, so `OTEL_PROJECTION_FULL_REQUEUE_BELOW = 2` keeps v2 chunks out of the
+  startup requeue and the projection drain's light tag-only upgrade (`upgradeTagsOnly`) re-stamps
+  them v3 in SQL, reading into Node only the chunks whose `resource` has a key outside the deny-list.
 
 **Other:**
 

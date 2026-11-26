@@ -1,0 +1,12 @@
+{
+  "prompt": "a cute laptop character mascot, its face is drawn on the laptop screen, rounded lavender-grey laptop body with a small keyboard, screen dim, worried eyebrows, small frown, one tiny tear drop, a little sad but still cute",
+  "style": "kawaii-serious",
+  "fullPrompt": "a cute laptop character mascot, its face is drawn on the laptop screen, rounded lavender-grey laptop body with a small keyboard, screen dim, worried eyebrows, small frown, one tiny tear drop, a little sad but still cute, style: cute yet grown-up kawaii mascot illustration, calm self-assured expression, clean vector-like flat shading, soft rounded shapes, thick smooth dark outlines, gentle pastel palette with one confident accent colour, tidy and professional like a well-designed app mascot, high quality, centered, single character, plain off-white background, no text, no letters",
+  "seed": 44,
+  "steps": 4,
+  "width": 1024,
+  "height": 1024,
+  "model": "flux1-schnell-Q5_K_S.gguf",
+  "generator": "stable-diffusion.cpp (scripts/imagegen.js)",
+  "seconds": 15
+}

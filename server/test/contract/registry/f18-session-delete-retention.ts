@@ -1,7 +1,7 @@
 // F18 — session deletion and the retention view (docs/qaa-overview/scenarios/05 §F18).
 //
 // Deleting a session soft-deletes the `sessions` row (and its children), drops every per-session
-// row and the session's logs, removes contexts only that session used, and writes one audit row.
+// row and the session's logs, removes the root's session tags, and writes one audit row.
 import { WORLD_V1 } from '../fixtures/world-v1.sql';
 import type { ContractFamily, WriteSpec } from '../types';
 
@@ -36,8 +36,7 @@ const SESSION_TABLES = [
   'sessions',
   'logs',
   'log_repositories',
-  'log_contexts',
-  'contexts',
+  'session_tags',
   'session_stats',
   'session_costs',
   'session_file_stats',
@@ -89,20 +88,9 @@ function deleteSession(
           where: `log_id IN (SELECT id FROM logs WHERE session_id = ${pk})`,
           count: 'all',
         },
-        {
-          table: 'log_contexts',
-          where: `log_id IN (SELECT id FROM logs WHERE session_id = ${pk})`,
-          count: 'all',
-        },
-        // A context no other session's log uses goes with it.
-        {
-          table: 'contexts',
-          where: `id IN (SELECT lc.context_id FROM log_contexts lc JOIN logs l ON l.id = lc.log_id
-                          WHERE l.session_id = ${pk})
-                  AND id NOT IN (SELECT lc.context_id FROM log_contexts lc JOIN logs l ON l.id = lc.log_id
-                                  WHERE l.session_id <> ${pk})`,
-          count: 'all',
-        },
+        // 2026-11-24 otel-session-tags: the root's tags go with it — soft delete keeps the
+        // sessions row, so the FK cascade does not cover them.
+        { table: 'session_tags', where: `session_id = ${pk}`, count: 'all' },
         { table: 'session_stats', where: `session_id = ${pk}`, count: 'all' },
         { table: 'session_costs', where: `session_id = ${pk}`, count: 'all' },
         {

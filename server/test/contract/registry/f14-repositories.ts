@@ -5,6 +5,7 @@
 // from the static `latest-hook-version.json` (latestVersion, outdated) depend on the checkout's
 // build state and are not compared.
 import type { ContractFamily } from '../types';
+import { listedRootsSql } from './oracle-sql';
 
 /** The team layer of R1's config in world-v1 (T1's team_repo_config row, link id 1). */
 const R1_TEAM_CONFIG = {
@@ -536,24 +537,101 @@ export const f14Repositories: ContractFamily = {
       expect: { status: 403 },
     },
     {
+      // 2026-11-24 otel-session-tags: the legacy pairs now come from `session_tags` of the
+      // listed root sessions, each (key, value) once whatever its source(s), sorted.
       id: 'F14-contexts',
       route: 'GET /api/v1/repositories/:repoId/contexts',
       actor: 'owner',
       params: { repoId: '@R1.id' },
-      expect: { status: 200, minRows: 2 },
+      expect: { status: 200, minRows: 5 },
       read: {
-        sql: `SELECT DISTINCT c.context_key, c.context_value
-                FROM contexts c
-                JOIN log_contexts lc ON lc.context_id = c.id
-                JOIN log_repositories lr ON lr.log_id = lc.log_id
-               WHERE lr.repo_id = $1`,
+        sql: `SELECT DISTINCT st.key, st.value
+                FROM ${listedRootsSql('$1')} r
+                JOIN session_tags st ON st.session_id = r.id
+               ORDER BY st.key, st.value`,
         args: ['@R1.id'],
         shape: 'array',
-        // The endpoint has no ORDER BY: compare as sets.
-        sortBy: 'value',
-        fields: { key: 'context_key', value: 'context_value' },
+        fields: { key: 'key', value: 'value' },
         strict: true,
       },
+    },
+    {
+      // Golden of the same answer: s01 (feature, team.name, jira twice), s02, s04.
+      id: 'F14-contexts-golden',
+      route: 'GET /api/v1/repositories/:repoId/contexts',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      expect: { status: 200, minRows: 5 },
+      read: {
+        sql: `SELECT * FROM (VALUES ('feature', 'billing'), ('feature', 'checkout'),
+                                    ('jira', 'ARR-1'), ('jira', 'ARR-2'),
+                                    ('team.name', 'Fremen')) AS g(key, value)`,
+        shape: 'array',
+        fields: { key: 'key', value: 'value' },
+        strict: true,
+      },
+    },
+    {
+      // Optional period: only s04 (12 January) is in scope.
+      id: 'F14-contexts-period',
+      route: 'GET /api/v1/repositories/:repoId/contexts',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: {
+        startDate: '2026-01-12T00:00:00.000Z',
+        endDate: '2026-01-12T23:59:59.999Z',
+      },
+      expect: { status: 200, minRows: 2 },
+      read: {
+        sql: `SELECT * FROM (VALUES ('feature', 'billing'), ('jira', 'ARR-2')) AS g(key, value)`,
+        shape: 'array',
+        fields: { key: 'key', value: 'value' },
+        strict: true,
+      },
+    },
+    {
+      // AC-10a: transparent T1 — the member sees every member's pairs, their own s06's
+      // jira=ARR-6 included.
+      id: 'F14-contexts-team-transparent',
+      route: 'GET /api/v1/repositories/:repoId/contexts',
+      actor: 'member',
+      params: { repoId: '@R1.id' },
+      query: { teamId: '@T1.id' },
+      expect: { status: 200, minRows: 6 },
+      read: {
+        sql: `SELECT * FROM (VALUES ('feature', 'billing'), ('feature', 'checkout'),
+                                    ('jira', 'ARR-1'), ('jira', 'ARR-2'), ('jira', 'ARR-6'),
+                                    ('team.name', 'Fremen')) AS g(key, value)`,
+        shape: 'array',
+        fields: { key: 'key', value: 'value' },
+        strict: true,
+      },
+    },
+    {
+      // AC-10a: restricted T2 — the manager does not see the member's s06 (disclosure never
+      // acknowledged), so jira=ARR-6 is not listed although s06 is in R1's URL.
+      id: 'F14-contexts-team-restricted-manager',
+      route: 'GET /api/v1/repositories/:repoId/contexts',
+      actor: 'manager',
+      params: { repoId: '@R1.id' },
+      query: { teamId: '@T2.id' },
+      expect: { status: 200, minRows: 5 },
+      read: {
+        sql: `SELECT * FROM (VALUES ('feature', 'billing'), ('feature', 'checkout'),
+                                    ('jira', 'ARR-1'), ('jira', 'ARR-2'),
+                                    ('team.name', 'Fremen')) AS g(key, value)`,
+        shape: 'array',
+        fields: { key: 'key', value: 'value' },
+        strict: true,
+      },
+    },
+    {
+      id: 'F14-contexts-bad-period',
+      route: 'GET /api/v1/repositories/:repoId/contexts',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { startDate: '2026-01-12T00:00:00.000Z' },
+      expect: { status: 400 },
     },
     {
       id: 'F14-contexts-outsider',

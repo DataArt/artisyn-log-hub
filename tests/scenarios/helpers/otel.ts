@@ -152,6 +152,9 @@ export async function resetOtelProjection(db: Pool, sessionId: string): Promise<
   for (const table of ['otel_session_state', 'otel_calls', 'otel_spans', 'otel_cost_buckets', 'otel_reclass_queue']) {
     await db.query(`DELETE FROM ${table} WHERE session_id = $1`, [id]);
   }
+  // Session tags from OTEL resource attributes (2026-11-24 otel-session-tags) did not exist
+  // before projection version 3 either; `config` pairs (migrated hook context) stay.
+  await db.query(`DELETE FROM session_tags WHERE session_id = $1 AND source = 'otel'`, [id]);
   await db.query('UPDATE logs_otel SET otel_projection_version = NULL WHERE session_id = $1', [id]);
 }
 

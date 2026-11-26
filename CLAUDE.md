@@ -199,6 +199,39 @@ Test policy for Work Hub — the same three kinds, in its own places:
 - Scenario coverage is **not measured** for Work Hub yet (no Rust coverage tool in the alpha), so
   the ≥ 80 % target does not apply to it until that follow-up lands.
 
+## AgentBook
+
+`agentbook/` is a separate product (a native Rust desktop tool that gives Claude Desktop isolated
+Docker laptops over SSH) that only lives in this repo: it is not part of `npm run build`, `dist/`
+or Log Hub's checks, shares no code with Log Hub or Work Hub, and Log Hub's commands above never
+cover it. Read `docs/knowledgebase/agentbook.md` before touching it. Its own commands, all run
+**from `agentbook/`**:
+
+| Purpose | Command |
+|---|---|
+| Lint (`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, licence check, platform-boundary check) | `npm run lint` |
+| Algorithm tests (Rust table tests over `docs/algorithm-examples/agentbook-*.json`) | `npm run test:algo` |
+| Build (`scripts/build.mjs`: release `AgentBook.exe`, then `AgentBook-Setup.exe` embedding it) | `npm run build` |
+| Scenarios: the engine on real Docker (needs Docker and the OpenSSH client) | `npm run test:scenarios` |
+
+AgentBook's health checks are **not run by default**: they live in
+`.claude/repo_config/agentbook-health-checks.json`, not in `repo-health-checks.json`, so
+`adlc-lh:check-health` (and every workflow built on it) never runs them. Run them only when asked,
+or when a task changes `agentbook/` — pass that file's `checks` and `environmentNotes` to the
+`adlc-lh:check-health-wf` Workflow (`finalRun: true` adds `agentbook-scenarios`), or run the
+commands above by hand.
+
+Test policy for AgentBook — the same three kinds, in its own places:
+
+- **Algorithm** — rows in `docs/algorithm-examples/agentbook-*.json` for an `agentbook-*` doc in
+  `docs/knowledgebase/algorithms/`; the table test is `agentbook/crates/core/tests/algo.rs`.
+- **API contract** — none: AgentBook has no HTTP routes.
+- **Scenario** — a step in the Rust scenario suite `agentbook/tests/scenarios/` (real Docker, fake
+  home and data dir under `tmp/`). Real Claude Desktop and installer checks are the manual
+  acceptance list in the KB article.
+- Scenario coverage is **not measured** for AgentBook (as for Work Hub), so the ≥ 80 % target does
+  not apply to it.
+
 ## Background processes cleanup
 
 When you launch a long-running command in the background (build, e2e run, any backgrounded
